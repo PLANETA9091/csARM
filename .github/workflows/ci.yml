@@ -273,10 +273,11 @@ jobs:
           api-level: 34
           target: google_apis
           arch: arm64-v8a
+          emulator-build: 11525734
           emulator-boot-timeout: 1200
-          # emulator 37.x failed HVF init on M1 (HV_UNSUPPORTED via vulkan/gfxstream);
-          # disabling the Vulkan feature path lets HVF initialize
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
+          # emulator 37.x fails HVF init on M1 runners (HV_UNSUPPORTED); build
+          # 11525734 (emulator 34.x) is the newest archive build that works
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
             adb install -r android/out/csARM.apk
             adb shell am start -n com.csarm.port/.MainActivity
