@@ -141,6 +141,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache source
+        id: cache-src-link
+        uses: actions/cache@v4
+        with:
+          path: c15
+          key: cstrike15-src-v2
+
+      - name: Fetch source + patches (needed for genproto compile and SDL2 headers)
+        run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
+
       - name: Download all objects
         uses: actions/download-artifact@v4
         with:
@@ -169,6 +179,9 @@ jobs:
             unzip -q /tmp/ndk.zip -d $HOME
             echo "NDKROOT=$HOME/android-ndk-r27d" >> $GITHUB_ENV
           fi
+
+      - name: Build SDL2 static lib
+        run: bash build/setup_sdl2.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
 
       - name: Link shared libraries
         run: |
