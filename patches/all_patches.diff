@@ -1328,7 +1328,7 @@ index c3eae3c..039dd08 100644
    #define __RADDETECTEDPROC__ __RADARM__
    #define __RADLITTLEENDIAN__
 diff --git a/tier0/cpu.cpp b/tier0/cpu.cpp
-index a38f284..95824e4 100644
+index a38f284..b8804a4 100644
 --- a/tier0/cpu.cpp
 +++ b/tier0/cpu.cpp
 @@ -45,7 +45,7 @@ struct CpuIdResult_t
@@ -1439,6 +1439,28 @@ index a38f284..95824e4 100644
  	return false;
  #else
  	return ( cpuid( 1 ).edx & 0x10 ) != 0;
+@@ -920,6 +920,21 @@ const CPUInformation& GetCPUInformation()
+ 			pi.m_nL2CacheSizeKb = ( cpuid( 0x80000006 ).ecx >> 16 );
+ 		}
+ 	}
++
++#if defined( __aarch64__ ) || defined( __arm__ )
++	// [csARM] x86 CPUID is a no-op here; NEON replaces SSE/MMX. Report the
++	// capabilities so mathlib's SSE gate passes (mathlib uses its ARM/NEON
++	// math branches instead).
++	pi.m_bRDTSC = true;
++	pi.m_bCMOV = true;
++	pi.m_bMMX = true;
++	pi.m_bSSE = true;
++	pi.m_bSSE2 = true;
++	pi.m_bSSE3 = true;
++	pi.m_bSSSE3 = true;
++	pi.m_bSSE41 = true;
++	pi.m_bSSE42 = true;
++#endif
+ 	return pi;
+ }
+ 
 diff --git a/tier0/cpu_posix.cpp b/tier0/cpu_posix.cpp
 index ba7ac80..5802725 100644
 --- a/tier0/cpu_posix.cpp
@@ -1511,21 +1533,22 @@ index 0421b7e..6866441 100644
  
  bool CheckMMXTechnology(void)
 diff --git a/tier1/strtools.cpp b/tier1/strtools.cpp
-index b017d89..322b7ea 100644
+index b017d89..9ff735d 100644
 --- a/tier1/strtools.cpp
 +++ b/tier1/strtools.cpp
-@@ -56,7 +56,9 @@
+@@ -56,7 +56,11 @@
  #ifdef POSIX
  
  #ifndef _PS3
--#include <iconv.h>
 +#if defined( ANDROID )
 +#include "tier1/unicode_native.h"
++#else
+ #include <iconv.h>
 +#endif
  #endif // _PS3
  
  #include <ctype.h>
-@@ -1405,23 +1407,12 @@ int _V_UCS2ToUnicode( const ucs2 *pUCS2, wchar_t *pUnicode, int cubDestSizeInByt
+@@ -1405,23 +1409,12 @@ int _V_UCS2ToUnicode( const ucs2 *pUCS2, wchar_t *pUnicode, int cubDestSizeInByt
  #ifdef _WIN32
  	int cchResult = V_wcslen( pUCS2 );
  	V_memcpy( pUnicode, pUCS2, cubDestSizeInBytes );
@@ -1554,7 +1577,7 @@ index b017d89..322b7ea 100644
  #endif
  	pUnicode[(cubDestSizeInBytes / sizeof(wchar_t)) - 1] = 0;
  	return cchResult;	
-@@ -1448,6 +1439,8 @@ int _V_UnicodeToUCS2( const wchar_t *pUnicode, int cubSrcInBytes, char *pUCS2, i
+@@ -1448,6 +1441,8 @@ int _V_UnicodeToUCS2( const wchar_t *pUnicode, int cubSrcInBytes, char *pUCS2, i
  	// Make sure we NULL-terminate.
  	pDest[ cchResult - 1 ] = 0;
  
@@ -1563,7 +1586,7 @@ index b017d89..322b7ea 100644
  #elif defined (POSIX)
  	iconv_t conv_t = iconv_open( "UCS-2LE", "UTF-32LE" );
  	size_t cchResult = -1;
-@@ -1455,7 +1448,7 @@ int _V_UnicodeToUCS2( const wchar_t *pUnicode, int cubSrcInBytes, char *pUCS2, i
+@@ -1455,7 +1450,7 @@ int _V_UnicodeToUCS2( const wchar_t *pUnicode, int cubSrcInBytes, char *pUCS2, i
  	size_t nMaxUCS2 = cubDestSizeInBytes;
  	char *pIn = (char*)pUnicode;
  	char *pOut = pUCS2;
@@ -1572,7 +1595,7 @@ index b017d89..322b7ea 100644
  	{
  		cchResult = 0;
  		cchResult = iconv( conv_t, &pIn, &nLenUnicde, &pOut, &nMaxUCS2 );
-@@ -1481,6 +1474,8 @@ int _V_UCS2ToUTF8( const ucs2 *pUCS2, char *pUTF8, int cubDestSizeInBytes )
+@@ -1481,6 +1476,8 @@ int _V_UCS2ToUTF8( const ucs2 *pUCS2, char *pUTF8, int cubDestSizeInBytes )
  #ifdef _WIN32
  	// under win32 wchar_t == ucs2, sigh
  	int cchResult = WideCharToMultiByte( CP_UTF8, 0, pUCS2, -1, pUTF8, cubDestSizeInBytes, NULL, NULL );
@@ -1581,7 +1604,7 @@ index b017d89..322b7ea 100644
  #elif defined(POSIX)
  	iconv_t conv_t = iconv_open( "UTF-8", "UCS-2LE" );
  	size_t cchResult = -1;
-@@ -1488,7 +1483,7 @@ int _V_UCS2ToUTF8( const ucs2 *pUCS2, char *pUTF8, int cubDestSizeInBytes )
+@@ -1488,7 +1485,7 @@ int _V_UCS2ToUTF8( const ucs2 *pUCS2, char *pUTF8, int cubDestSizeInBytes )
  	size_t nMaxUTF8 = cubDestSizeInBytes;
  	char *pIn = (char *)pUCS2;
  	char *pOut = (char *)pUTF8;
@@ -1590,7 +1613,7 @@ index b017d89..322b7ea 100644
  	{
  		cchResult = 0;
  		cchResult = iconv( conv_t, &pIn, &nLenUnicde, &pOut, &nMaxUTF8 );
-@@ -1517,6 +1512,8 @@ int _V_UTF8ToUCS2( const char *pUTF8, int cubSrcInBytes, ucs2 *pUCS2, int cubDes
+@@ -1517,6 +1514,8 @@ int _V_UTF8ToUCS2( const char *pUTF8, int cubSrcInBytes, ucs2 *pUCS2, int cubDes
  #elif defined( _PS3 ) // bugbug JLB
  	int cchResult = 0;
  	Assert( 0 );
@@ -1599,7 +1622,7 @@ index b017d89..322b7ea 100644
  #elif defined(POSIX)
  	iconv_t conv_t = iconv_open( "UCS-2LE", "UTF-8" );
  	size_t cchResult = -1;
-@@ -1524,7 +1521,7 @@ int _V_UTF8ToUCS2( const char *pUTF8, int cubSrcInBytes, ucs2 *pUCS2, int cubDes
+@@ -1524,7 +1523,7 @@ int _V_UTF8ToUCS2( const char *pUTF8, int cubSrcInBytes, ucs2 *pUCS2, int cubDes
  	size_t nMaxUTF8 = cubDestSizeInBytes;
  	char *pIn = (char *)pUTF8;
  	char *pOut = (char *)pUCS2;
