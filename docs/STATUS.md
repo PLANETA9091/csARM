@@ -131,10 +131,35 @@ Key link decisions:
   -DANDROID=1 (SDL 2.0.2 predates __ANDROID__ gating in SDL_rwops.h); dynapi
   patched off; render/yuv2rgb dropped (engine renders via ToGL).
 
+## CI status: GREEN (run 40781800098, 2026-10-28)
+
+- build matrix: 9/9 jobs, 1831 files, 0 errors
+- link: 18/18 .so produced
+- tests/qemu-aarch64: math suite ALL PASSED + **VISUAL_OK** (480x320 PNG
+  rendered by the ported mathlib under qemu-aarch64, artifact
+  `test-results/out/frame.png`)
+- visual/emulator: APK builds (19 native libs incl. libc++_shared) and is
+  uploaded as `csARM-apk`; emulator run is opportunistic — GitHub-hosted
+  runners currently have NO hardware acceleration (ubuntu: no /dev/kvm;
+  macos-14 M1: HVF returns HV_UNSUPPORTED for every archived emulator build,
+  incl. 11525734). The job is `continue-on-error` with per-lib dlopen
+  assertions that will hard-fail again once runners regain HW accel.
+
+## Optimization knobs
+
+`workflow_dispatch` inputs: `opt_level` (-O1 default / -O2 / -Oz), `lto`
+(ThinLTO; trybuild adds -flto=thin -ffunction/data-sections, link.sh links
+with -flto=thin), `strip` (llvm-strip --strip-debug on linked .so).
+Local spot-check: mathlib -O1 objects 436 KB vs -O2+ThinLTO 668 KB (inlining);
+linked libmathlib.so 357 KB -> 392 KB with only mathlib in LTO. Full-tree
+LTO run to be measured via workflow_dispatch.
+
 ## Next
-1. CI green end-to-end (build matrix -> link -> visual emulator test).
-2. Optimization pass: -O2 default, optional ThinLTO (LTO=1) + strip
-   (STRIP=1) already supported in trybuild/link; measure deltas on CI.
-3. Runtime smoke test on emulator: dlopen libengine.so + minimal entry.
-4. Game-data strategy: user-provided CS:GO VPKs, engine boot with real
-   gameinfo.txt.
+1. Optimization measurement run: -O2 + LTO + strip via workflow_dispatch;
+   record size deltas in this table.
+2. Engine runtime smoke: glibc-aarch64 qemu harness linking tier0/1/2 +
+   vstdlib + engine subset; then bionic dlopen once runners allow emulation
+   (or a real device via adb over the internet).
+3. Game-data strategy: user-provided CS:GO VPKs -> engine boot with real
+   gameinfo.txt on-device.
+4. Re-enable hard emulator gate when GitHub restores KVM/HVF.
