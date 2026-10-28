@@ -28,12 +28,21 @@ OPT=${OPT:--O1}
 JOBS=${JOBS:-4}
 NDKROOT=${NDKROOT:-$R/../ndk}
 
-INC="-I "$SCRIPT_DIR/glshim" -I c15/thirdparty/protobuf-2.5.0/src -I "$R/thirdparty/pb25shim" -I c15 -I c15/public -I c15/public/tier0 -I c15/public/tier1 -I c15/public/tier2 -I c15/common -I c15/tier0 -I c15/tier1 -I c15/tier2 -I c15/vstdlib -I c15/mathlib -I c15/thirdparty/telemetry/include -I c15/thirdparty -I c15/public/mathlib -I c15/external -I c15/public/steam -I c15/thirdparty/SDL2 -I c15/thirdparty/sse2neon -I genproto -I c15/gcsdk -I c15/gcsdk/steamextra/tier1 -I c15/gcsdk/steamextra -I c15/game/shared -I c15/game/shared/cstrike15 -I c15/game/shared/econ -I c15/game/client -I c15/game/server -I c15/engine/audio/public -I c15/engine/audio -I c15/engine/audio/private -I c15/external/crypto++-5.61 -I c15/thirdparty/quickhull -I c15/engine -I c15/soundemittersystem -I "${FTINC:-$R/thirdparty/freetype/include}" -I c15/public/vgui_controls -I c15/game/client/cstrike15 -I c15/game/client/cstrike15/gameui -I c15/game/client/cstrike15/Scaleform -I c15/game/client/game_controls"
+INC="-I "$SCRIPT_DIR/glshim" -I c15/thirdparty/protobuf-2.5.0/src -I "$R/thirdparty/pb25shim" -I c15 -I c15/public -I c15/public/tier0 -I c15/public/tier1 -I c15/public/tier2 -I c15/common -I c15/tier0 -I c15/tier1 -I c15/tier2 -I c15/vstdlib -I c15/mathlib -I c15/thirdparty/telemetry/include -I c15/thirdparty -I c15/public/mathlib -I c15/external -I c15/public/steam -I c15/thirdparty/SDL2 -I c15/thirdparty/sse2neon -I genproto -I c15/gcsdk -I c15/gcsdk/steamextra/tier1 -I c15/gcsdk/steamextra -I c15/game/shared -I c15/game/shared/cstrike15 -I c15/game/shared/econ -I c15/game/server/cstrike15 -I c15/engine/audio/public -I c15/engine/audio -I c15/engine/audio/private -I c15/external/crypto++-5.61 -I c15/thirdparty/quickhull -I c15/engine -I c15/soundemittersystem -I "${FTINC:-$R/thirdparty/freetype/include}" -I c15/public/vgui_controls -I c15/game/client/cstrike15 -I c15/game/client/cstrike15/gameui -I c15/game/client/cstrike15/Scaleform -I c15/game/client/game_controls"
 DEFX=${DEFX:-}
 INCX=${INCX:-}
-# Normalize DEFX: ensure every token is a -D flag (CI may pass "DFOO=1" without -D)
+# Normalize DEFX: CI passes Valve-style defs ("DCLIENT_DLL=1" meaning -DCLIENT_DLL=1)
+# or plain defs ("HAVE_PTHREAD=1" meaning -DHAVE_PTHREAD=1).
 if [ -n "$DEFX" ]; then
-  DEFX=$(printf '%s\n' $DEFX | sed 's/^-D/-D/; t; s/^-/-D/; t; s/^/-D/' | tr '\n' ' ')
+  out=""
+  for t in $DEFX; do
+    case "$t" in
+      -D*)     out="$out $t" ;;   # already -D-prefixed
+      D[A-Z]*) out="$out -${t}" ;; # Valve-style: DFOO=1 -> -DFOO=1
+      *)       out="$out -D$t" ;; # plain: FOO=1 -> -DFOO=1
+    esac
+  done
+  DEFX="$out"
 fi
 DEF="-std=gnu++17 -include $R/build/protocompat.h -Wno-narrowing -Wno-register -DDX_TO_GL_ABSTRACTION -DCSARM_GL_SHIM -DX64BITS -DPOSIX=1 -DLINUX=1 -D_LINUX=1 -DGNUC=1 -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1 -D_POSIX=1 -D__ANDROID__=1 -DANDROID=1 -DENGINE_DLL=1 -DUSE_SDL=1 -Dpthread_yield=sched_yield -Dstricmp=strcasecmp -D_stricmp=strcasecmp -Dstrnicmp=strncasecmp -D_strnicmp=strncasecmp $DEFX"
 INC="$INC $INCX $VINC"
@@ -45,8 +54,10 @@ INC="-I c15/$(dirname "$PROJ") $INC"
 
 # Per-module header resolution: client.h lives in BOTH engine/ and game/server/.
 # Engine+client modules need engine/client.h (CClientState); server needs its own.
+# view.h exists in BOTH engine/ and game/client/ — client modules need theirs.
 case "$TAG" in
   server*) INC="-I c15/game/server $INC" ;;
+  client*) INC="-I c15/game/client -I c15/engine $INC" ;;
   *)       INC="-I c15/engine $INC" ;;
 esac
 

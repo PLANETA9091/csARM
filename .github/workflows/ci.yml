@@ -41,10 +41,10 @@ jobs:
             defs: ""
           - tag: client
             modules: "game/client/client_cstrike15.vpc"
-            defs: "DCLIENT_DLL=1 DCSTRIKE_CLIENT_DLL=1 DCSTRIKE_DLL=1 DGAMEUI_EMBEDDED=1 DGAMEUI_EXPORTS=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DUSE_ECONOMY_FEATURES=1"
+            defs: "DCLIENT_DLL=1 DCSTRIKE_CLIENT_DLL=1 DCSTRIKE_DLL=1 DCSTRIKE15=1 DGAMEUI_EMBEDDED=1 DGAMEUI_EXPORTS=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DUSE_ECONOMY_FEATURES=1"
           - tag: server
             modules: "game/server/server_cstrike15.vpc"
-            defs: "DGAME_DLL=1 DCSTRIKE_DLL=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DPROTECTED_THINGS_ENABLE=1"
+            defs: "DGAME_DLL=1 DCSTRIKE_DLL=1 DCSTRIKE15=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DPROTECTED_THINGS_ENABLE=1"
           - tag: pb25
             modules: "lists/protobuf25.txt"
             defs: "HAVE_PTHREAD=1 HAVE_ZLIB=0"

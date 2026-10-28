@@ -45,6 +45,7 @@ else
 /thirdparty/SDL2/
 /thirdparty/libpng-1.5.2/
 /thirdparty/protobuf-2.5.0/
+/thirdparty/zlib-1.2.5/
 /thirdparty/quickhull/
 /thirdparty/telemetry/
 /tier0/
@@ -78,6 +79,7 @@ echo "Copying extra files..."
 cp -v "$REPO_DIR/patches/extras/gameeventlistener.h" "$SRC/game/shared/gameeventlistener.h"
 cp -v "$REPO_DIR/patches/extras/IVGUI.h" "$SRC/public/vgui/IVGUI.h"
 cp -v "$REPO_DIR/patches/extras/unicode_native.h" "$SRC/tier1/unicode_native.h"
+cp -v "$REPO_DIR/patches/extras/spawn_helper_nut.h" "$SRC/game/server/spawn_helper_nut.h"
 rm -rf "$SRC/thirdparty/sse2neon"
 cp -rv "$REPO_DIR/patches/extras/sse2neon" "$SRC/thirdparty/sse2neon"
 echo "Source setup complete: $SRC"
