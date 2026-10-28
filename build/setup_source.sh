@@ -14,9 +14,7 @@ else
   PINNED_SHA=f82112a2388b841d72cb62ca48ab1846dfcc11c8
   git clone --filter=blob:none --no-checkout "$MIRROR" "$SRC"
   cd "$SRC"
-  git checkout -q $PINNED_SHA 2>/dev/null || git checkout -q origin/master || git checkout -q master
-  echo "source commit: $(git rev-parse HEAD)"
-  # sparse checkout — only modules we need (61% of repo)
+  # sparse checkout FIRST (before any checkout) — only modules we need (61% of repo)
   cat > .git/info/sparse-checkout <<'EOF'
 /*
 !/*/
@@ -57,7 +55,11 @@ else
 /utils/common/
 /utils/bzip2/
 EOF
-  git checkout -q HEAD 2>&1 | tail -1
+  git sparse-checkout init --no-cone 2>/dev/null || true
+  cp .git/info/sparse-checkout "$(git rev-parse --git-dir)/info/sparse-checkout" 2>/dev/null || true
+  git sparse-checkout list 2>/dev/null | head -3 || true
+  git checkout -q "$PINNED_SHA" 2>/dev/null || git checkout -q origin/master || git checkout -q master
+  echo "source commit: $(git rev-parse HEAD)"
 fi
 
 cd "$SRC"

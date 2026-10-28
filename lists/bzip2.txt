@@ -1,0 +1,8 @@
+utils/bzip2/blocksort.c
+utils/bzip2/bzip2.c
+utils/bzip2/bzlib.c
+utils/bzip2/compress.c
+utils/bzip2/crctable.c
+utils/bzip2/decompress.c
+utils/bzip2/huffman.c
+utils/bzip2/randtable.c

@@ -1,0 +1,10 @@
+public/tier0/memoverride.cpp
+vstdlib/coroutine.cpp
+vstdlib/cvar.cpp
+vstdlib/jobthread.cpp
+vstdlib/keyvaluessystem.cpp
+vstdlib/random.cpp
+vstdlib/vcover.cpp
+vstdlib/eventsystem.cpp
+vstdlib/vstrtools.cpp
+vstdlib/vstdlib_strtools.cpp

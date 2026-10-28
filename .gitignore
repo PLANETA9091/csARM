@@ -3,6 +3,7 @@ obj/
 err/
 out/
 lists/
+!lists/*.txt
 link.log
 *.o
 *.so
