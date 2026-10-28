@@ -197,6 +197,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache source
+        id: cache-src-tests
+        uses: actions/cache@v4
+        with:
+          path: c15
+          key: cstrike15-src-v1
+
+      - name: Fetch pristine source + apply patches
+        if: steps.cache-src-tests.outputs.cache-hit != 'true'
+        run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
+
       - name: Install cross tools + qemu
         run: |
           sudo apt-get update -qq
