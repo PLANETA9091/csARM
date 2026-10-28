@@ -225,12 +225,14 @@ jobs:
           path: link.log
           if-no-files-found: ignore
 
-  # Job 2b: visual test — load all .so on a real Android (emulator) + render check
+  # Job 2b: visual test — load all .so on a real Android (emulator) + render check.
+  # Runs on macOS ARM64: native arm64-v8a emulator with HVF acceleration
+  # (GitHub Linux runners have no KVM -> software emulation never boots).
   visual-test:
     name: visual/emulator
     needs: link
     if: always() && !failure() && !cancelled()
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
@@ -245,8 +247,6 @@ jobs:
 
       - name: Build APK
         run: bash android/build_apk.sh
-        env:
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
       - name: Upload APK
         if: always()
@@ -261,7 +261,7 @@ jobs:
         with:
           api-level: 30
           target: google_apis
-          arch: x86_64
+          arch: arm64-v8a
           emulator-boot-timeout: 1200
           script: |
             adb install -r android/out/csARM.apk

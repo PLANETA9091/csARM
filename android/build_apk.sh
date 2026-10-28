@@ -6,7 +6,7 @@
 # Output: android/out/csARM.apk  (debug-signed, installable)
 set -euo pipefail
 A="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SDK=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}
+SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}
 
 [ -d "$SDK" ] || { echo "Android SDK not found at $SDK"; exit 1; }
 
@@ -45,9 +45,10 @@ cp "$DEX/classes.dex" "$DEX/classes.dex" 2>/dev/null || true
 mkdir -p "$A/lib/arm64-v8a"
 # our .so files have DT_NEEDED libc++_shared.so — take it from the NDK sysroot
 if [ ! -f "$A/libs/libc++_shared.so" ]; then
-  for cand in "${ANDROID_NDK_LATEST_HOME:-}" "${ANDROID_NDK_HOME:-}" "$ANDROID_SDK_ROOT/ndk/"*/ ; do
+  HOSTTAG=linux-x86_64; [ "$(uname)" = "Darwin" ] && HOSTTAG=darwin-x86_64
+  for cand in "${ANDROID_NDK_LATEST_HOME:-}" "${ANDROID_NDK_HOME:-}" "$SDK/ndk/"*/ ; do
     [ -n "$cand" ] || continue
-    f="$cand/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
+    f="$cand/toolchains/llvm/prebuilt/$HOSTTAG/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
     if [ -f "$f" ]; then cp "$f" "$A/libs/libc++_shared.so"; echo "libc++_shared.so from $cand"; break; fi
   done
 fi
