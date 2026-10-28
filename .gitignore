@@ -10,3 +10,5 @@ link.log
 thirdparty/protobuf/
 thirdparty/SDL2-lib/
 tests/out/
+thirdparty/protobuf-src/
+thirdparty/abseil-cpp/

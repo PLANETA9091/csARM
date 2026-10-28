@@ -44,6 +44,7 @@ else
 /studiorender/
 /thirdparty/SDL2/
 /thirdparty/libpng-1.5.2/
+/thirdparty/protobuf-2.5.0/
 /thirdparty/quickhull/
 /thirdparty/telemetry/
 /tier0/

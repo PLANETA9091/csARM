@@ -45,6 +45,9 @@ jobs:
           - tag: server
             modules: "game/server/server_cstrike15.vpc"
             defs: "DGAME_DLL=1 DCSTRIKE_DLL=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DPROTECTED_THINGS_ENABLE=1"
+          - tag: pb25
+            modules: "lists/protobuf25.txt"
+            defs: "HAVE_PTHREAD=1 HAVE_ZLIB=0"
 
     steps:
       - uses: actions/checkout@v4
@@ -54,10 +57,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v1
+          key: cstrike15-src-v2
 
-      - name: Fetch pristine source + apply patches
-        if: steps.cache-src.outputs.cache-hit != 'true'
+      - name: Fetch pristine source + apply patches (idempotent, always)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
 
       - name: Verify source
@@ -202,7 +204,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v1
+          key: cstrike15-src-v2
 
       - name: Fetch/refresh source (idempotent)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -220,7 +222,7 @@ jobs:
           aarch64-linux-gnu-g++ -O2 -std=gnu++17 -w \
             -DPOSIX=1 -DLINUX=1 -D_LINUX=1 -DGNUC=1 -DLINUX64 -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1 -D_RAD_TELEMETRY_DISABLED \
             -I c15/public -I c15/public/tier0 -I c15/public/tier1 -I c15/public/mathlib -I c15/mathlib \
-            -I c15/thirdparty/telemetry/include -I c15/tier0 -I c15/thirdparty/sse2neon \
+            -I c15/thirdparty/telemetry/include -I c15/tier0 -I c15/thirdparty -I c15/thirdparty/sse2neon \
             tests/test_math.cpp $SRCS \
             -o tests/out/test_math -lm 2> tests/build.log || { tail -30 tests/build.log; exit 1; }
           qemu-aarch64 -L /usr/aarch64-linux-gnu tests/out/test_math

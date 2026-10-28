@@ -15,82 +15,6 @@ index 8d4a074..ad89abb 100644
  
  #if __WORDSIZE == 32
  # include "ftconfig-32.h"
-diff --git a/common/netmessages.h b/common/netmessages.h
-index 750b9fa..3f38c72 100644
---- a/common/netmessages.h
-+++ b/common/netmessages.h
-@@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
-+//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
- //
- // Purpose: 
- //
-@@ -87,7 +87,7 @@ public:
- 
- 		// otherwise we have to do a temp allocation so we can read it all shifted
- #ifdef NET_SHOW_UNALIGNED_MSGS
--		DevMsg("Warning: unaligned read of protobuf message %s (%d bytes)\n", PB_OBJECT_TYPE::GetTypeName().c_str(), size );
-+		DevMsg("Warning: unaligned read of protobuf message %s (%d bytes)\n", PB_OBJECT_TYPE::GetTypeName().data(), size );
- #endif
- 
- 		void *parseBuffer = stackalloc( size );
-@@ -108,7 +108,7 @@ public:
- 	{
- 		if ( !PB_OBJECT_TYPE::IsInitialized() )
- 		{
--			Msg("WriteToBuffer Message %s is not initialized! Probably missing required fields!\n", PB_OBJECT_TYPE::GetTypeName().c_str() );
-+			Msg("WriteToBuffer Message %s is not initialized! Probably missing required fields!\n", std::string( PB_OBJECT_TYPE::GetTypeName() ).c_str() );
- 		}
- 
- 		int size = PB_OBJECT_TYPE::ByteSize();
-@@ -139,7 +139,7 @@ public:
- 
- 		// otherwise we have to do a temp allocation so we can write it all shifted
- #ifdef NET_SHOW_UNALIGNED_MSGS
--		DevMsg("Warning: unaligned write of protobuf message %s (%d bytes)\n", PB_OBJECT_TYPE::GetTypeName().c_str(), size );
-+		DevMsg("Warning: unaligned write of protobuf message %s (%d bytes)\n", PB_OBJECT_TYPE::GetTypeName().data(), size );
- #endif
- 
- 		void *serializeBuffer = stackalloc( size );
-diff --git a/common/protobuf_helpers.cpp b/common/protobuf_helpers.cpp
-index eabf131..bb18adf 100644
---- a/common/protobuf_helpers.cpp
-+++ b/common/protobuf_helpers.cpp
-@@ -1,4 +1,4 @@
--//======== Copyright © 2011, Valve Corporation, All rights reserved. ========//
-+//======== Copyright ï¿½ 2011, Valve Corporation, All rights reserved. ========//
- //
- // Purpose: Helper functions for protobufs
- //
-@@ -6,6 +6,12 @@
- 
- #include "tier0/dbg.h"
- 
-+// [port] absl (via protobuf 35) needs the builtin constexpr offsetof
-+#ifdef offsetof
-+#undef offsetof
-+#endif
-+#define offsetof(s,m) __builtin_offsetof(s,m)
-+
- #include "google/protobuf/descriptor.h"
- #include "google/protobuf/reflection_ops.h"
- #include "google/protobuf/descriptor.pb.h"
-@@ -13,6 +19,7 @@
- using namespace google::protobuf;
- //using namespace stl;
- 
-+#if 0 // [port] old protobuf log API (SetLogHandler/LogLevel) removed in protobuf 35
- class CProtobufLogHandler
- {
- public:
-@@ -50,6 +57,7 @@ public:
- };	
- 
- static CProtobufLogHandler g_ProtobufLogHandler;
-+#endif
- 
- /*
- 
 diff --git a/engine/cl_steamauth.cpp b/engine/cl_steamauth.cpp
 index 03c1be9..52104f7 100644
 --- a/engine/cl_steamauth.cpp
@@ -551,15 +475,6 @@ index 471e807..3818442 100644
  // This is completely disabled in release builds. We overwrite client Rel DLLs with client Staging DLLs on our cluster.
  #if !defined( CSTRIKE_REL_BUILD )
  
-diff --git a/game/shared/gameeventlistener.h b/game/shared/gameeventlistener.h
-new file mode 100644
-index 0000000..2f17e2d
---- /dev/null
-+++ b/game/shared/gameeventlistener.h
-@@ -0,0 +1,3 @@
-+#pragma once
-+// [port] case-compat: repo ships GameEventListener.h
-+#include "game/shared/GameEventListener.h"
 diff --git a/game/shared/sharedvar.h b/game/shared/sharedvar.h
 index bb4ade6..015df0e 100644
 --- a/game/shared/sharedvar.h
@@ -1140,7 +1055,7 @@ index 3f75c89..d476e39 100644
      __asm__ __volatile__ ( "rdtsc" : "=a" (Low), "=d" (High) );
      return ( High << 32 ) | ( Low & 0xffffffff );
 diff --git a/public/tier0/platform.h b/public/tier0/platform.h
-index 05764bb..f3379bb 100644
+index 05764bb..49a240f 100644
 --- a/public/tier0/platform.h
 +++ b/public/tier0/platform.h
 @@ -699,20 +699,20 @@ typedef void * HINSTANCE;
@@ -1191,24 +1106,6 @@ index 05764bb..f3379bb 100644
  #endif
  
  
-@@ -776,7 +775,7 @@ typedef void * HINSTANCE;
- 	// a pointer type for a class that has only been forward declared
- 	#define SINGLE_INHERITANCE		__single_inheritance
- 	#define MULTIPLE_INHERITANCE	__multiple_inheritance
--	#define EXPLICIT				explicit
-+	// [port] EXPLICIT macro removed to avoid protobuf enum clash
- 	#define NO_VTABLE				__declspec( novtable )
- 
- 	// gcc doesn't allow storage specifiers on explicit template instatiation, but visual studio needs them to avoid link errors.
-@@ -857,7 +856,7 @@ typedef void * HINSTANCE;
- 	#define FORCEINLINE_TEMPLATE	inline
- 	#define SINGLE_INHERITANCE
- 	#define MULTIPLE_INHERITANCE
--	#define EXPLICIT
-+	// [port] EXPLICIT macro removed to avoid protobuf enum clash
- 	#define NO_VTABLE
- 
- 	#define NULLTERMINATED			
 @@ -1133,7 +1132,11 @@ typedef void * HINSTANCE;
  	#elif defined( OSX )
  		#define DebuggerBreak()  if ( Plat_IsInDebugSession() ) asm( "int3" ); else { raise(SIGTRAP); }
@@ -1346,15 +1243,6 @@ index 81ba5e5..78e13c5 100644
  }
  
  
-diff --git a/public/vgui/IVGUI.h b/public/vgui/IVGUI.h
-new file mode 100644
-index 0000000..e0ce8f4
---- /dev/null
-+++ b/public/vgui/IVGUI.h
-@@ -0,0 +1,3 @@
-+#pragma once
-+// [port] case-compat: repo ships IVGui.h
-+#include "vgui/IVGui.h"
 diff --git a/thirdparty/SDL2/SDL_opengl.h b/thirdparty/SDL2/SDL_opengl.h
 index b48ea7a..c1cc250 100644
 --- a/thirdparty/SDL2/SDL_opengl.h
@@ -1368,6 +1256,35 @@ index b48ea7a..c1cc250 100644
  #define _SDL_opengl_h
  
  #include "SDL_config.h"
+diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h
+index b8581fa..25964d5 100644
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h
+@@ -176,6 +176,9 @@ GOOGLE_PROTOBUF_ATOMICOPS_ERROR
+ #elif defined(__GNUC__)
+ #if defined(GOOGLE_PROTOBUF_ARCH_IA32) || defined(GOOGLE_PROTOBUF_ARCH_X64)
+ #include <google/protobuf/stubs/atomicops_internals_x86_gcc.h>
++#elif defined(GOOGLE_PROTOBUF_ARCH_AARCH64)
++// [csARM] protobuf 2.5.0 predates aarch64; std::atomic-backed internals
++#include <google/protobuf/stubs/atomicops_internals_std_atomic.h>
+ #elif defined(GOOGLE_PROTOBUF_ARCH_ARM)
+ #include <google/protobuf/stubs/atomicops_internals_arm_gcc.h>
+ #elif defined(GOOGLE_PROTOBUF_ARCH_ARM_QNX)
+diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h
+index b1df60e..3f3c346 100644
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h
+@@ -49,6 +49,10 @@
+ #elif defined(__ARMEL__)
+ #define GOOGLE_PROTOBUF_ARCH_ARM 1
+ #define GOOGLE_PROTOBUF_ARCH_32_BIT 1
++#elif defined(__aarch64__)
++// [csARM] aarch64 support
++#define GOOGLE_PROTOBUF_ARCH_AARCH64 1
++#define GOOGLE_PROTOBUF_ARCH_64_BIT 1
+ #elif defined(__MIPSEL__)
+ #define GOOGLE_PROTOBUF_ARCH_MIPS 1
+ #define GOOGLE_PROTOBUF_ARCH_32_BIT 1
 diff --git a/thirdparty/telemetry/include/radtypes.h b/thirdparty/telemetry/include/radtypes.h
 index c3eae3c..039dd08 100644
 --- a/thirdparty/telemetry/include/radtypes.h
@@ -1662,124 +1579,6 @@ index b017d89..322b7ea 100644
  	{
  		cchResult = 0;
  		cchResult = iconv( conv_t, &pIn, &nLenUnicde, &pOut, &nMaxUTF8 );
-diff --git a/tier1/unicode_native.h b/tier1/unicode_native.h
-new file mode 100644
-index 0000000..b8bb164
---- /dev/null
-+++ b/tier1/unicode_native.h
-@@ -0,0 +1,112 @@
-+// csARM â€” native unicode conversion for Android bionic (no iconv)
-+// Conventions mirror the original iconv-based return values.
-+#ifndef TIER1_UNICODE_NATIVE_H
-+#define TIER1_UNICODE_NATIVE_H
-+#ifdef ANDROID
-+
-+#include "tier0/platform.h"
-+#include <wchar.h>
-+#include <string.h>
-+
-+// UCS-2 (2-byte, BMP) -> wchar_t (4-byte UTF-32 on Android). Returns bytes written to pUnicode.
-+inline int V_NativeUCS2ToUnicode( const ucs2 *pUCS2, wchar_t *pUnicode, int cubDestSizeInBytes )
-+{
-+	if ( !pUCS2 || !pUnicode || cubDestSizeInBytes < (int)sizeof(wchar_t) )
-+		return 0;
-+	int maxChars = cubDestSizeInBytes / sizeof(wchar_t) - 1; // leave room for terminator
-+	int n = 0;
-+	const ucs2 *pSrc = pUCS2;
-+	while ( n < maxChars && pSrc[n] != 0 )
-+	{
-+		pUnicode[n] = (wchar_t)pSrc[n]; // UCS-2 unit == UTF-32 code point (BMP)
-+		n++;
-+	}
-+	pUnicode[n] = 0;
-+	return n * (int)sizeof(wchar_t);
-+}
-+
-+// wchar_t (UTF-32) -> UCS-2. Returns number of source characters converted.
-+inline int V_NativeUnicodeToUCS2( const wchar_t *pUnicode, int cubSrcInBytes, void *pUCS2Buf, int cubDestSizeInBytes )
-+{
-+	if ( !pUnicode || !pUCS2Buf || cubDestSizeInBytes < (int)sizeof(ucs2) )
-+		return 0;
-+	ucs2 *pUCS2 = (ucs2 *)pUCS2Buf;
-+	int maxChars = cubDestSizeInBytes / (int)sizeof(ucs2) - 1;
-+	int srcChars = cubSrcInBytes / (int)sizeof(wchar_t);
-+	int n = 0;
-+	while ( n < maxChars && n < srcChars && pUnicode[n] != 0 )
-+	{
-+		wchar_t wc = pUnicode[n];
-+		pUCS2[n] = (wc > 0xFFFF) ? (ucs2)'?' : (ucs2)wc; // BMP clamp like UCS-2
-+		n++;
-+	}
-+	pUCS2[n] = 0;
-+	return n;
-+}
-+
-+// UCS-2 -> UTF-8. Returns bytes written (matches iconv 'remaining' convention).
-+inline int V_NativeUCS2ToUTF8( const ucs2 *pUCS2, char *pUTF8, int cubDestSizeInBytes )
-+{
-+	if ( !pUCS2 || !pUTF8 || cubDestSizeInBytes < 1 )
-+		return 0;
-+	int out = 0, max = cubDestSizeInBytes - 1;
-+	for ( const ucs2 *p = pUCS2; *p && out < max; p++ )
-+	{
-+		unsigned int c = *p;
-+		if ( c < 0x80 )
-+			pUTF8[out++] = (char)c;
-+		else if ( c < 0x800 && out + 1 < cubDestSizeInBytes )
-+		{
-+			pUTF8[out++] = (char)(0xC0 | (c >> 6));
-+			pUTF8[out++] = (char)(0x80 | (c & 0x3F));
-+		}
-+		else if ( out + 2 < cubDestSizeInBytes )
-+		{
-+			pUTF8[out++] = (char)(0xE0 | (c >> 12));
-+			pUTF8[out++] = (char)(0x80 | ((c >> 6) & 0x3F));
-+			pUTF8[out++] = (char)(0x80 | (c & 0x3F));
-+		}
-+		else break;
-+	}
-+	pUTF8[out] = 0;
-+	return out;
-+}
-+
-+// UTF-8 -> UCS-2. Returns source bytes consumed (matches original convention).
-+inline int V_NativeUTF8ToUCS2( const char *pUTF8, int cubSrcInBytes, void *pUCS2Buf, int cubDestSizeInBytes )
-+{
-+	if ( !pUTF8 || !pUCS2Buf || cubDestSizeInBytes < (int)sizeof(ucs2) )
-+		return 0;
-+	ucs2 *pUCS2 = (ucs2 *)pUCS2Buf;
-+	int maxChars = cubDestSizeInBytes / (int)sizeof(ucs2) - 1;
-+	int n = 0, i = 0;
-+	while ( i < cubSrcInBytes && n < maxChars && pUTF8[i] != 0 )
-+	{
-+		unsigned char b = (unsigned char)pUTF8[i];
-+		unsigned int cp;
-+		int adv;
-+		if ( b < 0x80 )      { cp = b; adv = 1; }
-+		else if ( (b & 0xE0) == 0xC0 ) { cp = b & 0x1F; adv = 2; }
-+		else if ( (b & 0xF0) == 0xE0 ) { cp = b & 0x0F; adv = 3; }
-+		else if ( (b & 0xF8) == 0xF0 ) { cp = b & 0x07; adv = 4; }
-+		else { cp = '?'; adv = 1; }
-+		if ( i + adv > cubSrcInBytes ) break;
-+		for ( int k = 1; k < adv; k++ )
-+		{
-+			unsigned char cb = (unsigned char)pUTF8[i + k];
-+			if ( (cb & 0xC0) != 0x80 ) { cp = '?'; adv = 1; break; }
-+			cp = (cp << 6) | (cb & 0x3F);
-+		}
-+		if ( cp > 0xFFFF )
-+			pUCS2[n] = (ucs2)'?';
-+		else
-+			pUCS2[n] = (ucs2)cp;
-+		n++;
-+		i += adv;
-+	}
-+	pUCS2[n] = 0;
-+	return i;
-+}
-+
-+#endif // ANDROID
-+#endif // TIER1_UNICODE_NATIVE_H
 diff --git a/utils/common/bsplib.cpp b/utils/common/bsplib.cpp
 index 7888342..a485ed1 100644
 --- a/utils/common/bsplib.cpp
