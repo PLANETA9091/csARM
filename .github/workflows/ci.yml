@@ -34,7 +34,7 @@ jobs:
             modules: "materialsystem/materialsystem.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
             defs: ""
           - tag: vgui
-            modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc vgui2/game_controls/game_controls.vpc vgui2/matsys_controls/matsys_controls.vpc vgui2/dme_controls/dme_controls.vpc"
+            modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc"
             defs: ""
           - tag: data
             modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc"
