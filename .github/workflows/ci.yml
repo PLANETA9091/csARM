@@ -274,12 +274,8 @@ jobs:
           target: google_apis
           arch: arm64-v8a
           emulator-boot-timeout: 1200
-          # emulator 37.x fails HVF init on M1 (HV_UNSUPPORTED via vulkan/gfxstream):
-          # pin 33.1.24 and disable the Vulkan feature path
-          pre-emulator-launch-script: |
-            yes | sdkmanager --uninstall emulator > /dev/null 2>&1 || true
-            yes | sdkmanager --install "emulator;33.1.24" > /dev/null 2>&1
-            /Users/runner/Library/Android/sdk/emulator/emulator -version || true
+          # emulator 37.x failed HVF init on M1 (HV_UNSUPPORTED via vulkan/gfxstream);
+          # disabling the Vulkan feature path lets HVF initialize
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           script: |
             adb install -r android/out/csARM.apk
