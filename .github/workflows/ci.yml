@@ -8,9 +8,17 @@ on:
   workflow_dispatch:
     inputs:
       opt_level:
-        description: 'Optimization level'
+        description: 'Optimization level (-O1 / -O2 / -Oz)'
         required: false
         default: '-O1'
+      lto:
+        description: 'ThinLTO (1 = enable)'
+        required: false
+        default: '0'
+      strip:
+        description: 'Strip debug info from .so (1 = enable)'
+        required: false
+        default: '0'
 
 env:
   MIRROR: https://github.com/perilouswithadollarsign/cstrike15_src.git
@@ -84,6 +92,7 @@ jobs:
           export R=$GITHUB_WORKSPACE
           export CC=aarch64-linux-android24-clang
           export OPT=${{ github.event.inputs.opt_level || '-O1' }}
+          export LTO=${{ github.event.inputs.lto || '0' }}
           export JOBS=4
           for m in ${{ matrix.modules }}; do
             echo "=== MODULE $m ==="
@@ -185,6 +194,8 @@ jobs:
       - name: Link shared libraries
         run: |
           export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export LTO=${{ github.event.inputs.lto || '0' }}
+          export STRIP=${{ github.event.inputs.strip || '0' }}
           mkdir -p out
           bash build/link.sh
           ls -la out/
