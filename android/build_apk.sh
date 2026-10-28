@@ -27,9 +27,10 @@ rm -rf "$OUT" "$GEN" "$CLS" "$DEX"; mkdir -p "$OUT" "$GEN" "$CLS" "$DEX"
 "$BT/aapt2" link -o "$OUT/base.apk" \
   --manifest "$A/AndroidManifest.xml" -I "$AJAR" --java "$GEN"
 
-# 2. java -> class
+# 2. java -> class (android toolchain way: source/target 1.8 + android.jar bootclasspath)
 find "$A/src" "$GEN" -name "*.java" > /tmp/csarm-javac.list
-javac -source 11 -target 11 -nowarn -bootclasspath "$AJAR" \
+javac -source 1.8 -target 1.8 -nowarn -Xlint:none \
+  -bootclasspath "$AJAR" -classpath "$AJAR" \
   -d "$CLS" @/tmp/csarm-javac.list
 
 # 3. class -> dex
@@ -42,11 +43,20 @@ cp "$OUT/base.apk" "$OUT/unsigned.apk"
 cp "$DEX/classes.dex" "$DEX/classes.dex" 2>/dev/null || true
 (cd "$DEX" && zip -q -u "$OUT/unsigned.apk" classes.dex)
 mkdir -p "$A/lib/arm64-v8a"
+# our .so files have DT_NEEDED libc++_shared.so — take it from the NDK sysroot
+if [ ! -f "$A/libs/libc++_shared.so" ]; then
+  for cand in "${ANDROID_NDK_LATEST_HOME:-}" "${ANDROID_NDK_HOME:-}" "$ANDROID_SDK_ROOT/ndk/"*/ ; do
+    [ -n "$cand" ] || continue
+    f="$cand/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
+    if [ -f "$f" ]; then cp "$f" "$A/libs/libc++_shared.so"; echo "libc++_shared.so from $cand"; break; fi
+  done
+fi
 if ls "$A"/libs/*.so >/dev/null 2>&1; then
   cp "$A"/libs/*.so "$A/lib/arm64-v8a/"
 fi
 NLIB=$(ls "$A"/lib/arm64-v8a/*.so 2>/dev/null | wc -l)
 echo "native libs: $NLIB"
+[ "$NLIB" -ge 18 ] || { echo "ERROR: expected >=18 native libs (17 port libs + libc++_shared), got $NLIB"; exit 1; }
 (cd "$A" && zip -q -u "$OUT/unsigned.apk" lib/arm64-v8a/*.so)
 
 # 5. align + sign (debug key)
