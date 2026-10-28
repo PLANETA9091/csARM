@@ -1,80 +1,94 @@
 # CS:GO (cstrike15_src) → Android/aarch64 port — STATUS
 
-Workspace: `/data/data/com.termux/files/home/csgo_port`
-Clone: `./c15` (sparse checkout of cstrike15_src; branch `csgo`)
-Toolchain: `aarch64-linux-android-clang` (Termux NDK), protobuf 35.1 (system)
+Workspace: CI (GitHub Actions, matrix) + local validation via host g++
+Clone: `./c15` (sparse checkout of cstrike15_src at pinned SHA f82112a; created by setup_source.sh)
+Toolchain: NDK r27d `aarch64-linux-android24-clang` (CI), protobuf **2.5.0** (from the mirror tree)
 
 ## Build flags (`trybuild.sh`)
 
 ```
-CC=aarch64-linux-android-clang
-OPT=-O0 (temp; target -O2+LTO)
+CC   = aarch64-linux-android24-clang
+OPT  = -O1 (CI default; -O0 for local host validation)
 std  = -std=gnu++17   (.c files use gnu11)
 DEF  = -include protocompat.h -Wno-narrowing -Wno-register
-       -DDX_TO_GL_ABSTRACTION -DX64BITS
+       -DDX_TO_GL_ABSTRACTION -DCSARM_GL_SHIM -DX64BITS
        -DPOSIX=1 -DLINUX=1 -D_LINUX=1 -DGNUC=1 -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1
-       -D_POSIX=1 -D__ANDROID__=1 -DENGINE_DLL=1 -USE_SDL=1
+       -D_POSIX=1 -D__ANDROID__=1 -DANDROID=1 -DENGINE_DLL=1 -DUSE_SDL=1
        -Dpthread_yield=sched_yield -Dstricmp=strcasecmp -Dstrnicmp=strncasecmp
-INC  = c15, public{,/tier0,/tier1,/tier2,/mathlib,/steam,/vgui_controls},
-       common, tier0/1/2, vstdlib, mathlib, engine, engine/audio{,/public,/private},
-       thirdparty{,/telemetry/include,/SDL2,/quickhull}, external, external/crypto++-5.61,
-       genproto, pbshim, gcsdk, gcsdk/steamextra/tier1,
-       game/shared, game/shared/cstrike15, game/client, game/server
+DEFX = per-matrix Valve-style defs (DCLIENT_DLL=1 → -DCLIENT_DLL=1; plain
+       FOO=1 → -DFOO=1), normalized in trybuild.sh
+INC  = protobuf-2.5.0/src, pb25shim, glshim, c15 (+public/tier0/1/2, common,
+       mathlib, engine, gcsdk, game/shared[/cstrike15], game/server/cstrike15,
+       game/client, engine/audio...), genproto, freetype, crypto++-5.61
+Per-tag: server → -I c15/game/server; client → -I c15/game/client -I c15/engine
 ```
 
-## Compile status
+## Protobuf strategy (v2)
 
-| module  | ok  | fail |
-|---------|-----|------|
-| tier0   | 37  | 0    |
-| tier1   | 45  | 0    |
-| tier2   | 21  | 0    |
-| vstdlib | 10  | 0    |
-| mathlib | 33  | 0    |
-| engine  | 250*| 0*   |  *pre-USE_SDL run; clean rebuild in progress
+Valve's code targets protobuf **2.5.0**, which is bundled in the mirror at
+`thirdparty/protobuf-2.5.0`. genproto is regenerated with protoc 2.5.0
+(`build/setup_proto.sh`, host protoc cached in `.cache/protoc25`); no abseil.
+protobuf 2.5.0 predates aarch64 → `thirdparty/pb25shim/.../atomicops_internals_std_atomic.h`
+implements AtomicOps via C++11 `std::atomic`; `platform_macros.h` teaches
+`__aarch64__`. Runtime is built as CI module `pb25` (lists/protobuf25.txt,
+32 files) and linked as `libprotobuf.so`.
+
+## Compile status (CI run 40717175869, pre-fix baseline)
+
+| module            | ok  | fail | notes                          |
+|-------------------|-----|------|--------------------------------|
+| tier0             | 37  | 0    |                                |
+| tier1             | 45  | 0    |                                |
+| tier2             | 21  | 0    |                                |
+| vstdlib           | 10  | 0    |                                |
+| mathlib           | 33  | 0    |                                |
+| appframework      | 3   | 0    |                                |
+| bzip2             | 8   | 0    |                                |
+| engine            | 249 | 2    | XUnzip futimes, crypto++ bswap — fixed |
+| materialsystem    | 28  | 0    |                                |
+| studiorender      | 13  | 0    |                                |
+| vguimatsurface    | 7   | 1    | fontconfig — already patched (stale CI cache) |
+| vgui_dll          | 20  | 0    |                                |
+| vgui_controls     | 79  | 1    | protobuf — fixed by 2.5.0 switch |
+| datacache         | 11  | 0    |                                |
+| soundemittersystem| 3   | 0    |                                |
+| filesystem_stdio  | 10  | 0    |                                |
+| client_cstrike15  | 623 | 16   | view.h shadowing + DEFX — fixed |
+| server_cstrike15  | 599 | 15   | offsetof + DEFX — fixed        |
+| pb25              | 32  | 0    | protobuf 2.5.0 runtime         |
+
+Fixes after that run (commit 07a8008): Valve offsetof restored, DEFX double-D
+bug, client include priority (view.h), crypto++ builtins, XUnzip futimens,
+msgprotobuf Hdr() fix, bsplib allocator-generic overloads, ai_movesolver round,
+spawn_helper_nut stub, zlib sparse, KHR stub.
 
 ## Key port decisions
-- `-DDX_TO_GL_ABSTRACTION`: use ToGL (Valve's GL abstraction) instead of D3D9 → resolves `D3DFORMAT` etc.
-- `-DENGINE_DLL`: enables engine-only members (e.g. `CGameTrace::GetEdict/SetEdict`).
-- `-DUSE_SDL`: Linux/Android windowing path in sys_mainwind/sys_dll2/sys_getmodes.
-- protobuf 35.1 generated classes are `final` and use `std::string_view`; subclasses
-  (`CNetMessagePB`) required stripping `final`/`PROTOBUF_FINAL` from `genproto/*.pb.h`
-  and removing Valve's `EXPLICIT` macro (platform.h) that clashed with the pb enum.
-- `pbshim/`: patched protobuf headers (`schema`→`pb_schema_`).
-- `protocompat.h`: `bswap_16/32/64` + `__bswap_16/32/64` builtins (forced include).
+- **offsetof**: Valve's pointer-arithmetic macro, NOT `__builtin_offsetof`
+  (the builtin rejects `SENDINFO_VECTORELEM`'s `m_Value[i]` on NetworkVar
+  wrappers; Valve's own comment in platform.h warns about exactly this).
+- `-DDX_TO_GL_ABSTRACTION`: ToGL instead of D3D9; desktop GL headers
+  compile-time only (glshim), runtime via dlsym.
+- `unicode_native.h` replaces iconv (bionic lacks it).
+- HTTP map downloads (libcurl) stubbed on Android; fontconfig excluded.
+- ScaleForm HUD kept (INCLUDE_SCALEFORM comes from the VPC project); engine
+  ScaleForm entry points disabled as before.
 
-## Patches applied (new clone)
-- `public/tier0/platform.h`: offsetof→`__builtin_offsetof`, INT/UINT_MAX literals,
-  DebuggerBreak/Plat_Rdtsc aarch64, removed `EXPLICIT` macro.
-- `public/tier0/{threadtools.h,microprofiler.h,basetypes.h,hardware_clock_fast.h}` (aarch64).
-- `public/tier0/memalloc.h`: offsetof→builtin.
-- `public/mathlib/{mathlib.h,ssemath.h,ssemath_x86.h,vector.h,math_pfns.h,vector4d.h}`:
-  ARM Round*/FastSinCos branches; x87 `fistpl`→C.
-- `public/tier1/{utlblockmemory.h,byteswap.h}`; `public/tier1/tokenset.h` (+strtools.h).
-- `public/dt_common.h`, `public/gcsdk/gcclientsdk.h`: offsetof→builtin.
-- `thirdparty/telemetry/include/radtypes.h` (+aarch64).
-- `common/protobuf_helpers.cpp`: old protobuf log API disabled.
-- `common/netmessages.h`: `GetTypeName()` wrapped in `std::string`.
-- `tier0/cpu.cpp`, `tier1/processor_detect_linux.cpp`: cpuid no-op on ARM.
-- `tier1/pathmatch.cpp`, `tier1/strtools.cpp`, `vstdlib/vstrtools.cpp` (iconv).
-- `mathlib/sse.cpp`: ARM VectorNormalize/FastCos.
-- `engine/{view.cpp,gl_screen.cpp,vgui_baseui_interface.cpp,sys_mainwind.cpp}`: Scaleform disabled.
-- `engine/{cl_steamauth.cpp,sv_steamauth.cpp,sys_dll2.cpp}`: newer Steamworks API
-  (`SteamAPI_Init`, no `*_InitSafe`, no `SteamAPI_SetBreakpadAppID/UseBreakpadCrashHandler`).
-- `engine/sys_getmodes.cpp`: POSIX no-op branch.
-- `crypto++-5.61/pubkey.h`: `std::auto_ptr`→`std::unique_ptr`.
+## Patches applied (all_patches.diff, 1932 lines)
+aarch64 platform fixes, ARM math branches, iconv replacement, Steamworks API
+update, protobuf aarch64 atomics, curl/fontconfig stubs, misc compile fixes.
+extras: unicode_native.h, IVGUI.h, gameeventlistener.h, spawn_helper_nut.h,
+sse2neon (+ sse_shim.h).
 
-## Excluded from engine build
-`openal`, `voice_record_dsound`, `voice_mixer_controls` (no OpenAL / Windows-only).
-
-## Sparse checkout present
-public tier0 tier1 tier2 vstdlib mathlib common engine thirdparty/{telemetry,SDL2,sse2neon,quickhull}
-gcsdk game/shared external vpc_scripts utils/common utils/bzip2
-materialsystem vgui2 vguimatsurface studiorender datacache soundemittersystem scaleformui appframework
+## CI
+- build: 9 matrix jobs (core, engine, render, vgui, data, client, server, pb25)
+- link: libprotobuf → tier0/1/2 → vstdlib/mathlib → subsystems → engine/game
+- tests: qemu-aarch64 mathlib unit tests (needs `-I c15/thirdparty` for
+  `<sse2neon/sse_shim.h>`)
+- source cache key v2; patches applied idempotently on every run.
 
 ## Next
-1. Finish clean engine rebuild (0 errors expected).
-2. Build supporting modules: materialsystem, vgui2, vguimatsurface, studiorender, datacache,
-   soundemittersystem, serverbrowser, game/client (client_cstrike15), game/server.
-3. Generate `hostversion.h` (GetHostVersion) for baseclientstate scheme versioning.
-4. Link client binary; then optimize (-O2/LTO/gc-sections/strip, NEON).
+1. Verify CI green after 07a8008 (expect ~1780 files, 0 fail).
+2. Link all .so (link.sh): resolve undefined symbols iteratively.
+3. SDL2 for Android (thirdparty/SDL2 → libSDL2.a) + APK packaging.
+4. Optimization: -O2, LTO, gc-sections, NEON paths; measure.
+5. Runtime smoke test: engine + minimal map under qemu-user or Android.
