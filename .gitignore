@@ -1,0 +1,11 @@
+c15/
+obj/
+err/
+out/
+lists/
+link.log
+*.o
+*.so
+thirdparty/protobuf/
+thirdparty/SDL2-lib/
+tests/out/

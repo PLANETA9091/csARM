@@ -1,0 +1,220 @@
+name: csARM CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      opt_level:
+        description: 'Optimization level'
+        required: false
+        default: '-O1'
+
+env:
+  MIRROR: https://github.com/perilouswithadollarsign/cstrike15_src.git
+
+jobs:
+  # Job 1: build all module groups in parallel matrix
+  build:
+    name: build/${{ matrix.tag }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: core
+            modules: "tier0/tier0.vpc tier1/tier1.vpc tier2/tier2.vpc vstdlib/vstdlib.vpc mathlib/mathlib.vpc appframework/appframework.vpc utils/bzip2/bzip2.vpc"
+            defs: ""
+          - tag: engine
+            modules: "engine/engine.vpc"
+            defs: ""
+          - tag: render
+            modules: "materialsystem/materialsystem.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
+            defs: ""
+          - tag: vgui
+            modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc vgui2/game_controls/game_controls.vpc vgui2/matsys_controls/matsys_controls.vpc vgui2/dme_controls/dme_controls.vpc"
+            defs: ""
+          - tag: data
+            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc"
+            defs: ""
+          - tag: client
+            modules: "game/client/client_cstrike15.vpc"
+            defs: "DCLIENT_DLL=1 DCSTRIKE_CLIENT_DLL=1 DCSTRIKE_DLL=1 DGAMEUI_EMBEDDED=1 DGAMEUI_EXPORTS=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DUSE_ECONOMY_FEATURES=1"
+          - tag: server
+            modules: "game/server/server_cstrike15.vpc"
+            defs: "DGAME_DLL=1 DCSTRIKE_DLL=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DPROTECTED_THINGS_ENABLE=1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache source
+        id: cache-src
+        uses: actions/cache@v4
+        with:
+          path: c15
+          key: cstrike15-src-v1
+
+      - name: Fetch pristine source + apply patches
+        if: steps.cache-src.outputs.cache-hit != 'true'
+        run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
+
+      - name: Verify source
+        run: |
+          test -f c15/engine/engine.vpc || { echo "source incomplete"; exit 1; }
+          echo "source files: $(find c15 -type f | wc -l)"
+
+      - name: Setup NDK
+        run: |
+          if [ -d "$ANDROID_NDK_LATEST_HOME" ]; then
+            echo "NDKROOT=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
+          else
+            curl -sL -o /tmp/ndk.zip https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+            unzip -q /tmp/ndk.zip -d $HOME
+            echo "NDKROOT=$HOME/android-ndk-r27d" >> $GITHUB_ENV
+          fi
+
+      - name: Build modules
+        run: |
+          set -u
+          export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export R=$GITHUB_WORKSPACE
+          export CC=aarch64-linux-android24-clang
+          export OPT=${{ github.event.inputs.opt_level || '-O1' }}
+          export JOBS=4
+          for m in ${{ matrix.modules }}; do
+            echo "=== MODULE $m ==="
+            DEFX="${{ matrix.defs }}" bash build/trybuild.sh "$m" || true
+          done
+
+      - name: Build summary
+        run: |
+          total_ok=0; total_fail=0
+          echo "| module | ok | fail |" > summary.md
+          echo "|--------|----|------|" >> summary.md
+          for d in obj/*/; do
+            t=$(basename "$d"); ok=$(ls "$d" 2>/dev/null | wc -l)
+            fail=0
+            for f in err/$t/*.log; do [ -f "$f" ] && grep -qE 'error:' "$f" && fail=$((fail+1)); done
+            echo "| $t | $ok | $fail |" >> summary.md
+            total_ok=$((total_ok+ok)); total_fail=$((total_fail+fail))
+          done
+          echo "TOTAL ok=$total_ok fail=$total_fail" >> summary.md
+          cat summary.md
+          echo "SUMMARY_TABLE<<EOF" >> $GITHUB_ENV
+          cat summary.md >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Collect error logs
+        if: always()
+        run: |
+          mkdir -p logs
+          find err -name "*.log" -size +0c | xargs -I{} sh -c 'grep -qE "error:" "{}" && cp {} logs/$(echo {} | tr "/" "_")' 2>/dev/null || true
+          cp summary.md logs/ 2>/dev/null || true
+          tar czf logs.tgz logs/ lists/ 2>/dev/null || true
+
+      - name: Upload error logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.tag }}
+          path: logs.tgz
+          if-no-files-found: ignore
+
+      - name: Upload object files
+        uses: actions/upload-artifact@v4
+        with:
+          name: obj-${{ matrix.tag }}
+          path: obj/
+          retention-days: 3
+          compression-level: 6
+
+  # Job 2: link all modules into shared libraries
+  link:
+    name: link/.so
+    needs: build
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all objects
+        uses: actions/download-artifact@v4
+        with:
+          pattern: obj-*
+          path: obj/
+
+      - name: Flatten artifact dirs
+        run: |
+          mkdir -p obj_flat
+          for d in obj/obj-*/; do
+            for t in "$d"*/; do
+              tag=$(basename "$t")
+              mkdir -p "obj_flat/$tag"
+              cp -r "$t"* "obj_flat/$tag/" 2>/dev/null || true
+            done
+          done
+          rm -rf obj && mv obj_flat obj
+          echo "Object groups:"; ls obj/
+
+      - name: Setup NDK
+        run: |
+          if [ -d "$ANDROID_NDK_LATEST_HOME" ]; then
+            echo "NDKROOT=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
+          else
+            curl -sL -o /tmp/ndk.zip https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+            unzip -q /tmp/ndk.zip -d $HOME
+            echo "NDKROOT=$HOME/android-ndk-r27d" >> $GITHUB_ENV
+          fi
+
+      - name: Link shared libraries
+        run: |
+          export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          mkdir -p out
+          bash build/link.sh || true
+          ls -la out/
+
+      - name: Verify libraries
+        run: |
+          for so in out/*.so; do
+            [ -e "$so" ] || continue
+            echo "=== $so ==="
+            file "$so"
+            $NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -d "$so" | head -12
+          done
+
+      - name: Upload libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: so-libs
+          path: out/*.so
+
+  # Job 3: aarch64 math/unit tests under qemu (validates NEON math patches)
+  tests:
+    name: tests/qemu-aarch64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cross tools + qemu
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
+
+      - name: Build and run aarch64 unit tests
+        run: |
+          set -e
+          mkdir -p tests/out
+          aarch64-linux-gnu-g++ -O2 -std=gnu++17 -I c15/public -I c15/public/tier0 -I c15/public/mathlib -I c15/mathlib -I c15/thirdparty/telemetry/include -I c15/tier0 -include build/protocompat.h \
+            tests/test_math.cpp \
+            c15/mathlib/color_conversion.cpp c15/mathlib/halton.cpp c15/mathlib/noise.cpp c15/mathlib/polyhedron.cpp c15/mathlib/simdtypes.cpp c15/mathlib/ssemath.cpp c15/mathlib/vector.cpp c15/mathlib/vmatrix.cpp c15/mathlib/bumpvects.cpp c15/mathlib/IceKey.cpp c15/mathlib/quantize.cpp c15/mathlib/r_linefile.cpp c15/mathlib/spherical.cpp c15/mathlib/3dnow.cpp c15/mathlib/sse.cpp c15/mathlib/mathlib_base.cpp c15/mathlib/lightdesc.cpp c15/mathlib/polyhedron_clip.cpp \
+            -o tests/out/test_math -lm 2> tests/build.log || { cat tests/build.log; exit 1; }
+          qemu-aarch64 -L /usr/aarch64-linux-gnu tests/out/test_math
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: tests/
