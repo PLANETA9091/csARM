@@ -206,10 +206,13 @@ jobs:
         run: |
           set -e
           mkdir -p tests/out
-          aarch64-linux-gnu-g++ -O2 -std=gnu++17 -I c15/public -I c15/public/tier0 -I c15/public/mathlib -I c15/mathlib -I c15/thirdparty/telemetry/include -I c15/tier0 -include build/protocompat.h \
-            tests/test_math.cpp \
-            c15/mathlib/color_conversion.cpp c15/mathlib/halton.cpp c15/mathlib/noise.cpp c15/mathlib/polyhedron.cpp c15/mathlib/simdtypes.cpp c15/mathlib/ssemath.cpp c15/mathlib/vector.cpp c15/mathlib/vmatrix.cpp c15/mathlib/bumpvects.cpp c15/mathlib/IceKey.cpp c15/mathlib/quantize.cpp c15/mathlib/r_linefile.cpp c15/mathlib/spherical.cpp c15/mathlib/3dnow.cpp c15/mathlib/sse.cpp c15/mathlib/mathlib_base.cpp c15/mathlib/lightdesc.cpp c15/mathlib/polyhedron_clip.cpp \
-            -o tests/out/test_math -lm 2> tests/build.log || { cat tests/build.log; exit 1; }
+          SRCS=$(cat lists/mathlib.txt | sed "s|^mathlib/|c15/mathlib/|" | tr "\n" " ")
+          aarch64-linux-gnu-g++ -O2 -std=gnu++17 -w \
+            -DPOSIX=1 -DLINUX=1 -D_LINUX=1 -DGNUC=1 -DLINUX64 -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1 -D_RAD_TELEMETRY_DISABLED \
+            -I c15/public -I c15/public/tier0 -I c15/public/tier1 -I c15/public/mathlib -I c15/mathlib \
+            -I c15/thirdparty/telemetry/include -I c15/tier0 -I c15/thirdparty/sse2neon \
+            tests/test_math.cpp $SRCS \
+            -o tests/out/test_math -lm 2> tests/build.log || { tail -30 tests/build.log; exit 1; }
           qemu-aarch64 -L /usr/aarch64-linux-gnu tests/out/test_math
 
       - name: Upload test results

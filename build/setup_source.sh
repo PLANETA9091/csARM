@@ -11,8 +11,11 @@ if [ -d "$SRC/.git" ] && [ -f "$SRC/.git/info/sparse-checkout" ]; then
   echo "c15 already present, skipping clone"
 else
   rm -rf "$SRC"
-  git clone --depth 1 --filter=blob:none --no-checkout --branch master "$MIRROR" "$SRC"
+  PINNED_SHA=f82112a2388b841d72cb62ca48ab1846dfcc11c8
+  git clone --filter=blob:none --no-checkout "$MIRROR" "$SRC"
   cd "$SRC"
+  git checkout -q $PINNED_SHA 2>/dev/null || git checkout -q origin/master || git checkout -q master
+  echo "source commit: $(git rev-parse HEAD)"
   # sparse checkout — only modules we need (61% of repo)
   cat > .git/info/sparse-checkout <<'EOF'
 /*
@@ -54,7 +57,7 @@ else
 /utils/common/
 /utils/bzip2/
 EOF
-  git checkout master 2>&1 | tail -1
+  git checkout -q HEAD 2>&1 | tail -1
 fi
 
 cd "$SRC"
