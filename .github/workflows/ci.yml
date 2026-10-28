@@ -47,7 +47,7 @@ jobs:
             defs: "DGAME_DLL=1 DCSTRIKE_DLL=1 DCSTRIKE15=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DPROTECTED_THINGS_ENABLE=1"
           - tag: pb25
             modules: "lists/protobuf25.txt"
-            defs: "HAVE_PTHREAD=1 HAVE_ZLIB=0"
+            defs: "HAVE_PTHREAD=1"
 
     steps:
       - uses: actions/checkout@v4
@@ -92,7 +92,7 @@ jobs:
 
       - name: Build summary
         run: |
-          total_ok=0; total_fail=0
+          total_ok=0; total_fail=0; zero=0
           echo "| module | ok | fail |" > summary.md
           echo "|--------|----|------|" >> summary.md
           for d in obj/*/; do
@@ -101,12 +101,11 @@ jobs:
             for f in err/$t/*.log; do [ -f "$f" ] && grep -qE 'error:' "$f" && fail=$((fail+1)); done
             echo "| $t | $ok | $fail |" >> summary.md
             total_ok=$((total_ok+ok)); total_fail=$((total_fail+fail))
+            if [ "$ok" -eq 0 ]; then echo "::error::module $t produced 0 objects"; zero=$((zero+1)); fi
           done
           echo "TOTAL ok=$total_ok fail=$total_fail" >> summary.md
           cat summary.md
-          echo "SUMMARY_TABLE<<EOF" >> $GITHUB_ENV
-          cat summary.md >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          if [ "$total_fail" -gt 0 ] || [ "$zero" -gt 0 ]; then exit 1; fi
 
       - name: Collect error logs
         if: always()
@@ -187,10 +186,21 @@ jobs:
         run: |
           export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           mkdir -p out
-          bash build/link.sh || true
+          bash build/link.sh
           ls -la out/
 
+      - name: Undefined symbol report
+        if: always()
+        run: |
+          READELF="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          for so in out/*.so; do
+            [ -e "$so" ] || continue
+            echo "=== $so ==="
+            $READELF --dyn-syms "$so" | grep -c UND || true
+          done
+
       - name: Verify libraries
+        if: always()
         run: |
           for so in out/*.so; do
             [ -e "$so" ] || continue
@@ -200,10 +210,91 @@ jobs:
           done
 
       - name: Upload libraries
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: so-libs
           path: out/*.so
+          if-no-files-found: ignore
+
+      - name: Upload link log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-log
+          path: link.log
+          if-no-files-found: ignore
+
+  # Job 2b: visual test — load all .so on a real Android (emulator) + render check
+  visual-test:
+    name: visual/emulator
+    needs: link
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download .so libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: so-libs
+          path: android/libs
+
+      - name: List libs for APK
+        run: ls -la android/libs/
+
+      - name: Build APK
+        run: bash android/build_apk.sh
+        env:
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csARM-apk
+          path: android/out/csARM.apk
+          if-no-files-found: ignore
+
+      - name: Run on emulator + visual capture
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          emulator-boot-timeout: 1200
+          script: |
+            adb install -r android/out/csARM.apk
+            adb shell am start -n com.csarm.port/.MainActivity
+            sleep 10
+            adb logcat -d > logcat.txt || true
+            grep -E "CSARM_LIB_OK|CSARM_LIB_FAIL|CSARM_LOAD_DONE|CSARM_FRAME" logcat.txt | sort -u || true
+            adb exec-out screencap -p > shot1.png
+            sleep 4
+            adb exec-out screencap -p > shot2.png
+            adb logcat -d -b crash > crash.txt || true
+
+      - name: Assert load results
+        run: |
+          test -f logcat.txt || { echo "no logcat"; exit 1; }
+          grep -q "CSARM_LOAD_DONE" logcat.txt || { echo "::error::load report missing"; tail -50 logcat.txt; exit 1; }
+          if grep -q "CSARM_LIB_FAIL" logcat.txt; then
+            echo "::error::libraries failed to load on ARM64/translation"
+            grep -E "CSARM_LIB_FAIL" logcat.txt
+            exit 1
+          fi
+          echo "All libraries loaded OK on emulator"
+
+      - name: Upload visual artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-test
+          path: |
+            shot*.png
+            logcat.txt
+            crash.txt
+          if-no-files-found: ignore
 
   # Job 3: aarch64 math/unit tests under qemu (validates NEON math patches)
   tests:

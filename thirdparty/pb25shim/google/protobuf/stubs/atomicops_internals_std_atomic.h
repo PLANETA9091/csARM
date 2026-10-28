@@ -81,13 +81,13 @@ inline void Release_Store(volatile Atomic32* ptr, Atomic32 value) {
   ToStd(ptr)->store(value, std::memory_order_release);
 }
 inline Atomic32 NoBarrier_Load(volatile const Atomic32* ptr) {
-  return const_cast<std::atomic<Atomic32>*>(ToStd(ptr))->load(std::memory_order_relaxed);
+  return ToStd(const_cast<volatile Atomic32*>(ptr))->load(std::memory_order_relaxed);
 }
 inline Atomic32 Acquire_Load(volatile const Atomic32* ptr) {
-  return const_cast<std::atomic<Atomic32>*>(ToStd(ptr))->load(std::memory_order_acquire);
+  return ToStd(const_cast<volatile Atomic32*>(ptr))->load(std::memory_order_acquire);
 }
 inline Atomic32 Release_Load(volatile const Atomic32* ptr) {
-  return const_cast<std::atomic<Atomic32>*>(ToStd(ptr))->load(std::memory_order_seq_cst);
+  return ToStd(const_cast<volatile Atomic32*>(ptr))->load(std::memory_order_seq_cst);
 }
 
 // ---------------- Atomic64 ----------------
@@ -147,13 +147,13 @@ inline void Release_Store(volatile Atomic64* ptr, Atomic64 value) {
   ToStd(ptr)->store(value, std::memory_order_release);
 }
 inline Atomic64 NoBarrier_Load(volatile const Atomic64* ptr) {
-  return const_cast<std::atomic<Atomic64>*>(ToStd(ptr))->load(std::memory_order_relaxed);
+  return ToStd(const_cast<volatile Atomic64*>(ptr))->load(std::memory_order_relaxed);
 }
 inline Atomic64 Acquire_Load(volatile const Atomic64* ptr) {
-  return const_cast<std::atomic<Atomic64>*>(ToStd(ptr))->load(std::memory_order_acquire);
+  return ToStd(const_cast<volatile Atomic64*>(ptr))->load(std::memory_order_acquire);
 }
 inline Atomic64 Release_Load(volatile const Atomic64* ptr) {
-  return const_cast<std::atomic<Atomic64>*>(ToStd(ptr))->load(std::memory_order_seq_cst);
+  return ToStd(const_cast<volatile Atomic64*>(ptr))->load(std::memory_order_seq_cst);
 }
 
 }  // namespace internal
