@@ -89,6 +89,7 @@ cp -v "$REPO_DIR/patches/extras/gameeventlistener.h" "$SRC/game/shared/gameevent
 cp -v "$REPO_DIR/patches/extras/IVGUI.h" "$SRC/public/vgui/IVGUI.h"
 cp -v "$REPO_DIR/patches/extras/unicode_native.h" "$SRC/tier1/unicode_native.h"
 cp -v "$REPO_DIR/patches/extras/spawn_helper_nut.h" "$SRC/game/server/spawn_helper_nut.h"
+cp -v "$REPO_DIR/patches/extras/vscript_server_nut.h" "$SRC/game/server/vscript_server_nut.h"
 rm -rf "$SRC/thirdparty/sse2neon"
 cp -rv "$REPO_DIR/patches/extras/sse2neon" "$SRC/thirdparty/sse2neon"
 echo "Source setup complete: $SRC"

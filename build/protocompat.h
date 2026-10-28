@@ -21,4 +21,11 @@
 #define bswap_64(x) __builtin_bswap64((unsigned long long)(x))
 #endif
 
+// Valve's int64/uint64 (public/tier0/platform.h, non-MSVC branch) are used in
+// some POSIX prototypes before platform.h is reached (e.g. tier1/fileio.cpp
+// _findnext/_findclose). Pre-declare them here; an identical typedef
+// redeclaration in platform.h is legal C++.
+typedef long long int64;
+typedef unsigned long long uint64;
+
 #endif

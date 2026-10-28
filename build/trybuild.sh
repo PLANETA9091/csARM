@@ -8,20 +8,23 @@ R=${R:-$(dirname "$SCRIPT_DIR")}
 cd "$R"
 PROJ="$1"
 TAG=$(basename "$PROJ" .vpc)
-OUT="$R/obj/$TAG"; ERR="$R/err/$TAG"; mkdir -p "$OUT" "$ERR"
-LST="$R/lists/$TAG.txt"; mkdir -p "$R/lists"
 if [ -f "$PROJ" ] || [ -f "$R/$PROJ" ]; then
   # raw .txt file list (c15-relative paths), e.g. lists/protobuf25.txt
-  [ -f "$PROJ" ] && cp "$PROJ" "$LST" || cp "$R/$PROJ" "$LST"
+  LST="$R/lists/$(basename "$PROJ")"; mkdir -p "$R/lists"
+  if [ ! "$PROJ" -ef "$LST" ]; then
+    [ -f "$PROJ" ] && cp "$PROJ" "$LST" || cp "$R/$PROJ" "$LST"
+  fi
   TAG=$(basename "$PROJ" .txt)
-  OUT="$R/obj/$TAG"; ERR="$R/err/$TAG"; mkdir -p "$OUT" "$ERR"
   VDEFS=""; VINC=""
 else
+  LST="$R/lists/$TAG.txt"; mkdir -p "$R/lists"
   python3 "$SCRIPT_DIR/vpcmini.py" c15 "$PROJ" 2>/dev/null | grep -E '\.(cpp|cc|cxx|c)$' | grep -vE 'openal|voice_record_dsound|voice_mixer_controls' > "$LST"
 
   VDEFS=$(python3 "$SCRIPT_DIR/vpcmini.py" c15 "$PROJ" --defs 2>/dev/null | tr ';' '\n' | grep -vE '\$|\(|\)|^$|^DEBUG$|^_DEBUG$|^NDEBUG$' | sort -u | sed 's/^/-D/' | tr '\n' ' ' 2>/dev/null)
   VINC=$(python3 "$SCRIPT_DIR/vpcmini.py" c15 "$PROJ" --inc 2>/dev/null | grep -vE '\$|\(' | while read -r i; do [ -d "c15/$i" ] && printf ' -I c15/%s' "$i"; done 2>/dev/null)
 fi
+# TAG is final here — create the real output dirs (never pre-TAG dirs)
+OUT="$R/obj/$TAG"; ERR="$R/err/$TAG"; mkdir -p "$OUT" "$ERR"
 
 CC=${CC:-aarch64-linux-android27-clang}
 OPT=${OPT:--O1}
