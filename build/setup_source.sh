@@ -71,9 +71,18 @@ echo "Applying patches (FRESH=$FRESH)..."
 if [ "$FRESH" = "1" ]; then
   git apply --whitespace=nowarn "$REPO_DIR/patches/all_patches.diff" || { echo "PATCH APPLY FAILED"; exit 1; }
 else
-  git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/all_patches.diff" 2>/dev/null \
-    && git apply --whitespace=nowarn "$REPO_DIR/patches/all_patches.diff" \
-    || echo "PATCH APPLY: already applied, skipping"
+  if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/all_patches.diff" 2>/dev/null; then
+    echo "PATCH APPLY: current patches already applied"
+  elif git apply --whitespace=nowarn --check "$REPO_DIR/patches/all_patches.diff" 2>/dev/null; then
+    git apply --whitespace=nowarn "$REPO_DIR/patches/all_patches.diff"
+  else
+    # Patch-state mismatch (e.g. cached c15 has an older patch revision):
+    # reset tracked files + drop untracked extras, then apply the current diff.
+    echo "PATCH STATE MISMATCH -> resetting source tree to pristine"
+    git checkout -- .
+    git clean -fdq
+    git apply --whitespace=nowarn "$REPO_DIR/patches/all_patches.diff" || { echo "PATCH APPLY FAILED"; exit 1; }
+  fi
 fi
 echo "Copying extra files..."
 cp -v "$REPO_DIR/patches/extras/gameeventlistener.h" "$SRC/game/shared/gameeventlistener.h"

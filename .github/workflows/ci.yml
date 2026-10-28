@@ -57,7 +57,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v2
+          key: cstrike15-src-v3
 
       - name: Fetch pristine source + apply patches (idempotent, always)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -146,7 +146,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v2
+          key: cstrike15-src-v3
 
       - name: Fetch source + patches (needed for genproto compile and SDL2 headers)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -217,7 +217,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v2
+          key: cstrike15-src-v3
 
       - name: Fetch/refresh source (idempotent)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -231,12 +231,16 @@ jobs:
         run: |
           set -e
           mkdir -p tests/out
-          SRCS=$(cat lists/mathlib.txt | sed "s|^mathlib/|c15/mathlib/|" | tr "\n" " ")
-          aarch64-linux-gnu-g++ -O2 -std=gnu++17 -w \
+          SRCS=$(cat lists/mathlib.txt | sed "s|^mathlib/|c15/mathlib/|" | grep -vE "expressioncalculator|lightdesc|polyhedron|IceKey" | tr "\n" " ")
+          aarch64-linux-gnu-g++ -O2 -std=gnu++17 -w -Wno-narrowing \
             -DPOSIX=1 -DLINUX=1 -D_LINUX=1 -DGNUC=1 -DLINUX64 -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1 -D_RAD_TELEMETRY_DISABLED \
             -I c15/public -I c15/public/tier0 -I c15/public/tier1 -I c15/public/mathlib -I c15/mathlib \
+            -I c15/public/vstdlib -I c15/vstdlib \
             -I c15/thirdparty/telemetry/include -I c15/tier0 -I c15/thirdparty -I c15/thirdparty/sse2neon \
-            tests/test_math.cpp $SRCS \
+            tests/test_math.cpp tests/test_stubs.cpp \
+            c15/tier0/cpu.cpp c15/tier0/cpu_posix.cpp c15/tier0/tier0_strtools.cpp c15/tier1/processor_detect_linux.cpp \
+            c15/tier1/convar.cpp c15/tier1/characterset.cpp c15/tier1/utlstring.cpp c15/tier1/utlbuffer.cpp \
+            $SRCS \
             -o tests/out/test_math -lm 2> tests/build.log || { tail -30 tests/build.log; exit 1; }
           qemu-aarch64 -L /usr/aarch64-linux-gnu tests/out/test_math
 

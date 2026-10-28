@@ -8,6 +8,11 @@
 #include "tier0/platform.h"
 #include "mathlib/mathlib.h"
 #include "mathlib/vector.h"
+#include "mathlib/ssemath.h"
+
+// mathlib API provides FastSinCos (x86 sse.cpp / ARM branch), not FastSin;
+// small wrapper for readability below.
+static inline float FastSin( float x ) { float s, c; FastSinCos( x, &s, &c ); return s; }
 #include "mathlib/vmatrix.h"
 
 static int g_fail = 0;
