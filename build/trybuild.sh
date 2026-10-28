@@ -27,6 +27,10 @@ DEF="-std=gnu++17 -include $R/build/protocompat.h -Wno-narrowing -Wno-register -
 INC="$INC $INCX $VINC"
 DEF="$DEF $VDEFS"
 
+# Project-local headers come first (Valve semantics: e.g. soundemittersystem
+# has its own lightweight cbase.h that must shadow game/server/cbase.h)
+INC="-I c15/$(dirname "$PROJ") $INC"
+
 # Per-module header resolution: client.h lives in BOTH engine/ and game/server/.
 # Engine+client modules need engine/client.h (CClientState); server needs its own.
 case "$TAG" in

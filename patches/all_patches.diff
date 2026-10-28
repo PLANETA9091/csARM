@@ -104,6 +104,28 @@ index 03c1be9..52104f7 100644
  	#else
  	extern SteamPS3Params_t g_EngineSteamPS3Params;
  	SteamAPI_Init( &g_EngineSteamPS3Params );
+diff --git a/engine/downloadthread.cpp b/engine/downloadthread.cpp
+index 674397e..dcbd967 100644
+--- a/engine/downloadthread.cpp
++++ b/engine/downloadthread.cpp
+@@ -523,6 +523,17 @@ uintp DownloadThread( void *voidPtr )
+ 
+ 	return 0;
+ }
++#elif defined( ANDROID ) && !defined( DEDICATED )
++
++// csARM: libcurl is not part of bionic/NDK. HTTP map downloads are stubbed;
++// the engine falls back to LAN/builtin content. TODO: route via Java HttpURLConnection.
++uintp DownloadThread( void *voidPtr )
++{
++	RequestContext &rc = *(RequestContext *)voidPtr;
++	Warning( "DownloadThread: HTTP downloads not available on Android (stubbed)\n" );
++	rc.status = HTTP_ABORTED;
++	return 0;
++}
+ #elif defined( POSIX ) && !defined( DEDICATED )
+ 
+ #include "curl/curl.h"
 diff --git a/engine/gl_matsysiface.cpp b/engine/gl_matsysiface.cpp
 index 15a7ce8..a711a96 100644
 --- a/engine/gl_matsysiface.cpp
@@ -402,6 +424,76 @@ index d54a3d4..9a10613 100644
  #endif
  
  #include "cbase.h"
+diff --git a/game/server/entitylist.h b/game/server/entitylist.h
+index c2799ab..8b4da99 100644
+--- a/game/server/entitylist.h
++++ b/game/server/entitylist.h
+@@ -1,4 +1,4 @@
+-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
+ //
+ // Purpose: 
+ //
+@@ -15,6 +15,12 @@
+ 
+ class CBaseEntity;
+ class IEntityListener;
++// csARM: forward declarations so utility builds (soundemittersystem etc.) compile
++// without the full game/server include stack
++class IServerNetworkable;
++class CBaseNetworkable;
++class IServerUnknown;
++class CBaseEntity;
+ 
+ abstract_class CBaseEntityClassList
+ {
+@@ -207,38 +213,46 @@ inline CBaseHandle CGlobalEntityList::AddNonNetworkableEntity( IHandleEntity *pE
+ 
+ inline edict_t* CGlobalEntityList::GetEdict( CBaseHandle hEnt ) const
+ {
++#if defined( GAME_DLL )  // csARM: engine types only in game dll builds
+ 	IServerUnknown *pUnk = static_cast<IServerUnknown*>(LookupEntity( hEnt ));
+ 	if ( pUnk )
+ 		return pUnk->GetNetworkable()->GetEdict();
+ 	else
+ 		return NULL;
++#endif  // csARM
+ }
+ 
+ inline CBaseNetworkable* CGlobalEntityList::GetBaseNetworkable( CBaseHandle hEnt ) const
+ {
++#if defined( GAME_DLL )  // csARM: engine types only in game dll builds
+ 	IServerUnknown *pUnk = static_cast<IServerUnknown*>(LookupEntity( hEnt ));
+ 	if ( pUnk )
+ 		return pUnk->GetNetworkable()->GetBaseNetworkable();
+ 	else
+ 		return NULL;
++#endif  // csARM
+ }
+ 
+ inline IServerNetworkable* CGlobalEntityList::GetServerNetworkable( CBaseHandle hEnt ) const
+ {
++#if defined( GAME_DLL )  // csARM: engine types only in game dll builds
+ 	IServerUnknown *pUnk = static_cast<IServerUnknown*>(LookupEntity( hEnt ));
+ 	if ( pUnk )
+ 		return pUnk->GetNetworkable();
+ 	else
+ 		return NULL;
++#endif  // csARM
+ }
+ 
+ inline CBaseEntity* CGlobalEntityList::GetBaseEntity( CBaseHandle hEnt ) const
+ {
++#if defined( GAME_DLL )  // csARM: engine types only in game dll builds
+ 	IServerUnknown *pUnk = static_cast<IServerUnknown*>(LookupEntity( hEnt ));
+ 	if ( pUnk )
+ 		return pUnk->GetBaseEntity();
+ 	else
+ 		return NULL;
++#endif  // csARM
+ }
+ 
+ 
 diff --git a/game/shared/baseachievement.cpp b/game/shared/baseachievement.cpp
 index 1b0abf7..fe7a053 100644
 --- a/game/shared/baseachievement.cpp
@@ -468,6 +560,107 @@ index 0000000..2f17e2d
 +#pragma once
 +// [port] case-compat: repo ships GameEventListener.h
 +#include "game/shared/GameEventListener.h"
+diff --git a/game/shared/sharedvar.h b/game/shared/sharedvar.h
+index bb4ade6..015df0e 100644
+--- a/game/shared/sharedvar.h
++++ b/game/shared/sharedvar.h
+@@ -1,4 +1,4 @@
+-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
+ //
+ // Purpose: 
+ //
+@@ -189,9 +189,11 @@ public:
+ 	{
+ 		Assert( !m_pSharedMemory && !m_pValue );
+ 
++#if defined( CLIENT_DLL ) || defined( GAME_DLL )
+ 		m_pSharedMemory = engine->GetSinglePlayerSharedMemorySpace( pchName, iEntNum );
+ 		m_pSharedMemory->Init( sizeof( Type ) );
+ 		m_pValue = (Type*)m_pSharedMemory->Base();
++#endif
+ 	}
+ 
+ 	#if defined( GAME_DLL )
+@@ -626,10 +628,12 @@ public:
+ 	{
+ 		Assert( !this->m_pSharedMemory && !this->m_pValue );
+ 
++#if defined( CLIENT_DLL ) || defined( GAME_DLL )
+ 		this->m_pSharedMemory = engine->GetSinglePlayerSharedMemorySpace( pchName, iEntNum );
+ 		this->m_pSharedMemory->Init( sizeof( EHANDLE ) + sizeof( int ) );		// Also allocate memory for the int that converts to a Client handle
+ 		this->m_pValue = (EHANDLE*)this->m_pSharedMemory->Base();
+ 		m_piClientIndex = (int*)((void*)(this->m_pValue + 1));
++#endif
+ 	}
+ 
+ 	bool operator !() const 
+@@ -691,10 +695,12 @@ private:
+ 		#if defined( GAME_DLL )
+ 			// Server can get the handle directly
+ 			return (*CSharedHandleBase<Type,Changer>::m_pValue);
+-		#else
+-			// Client needs to get the handle translated from the stroed int
++		#elif defined( CLIENT_DLL )
++			// Client needs to get the handle translated from the stored int
+ 			EHANDLE hClient = Client_IntToEHandle( *m_piClientIndex );
+ 			return hClient;
++		#else
++			return (*CSharedHandleBase<Type,Changer>::m_pValue);  // csARM: utility builds
+ 		#endif
+ 	}
+ 
+@@ -749,9 +755,11 @@ public:
+ 		Assert( !this->m_pSharedMemory && !(CSharedArrayBase<Type,Changer>::m_pValue) && iCount > 0 );
+ 
+ 		m_iCount = iCount;
++#if defined( CLIENT_DLL ) || defined( GAME_DLL )
+ 		this->m_pSharedMemory = engine->GetSinglePlayerSharedMemorySpace( pchName, iEntNum );
+ 		this->m_pSharedMemory->Init( sizeof( Type ) * m_iCount );
+ 		CSharedArrayBase<Type,Changer>::m_pValue = (Type*)this->m_pSharedMemory->Base();
++#endif
+ 	}
+ 
+ 	const int& Count() const
+@@ -833,10 +841,12 @@ public:
+ 		Assert( !this->m_pSharedMemory && !(CSharedHandleArrayBase<Type,Changer>::m_pValue) && iCount > 0 );
+ 
+ 		this->m_iCount = iCount;
++#if defined( CLIENT_DLL ) || defined( GAME_DLL )
+ 		this->m_pSharedMemory = engine->GetSinglePlayerSharedMemorySpace( pchName, iEntNum );
+ 		this->m_pSharedMemory->Init( sizeof( EHANDLE ) * this->m_iCount + sizeof( int ) * this->m_iCount );	// Also allocate memory for the ints that convert to Client handles
+ 		this->m_pValue = (EHANDLE*)this->m_pSharedMemory->Base();
+ 		m_piClientIndex = (int*)((void*)(CSharedHandleArrayBase<Type,Changer>::m_pValue + this->m_iCount));
++#endif
+ 	}
+ 
+ 	const int& Count() const
+@@ -874,10 +884,12 @@ private:
+ 		#if defined( GAME_DLL )
+ 			// Server can get the handle directly
+ 			return CSharedHandleArrayBase<Type,Changer>::m_pValue[i];
+-		#else
++		#elif defined( CLIENT_DLL )
+ 			// Client needs to get the handle translated from the stroed int
+ 			EHANDLE hClient = Client_IntToEHandle( m_piClientIndex[i] );
+ 			return hClient;
++		#else
++			return CSharedHandleArrayBase<Type,Changer>::m_pValue[i];  // csARM: utility builds
+ 		#endif
+ 	}
+ 
+@@ -945,9 +957,11 @@ public:
+ 	{
+ 		Assert( !this->m_pSharedMemory && !(CSharedUtlVectorBase<Type,Changer>::m_pValue) );
+ 
++#if defined( CLIENT_DLL ) || defined( GAME_DLL )
+ 		this->m_pSharedMemory = engine->GetSinglePlayerSharedMemorySpace( pchName, iEntNum );
+ 		this->m_pSharedMemory->Init( sizeof( CUtlVector<Type> ) );
+ 		CSharedUtlVectorBase<Type,Changer>::m_pValue = (CUtlVector<Type>*)this->m_pSharedMemory->Base();
++#endif
+ 	}
+ 
+ #if defined( GAME_DLL )
 diff --git a/game/shared/usermessages.cpp b/game/shared/usermessages.cpp
 index a512b7a..456cfda 100644
 --- a/game/shared/usermessages.cpp
@@ -481,6 +674,78 @@ index a512b7a..456cfda 100644
  		//handle message content display if they have it set to a value > 1
  		if( cl_show_usermessage.GetInt() > 1 )
  			Msg("%s", pMsg->DebugString().c_str() );
+diff --git a/game/shared/util_shared.h b/game/shared/util_shared.h
+index a1ced3d..42ee38c 100644
+--- a/game/shared/util_shared.h
++++ b/game/shared/util_shared.h
+@@ -1,4 +1,4 @@
+-//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
+ //
+ // Purpose: Shared util code between client and server.
+ //
+@@ -6,6 +6,12 @@
+ 
+ #ifndef UTIL_SHARED_H
+ #define UTIL_SHARED_H
++#if defined( GAME_DLL )
++// csARM: server-only helpers below need full engine types
++#include "iserverunknown.h"
++#include "enginecallback.h"
++#endif
++
+ #ifdef _WIN32
+ #pragma once
+ #endif
+@@ -88,12 +94,14 @@ inline const CBaseEntity *EntityFromEntityHandle( const IHandleEntity *pConstHan
+ #ifdef CLIENT_DLL
+ 	IClientUnknown *pUnk = (IClientUnknown*)pHandleEntity;
+ 	return pUnk->GetBaseEntity();
+-#else
++#elif defined( GAME_DLL )
+ 	if ( staticpropmgr->IsStaticProp( pHandleEntity ) )
+ 		return NULL;
+ 
+ 	IServerUnknown *pUnk = (IServerUnknown*)pHandleEntity;
+ 	return pUnk->GetBaseEntity();
++#else
++	return NULL;  // csARM: utility builds (soundemittersystem etc.) â€” no entity translation
+ #endif
+ }
+ 
+@@ -102,7 +110,7 @@ inline CBaseEntity *EntityFromEntityHandle( IHandleEntity *pHandleEntity )
+ #ifdef CLIENT_DLL
+ 	IClientUnknown *pUnk = (IClientUnknown*)pHandleEntity;
+ 	return pUnk->GetBaseEntity();
+-#else
++#elif defined( GAME_DLL )
+ #ifndef _GAMECONSOLE
+ 	if ( staticpropmgr->IsStaticProp( pHandleEntity ) )
+ 		return NULL;
+@@ -114,6 +122,8 @@ inline CBaseEntity *EntityFromEntityHandle( IHandleEntity *pHandleEntity )
+ 	IServerUnknown *pUnk = (IServerUnknown*)pHandleEntity;
+ 	Assert( !pUnk || pUnk->GetBaseEntity() );
+ 	return pUnk->GetBaseEntity();
++#else
++	return NULL;  // csARM: utility builds â€” no entity translation
+ #endif
+ }
+ 
+@@ -306,6 +316,14 @@ extern ConVar r_visualizetraces;
+ #define ReportExpensiveTrace( repeat ) ((void)0)
+ #endif
+ 
++#if !defined( CLIENT_DLL ) && !defined( GAME_DLL )
++// csARM: utility builds (soundemittersystem etc.) don't link the engine;
++// declare the interface pointer so inline helpers compile. These are never
++// called from within those modules (no engine trace callbacks wired there).
++class IEngineTrace;
++extern IEngineTrace *enginetrace;
++#endif
++
+ inline void UTIL_TraceLine( const Vector& vecAbsStart, const Vector& vecAbsEnd, unsigned int mask, 
+ 					 const IHandleEntity *ignore, int collisionGroup, trace_t *ptr )
+ {
 diff --git a/materialsystem/cmaterialsystem.cpp b/materialsystem/cmaterialsystem.cpp
 index 6fc7865..ca561b5 100644
 --- a/materialsystem/cmaterialsystem.cpp
@@ -1541,6 +1806,25 @@ index ac6fcc5..f1b306a 100644
  	strcat( out, "/" );
  #endif
  	Q_FixSlashes( out );
+diff --git a/vguimatsurface/MatSystemSurface.cpp b/vguimatsurface/MatSystemSurface.cpp
+index 80fdef8..f3f5ba2 100644
+--- a/vguimatsurface/MatSystemSurface.cpp
++++ b/vguimatsurface/MatSystemSurface.cpp
+@@ -18,8 +18,14 @@
+ #include <Carbon/Carbon.h>
+ #endif
+ #ifdef LINUX
++#if defined( ANDROID )
++// csARM: no fontconfig on Android; fonts come from the game directory (TTFs bundled in APK assets)
++struct FcConfig;
++inline bool FcConfigInit_stub() { return false; }
++#else
+ #include <fontconfig/fontconfig.h>
+ #endif
++#endif
+ 
+ #if defined( USE_SDL ) || defined(OSX) 
+ #include <appframework/ilaunchermgr.h>
 diff --git a/vstdlib/vstrtools.cpp b/vstdlib/vstrtools.cpp
 index fb69147..382632d 100644
 --- a/vstdlib/vstrtools.cpp
