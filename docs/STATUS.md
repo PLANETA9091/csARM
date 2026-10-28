@@ -80,15 +80,61 @@ extras: unicode_native.h, IVGUI.h, gameeventlistener.h, spawn_helper_nut.h,
 sse2neon (+ sse_shim.h).
 
 ## CI
-- build: 9 matrix jobs (core, engine, render, vgui, data, client, server, pb25)
-- link: libprotobuf → tier0/1/2 → vstdlib/mathlib → subsystems → engine/game
+- build: 9 matrix jobs (core, engine, render, vgui, data, client, server, pb25);
+  strict summary: any err>0 or zero-object module fails the job
+- link: libSDL2 -> libprotobuf -> tier0/1/2 -> vstdlib/mathlib/tier2 ->
+  subsystems (datacache, studiorender, soundemittersystem, vguimatsurface,
+  vgui, vgui_controls, materialsystem) -> engine (+genproto) -> client/server
+- visual-test: APK (no-gradle aapt2/d8/apksigner build) -> API 30 x86_64
+  google_apis emulator (ARM64 translation) -> dlopen all 17 libs + GLES2
+  animated scene -> screencaps + logcat assertions as artifacts
 - tests: qemu-aarch64 mathlib unit tests (needs `-I c15/thirdparty` for
   `<sse2neon/sse_shim.h>`)
-- source cache key v2; patches applied idempotently on every run.
+
+## Link status (verified locally, NDK r27d, 2026-10-28)
+
+ALL 18 libraries link clean:
+
+| lib | size (-O1, unstripped) | deps |
+|-----|------------------------|------|
+| libSDL2.so | 665 KB | system (GLES1/2, EGL, log, android) |
+| libprotobuf.so | 1.2 MB | system |
+| libtier0.so | 270 KB | system |
+| libtier1.so | 664 KB | tier0 |
+| libvstdlib.so | 284 KB | tier0 tier1 |
+| libmathlib.so | 357 KB | tier0 tier1 |
+| libtier2.so | 211 KB | tier0 tier1 |
+| libappframework.so | 109 KB | tier0 tier1 |
+| libdatacache.so | 746 KB | + vstdlib |
+| libstudiorender.so | 905 KB | + mathlib |
+| libsoundemittersystem.so | 131 KB | + mathlib |
+| libvguimatsurface.so | 262 KB | + tier2 SDL2 |
+| libvgui.so | 313 KB | + tier2 SDL2 |
+| libvgui_controls.so | 3.1 MB | + vgui |
+| libmaterialsystem.so | 2.0 MB | + tier2 |
+| libengine.so | 12.6 MB | tier0/1/2 vstdlib mathlib protobuf SDL2 + GLESv2/OpenSLES |
+| libclient.so | 23.6 MB | engine deps (+ SDL2) |
+| libserver.so | 26.7 MB | engine deps |
+
+Key link decisions:
+- **libSDL2.so is shared** (was static): engine, vgui, vguimatsurface all
+  reference SDL symbols -> one runtime instance via DT_NEEDED.
+- **libc++_shared** for every .so: single STL heap + unified std type_info
+  across 17 libs (cross-.so exceptions).
+- EXCLUDE_RE in link.sh drops objects with colliding/overridden definitions:
+  tier0/mem_helpers.cpp (g_pszModule dup with memoverride; no refs to its
+  symbols), client weapon_parse_default + c_mod_lesson_stubs (cstrike15
+  overrides), server game/server/player_pickup.cpp (cstrike15 override).
+- protobuf 2.5.0 shim: const-volatile ToStd overloads; hand-rolled config.h
+  for bionic (HAVE_PTHREAD, no zlib -> gzip_stream.cc excluded).
+- SDL 2.0.2 built from official tarball against ITS OWN headers with
+  -DANDROID=1 (SDL 2.0.2 predates __ANDROID__ gating in SDL_rwops.h); dynapi
+  patched off; render/yuv2rgb dropped (engine renders via ToGL).
 
 ## Next
-1. Verify CI green after 07a8008 (expect ~1780 files, 0 fail).
-2. Link all .so (link.sh): resolve undefined symbols iteratively.
-3. SDL2 for Android (thirdparty/SDL2 → libSDL2.a) + APK packaging.
-4. Optimization: -O2, LTO, gc-sections, NEON paths; measure.
-5. Runtime smoke test: engine + minimal map under qemu-user or Android.
+1. CI green end-to-end (build matrix -> link -> visual emulator test).
+2. Optimization pass: -O2 default, optional ThinLTO (LTO=1) + strip
+   (STRIP=1) already supported in trybuild/link; measure deltas on CI.
+3. Runtime smoke test on emulator: dlopen libengine.so + minimal entry.
+4. Game-data strategy: user-provided CS:GO VPKs, engine boot with real
+   gameinfo.txt.
