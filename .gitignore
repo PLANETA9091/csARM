@@ -2,7 +2,7 @@ c15/
 obj/
 err/
 out/
-lists/
+lists/*
 !lists/*.txt
 link.log
 *.o

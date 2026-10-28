@@ -24,7 +24,12 @@ for pb in genproto/*.pb.cc; do
   $CC -c -fPIC -O1 -w -std=gnu++17 $PBINC -D_POSIX=1 -DLINUX=1 -DGNUC=1 -DENGINE_DLL=1 "$pb" -o "$obj" >> "$LOG" 2>&1
 done
 
-LFLAGS="-shared -fPIC -fuse-ld=lld -stdlib=libc++_shared -Wl,--gc-sections -Wl,-soname,"
+LFLAGS="-shared -fPIC -fuse-ld=lld -stdlib=libc++_shared -Wl,--gc-sections"
+# LTO=1 (must match trybuild.sh) -> ThinLTO at link; soname passed separately
+if [ "${LTO:-0}" = "1" ]; then LFLAGS="$LFLAGS -flto=thin"; fi
+if [ "${STRIP:-0}" = "1" ]; then
+  STRIPBIN="${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+fi
 
 # objects to drop (duplicate/overridden definitions inside one .so):
 #   tier0: mem_helpers.cpp defines g_pszModule which memoverride.cpp also defines;
@@ -50,9 +55,10 @@ link_so() {
   local ldeps=""
   for d in $deps; do ldeps="$ldeps -L$OUTDIR -l$d"; done
   echo "[link] $name  objs=$total  deps=[$deps]" | tee -a "$LOG"
-  $CC $LFLAGS"$name" -o "$OUTDIR/$name" "${objs[@]}" $ldeps -ldl -llog -lm -lc -lz 2>>"$LOG"
+  $CC $LFLAGS -Wl,-soname,"$name" -o "$OUTDIR/$name" "${objs[@]}" $ldeps -ldl -llog -lm -lc -lz 2>>"$LOG"
   local rc=$?
   if [ $rc -ne 0 ]; then echo "   LINK FAILED: $name" | tee -a "$LOG"; else echo "   OK: $name" | tee -a "$LOG"; fi
+  if [ $rc -eq 0 ] && [ -n "${STRIPBIN:-}" ] && [ "${STRIP:-0}" = "1" ]; then "$STRIPBIN" --strip-debug "$OUTDIR/$name" || true; fi
   return $rc
 }
 
@@ -82,10 +88,10 @@ link_so libmaterialsystem.so "tier0 tier1 mathlib vstdlib tier2" materialsystem 
 GENPROTO_OBJS=$(ls obj/genproto/*.o 2>/dev/null)
 if [ -n "$GENPROTO_OBJS" ] && [ -f "$OUTDIR/libmathlib.so" ]; then
   echo "[link] libengine.so (engine + genproto)" | tee -a "$LOG"
-  $CC $LFLAGS"libengine.so" -o "$OUTDIR/libengine.so" obj/engine/*.o $GENPROTO_OBJS \
+  $CC $LFLAGS -Wl,-soname,"libengine.so" -o "$OUTDIR/libengine.so" obj/engine/*.o $GENPROTO_OBJS \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 \
      -ldl -llog -lm -lc -lz -landroid -lEGL -lGLESv2 -lOpenSLES 2>>"$LOG" \
-     && echo "   OK: libengine.so" | tee -a "$LOG" || echo "   LINK FAILED: libengine.so" | tee -a "$LOG"
+     && { echo "   OK: libengine.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/libengine.so" || true; } || echo "   LINK FAILED: libengine.so" | tee -a "$LOG"
 fi
 
 # 4. Client / Server (game DLLs) — same EXCLUDE_RE filtering as link_so
@@ -101,10 +107,10 @@ for GAMEDLL in client server; do
   done
   [ "$GTOTAL" -eq 0 ] && continue
   echo "[link] lib$GAMEDLL.so (tags: $TAGS) objs=$GTOTAL" | tee -a "$LOG"
-  $CC $LFLAGS"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS \
+  $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 \
      -ldl -llog -lm -lc -lz 2>>"$LOG" \
-     && echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG" || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
+     && { echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/lib$GAMEDLL.so" || true; } || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
 done
 
 echo "=== linked results ===" | tee -a "$LOG"
