@@ -24,7 +24,7 @@ for pb in genproto/*.pb.cc; do
   $CC -c -fPIC -O1 -w -std=gnu++17 $PBINC -D_POSIX=1 -DLINUX=1 -DGNUC=1 -DENGINE_DLL=1 "$pb" -o "$obj" >> "$LOG" 2>&1
 done
 
-LFLAGS="-shared -fPIC -fuse-ld=lld -stdlib=libc++_shared -Wl,--gc-sections"
+LFLAGS="-shared -fPIC -fuse-ld=lld -stdlib=libc++_shared -Wl,--gc-sections -Wl,-z,max-page-size=16384"
 # LTO=1 (must match trybuild.sh) -> ThinLTO at link; soname passed separately
 if [ "${LTO:-0}" = "1" ]; then LFLAGS="$LFLAGS -flto=thin"; fi
 if [ "${STRIP:-0}" = "1" ]; then
@@ -83,6 +83,7 @@ link_so libvguimatsurface.so "tier0 tier1 mathlib vstdlib tier2 SDL2" vguimatsur
 link_so libvgui.so "tier0 tier1 mathlib vstdlib tier2 SDL2" vgui_dll || true
 link_so libvgui_controls.so "tier0 tier1 mathlib vstdlib tier2 vgui" vgui_controls || true
 link_so libmaterialsystem.so "tier0 tier1 mathlib vstdlib tier2" materialsystem || true
+link_so libinputsystem.so "tier0 tier1 vstdlib SDL2" inputsystem || true
 
 # 3. Engine (+ protobuf messages + SDL2)
 GENPROTO_OBJS=$(ls obj/genproto/*.o 2>/dev/null)
@@ -93,6 +94,9 @@ if [ -n "$GENPROTO_OBJS" ] && [ -f "$OUTDIR/libmathlib.so" ]; then
      -ldl -llog -lm -lc -lz -landroid -lEGL -lGLESv2 -lOpenSLES 2>>"$LOG" \
      && { echo "   OK: libengine.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/libengine.so" || true; } || echo "   LINK FAILED: libengine.so" | tee -a "$LOG"
 fi
+
+# 3b. Launcher (Valve CSourceAppSystemGroup host; dlopen'ed by libmain)
+link_so liblauncher.so "tier0 tier1 tier2 appframework SDL2" launcher || true
 
 # 4. Client / Server (game DLLs) — same EXCLUDE_RE filtering as link_so
 for GAMEDLL in client server; do

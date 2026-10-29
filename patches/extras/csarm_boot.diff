@@ -1,0 +1,26 @@
+--- a/engine/sys_engine.cpp
++++ b/engine/sys_engine.cpp
+@@ -430,6 +430,23 @@
+ 	// Get current time
+ 	m_flCurrentTime	= Sys_FloatTime();
+ 
++
++// csARM: boot/frame proof for the Android CI (logcat assertions).
++#ifdef __ANDROID__
++	{
++		static int s_nCsarmTicks = 0;
++		int nTick = ++s_nCsarmTicks;
++		if ( nTick == 1 )
++		{
++			Msg( "CSARM_ENGINE_FIRST_FRAME\n" );
++		}
++		else if ( ( nTick % 120 ) == 0 )
++		{
++			Msg( "CSARM_ENGINE_TICK %d\n", nTick );
++		}
++	}
++#endif
++
+ 	// Watch for data from the CPU frequency monitoring system and print it to the console.
+ 	const CPUFrequencyResults frequency = GetCPUFrequencyResults();
+ 	static double s_lastFrequencyTimestamp;

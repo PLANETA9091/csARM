@@ -42,6 +42,8 @@ else
 /scaleformui/
 /soundemittersystem/
 /studiorender/
+/inputsystem/
+/launcher/
 /thirdparty/SDL2/
 /thirdparty/libpng-1.5.2/
 /thirdparty/protobuf-2.5.0/
@@ -66,6 +68,13 @@ EOF
   echo "source commit: $(git rev-parse HEAD)"
 fi
 
+# Sparse patterns may have gained new dirs (launcher/, inputsystem/) since the
+# cached tree was materialized — refresh those paths if missing (idempotent).
+if [ -d "$SRC/.git" ] && { [ ! -d "$SRC/launcher" ] || [ ! -d "$SRC/inputsystem" ]; }; then
+  echo "Refreshing sparse checkout for launcher/inputsystem..."
+  (cd "$SRC" && git checkout -q HEAD -- launcher inputsystem 2>/dev/null || true)
+fi
+
 cd "$SRC"
 echo "Applying patches (FRESH=$FRESH)..."
 if [ "$FRESH" = "1" ]; then
@@ -84,6 +93,16 @@ else
     git apply --whitespace=nowarn "$REPO_DIR/patches/all_patches.diff" || { echo "PATCH APPLY FAILED"; exit 1; }
   fi
 fi
+
+# csARM engine boot/frame proof (separate diff: applies after all_patches)
+if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_boot.diff" 2>/dev/null; then
+  echo "csarm_boot.diff already applied"
+elif git apply --whitespace=nowarn --check "$REPO_DIR/patches/extras/csarm_boot.diff" 2>/dev/null; then
+  git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_boot.diff" || { echo "csarm_boot.diff APPLY FAILED"; exit 1; }
+else
+  echo "csarm_boot.diff does not apply (context drift?)"; exit 1
+fi
+
 echo "Copying extra files..."
 cp -v "$REPO_DIR/patches/extras/gameeventlistener.h" "$SRC/game/shared/gameeventlistener.h"
 cp -v "$REPO_DIR/patches/extras/IVGUI.h" "$SRC/public/vgui/IVGUI.h"

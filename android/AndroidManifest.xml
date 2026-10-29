@@ -1,22 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.csarm.port"
-    android:versionCode="1"
-    android:versionName="0.1">
+    android:versionCode="2"
+    android:versionName="0.2">
 
-    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="30" />
-    <uses-feature android:glEsVersion="0x00020000" android:required="true" />
+    <!-- targetSdk 28: keeps legacy execmem (JIT) allowed for software renderers
+         (SwiftShader/Subzero) on Android 10+; minSdk 24 = Android 7.0+ -->
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="28" />
+    <!-- GL NOT required: the port must boot and run even without HW acceleration -->
+    <uses-feature android:glEsVersion="0x00020000" android:required="false" />
 
     <application
-        android:label="csARM visual test"
+        android:label="csARM"
         android:hasCode="true"
         android:extractNativeLibs="true"
+        android:hardwareAccelerated="false"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
-        <activity android:name=".MainActivity" android:exported="true">
+        <!-- full engine launcher (SDL2 glue -> libmain -> LauncherMain) -->
+        <activity android:name=".CSARMActivity"
+                  android:exported="true"
+                  android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+        <!-- library-load + GLES visual test (CI) -->
+        <activity android:name=".MainActivity" android:exported="true">
         </activity>
     </application>
 </manifest>

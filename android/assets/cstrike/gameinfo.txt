@@ -1,0 +1,27 @@
+"GameInfo"
+{
+	game		"cstrike"
+	title		"Counter-Strike: Global Offensive (csARM)"
+	title2		"android aarch64 port"
+	type		multiplayer_only
+	nomodels	1
+	nohimodel	1
+	nocrosshair	0
+	hidden_maps
+	{
+	}
+	nodegraph	0
+
+	FileSystem
+	{
+		SteamAppId				730
+
+		SearchPaths
+		{
+			game+mod			|gameinfo_path|.
+			game				|gameinfo_path|.
+			game				cstrike
+			platform			platform
+		}
+	}
+}

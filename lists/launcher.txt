@@ -1,0 +1,3 @@
+launcher/launcher.cpp
+launcher/reslistgenerator.cpp
+public/filesystem_init.cpp

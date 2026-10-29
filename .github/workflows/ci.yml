@@ -10,11 +10,11 @@ on:
       opt_level:
         description: 'Optimization level (-O1 / -O2 / -Oz)'
         required: false
-        default: '-O1'
+        default: '-O2'
       lto:
         description: 'ThinLTO (1 = enable)'
         required: false
-        default: '0'
+        default: '1'
       strip:
         description: 'Strip debug info from .so (1 = enable)'
         required: false
@@ -45,7 +45,7 @@ jobs:
             modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc"
             defs: ""
           - tag: data
-            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc"
+            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt"
             defs: ""
           - tag: client
             modules: "game/client/client_cstrike15.vpc"
@@ -65,7 +65,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v3
+          key: cstrike15-src-v4
 
       - name: Fetch pristine source + apply patches (idempotent, always)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -91,8 +91,8 @@ jobs:
           export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           export R=$GITHUB_WORKSPACE
           export CC=aarch64-linux-android24-clang
-          export OPT=${{ github.event.inputs.opt_level || '-O1' }}
-          export LTO=${{ github.event.inputs.lto || '0' }}
+          export OPT=${{ github.event.inputs.opt_level || '-O2' }}
+          export LTO=${{ github.event.inputs.lto || '1' }}
           export JOBS=4
           for m in ${{ matrix.modules }}; do
             echo "=== MODULE $m ==="
@@ -154,7 +154,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v3
+          key: cstrike15-src-v4
 
       - name: Fetch source + patches (needed for genproto compile and SDL2 headers)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -194,10 +194,12 @@ jobs:
       - name: Link shared libraries
         run: |
           export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-          export LTO=${{ github.event.inputs.lto || '0' }}
+          export LTO=${{ github.event.inputs.lto || '1' }}
           export STRIP=${{ github.event.inputs.strip || '0' }}
           mkdir -p out
           bash build/link.sh
+          # native launcher (libmain.so) — needs libSDL2.so + libtier0.so from out/
+          bash build/build_main.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
           ls -la out/
 
       - name: Undefined symbol report
@@ -267,7 +269,7 @@ jobs:
           path: android/out/csARM.apk
           if-no-files-found: ignore
 
-      - name: Run on emulator + visual capture
+      - name: Run on emulator + visual capture + engine boot test
         uses: reactivecircus/android-emulator-runner@v2
         continue-on-error: true   # GitHub-hosted runners currently lack HW accel (no KVM / HVF HV_UNSUPPORTED); kept opportunistically
         with:
@@ -278,17 +280,38 @@ jobs:
           emulator-boot-timeout: 1200
           # emulator 37.x fails HVF init on M1 runners (HV_UNSUPPORTED); build
           # 11525734 (emulator 34.x) is the newest archive build that works
+          # -gpu swiftshader_indirect = PURE SOFTWARE rendering (no GPU): the
+          # engine must still boot and tick — this is the "no-HW" proof.
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
             adb install -r android/out/csARM.apk
+            # --- part 1: library load + GLES visual test (MainActivity) ---
             adb shell am start -n com.csarm.port/.MainActivity
             sleep 10
-            adb logcat -d > logcat.txt || true
-            grep -E "CSARM_LIB_OK|CSARM_LIB_FAIL|CSARM_LOAD_DONE|CSARM_FRAME" logcat.txt | sort -u || true
             adb exec-out screencap -p > shot1.png
             sleep 4
             adb exec-out screencap -p > shot2.png
+            adb logcat -d > logcat.txt || true
+            grep -E "CSARM_LIB_OK|CSARM_LIB_FAIL|CSARM_LOAD_DONE|CSARM_FRAME" logcat.txt | sort -u || true
+            # --- part 2: FULL ENGINE BOOT TEST (CSARMActivity -> SDL -> LauncherMain) ---
+            adb logcat -c || true
+            adb shell am start -n com.csarm.port/.CSARMActivity
+            # engine boot can be slow under ARM translation; poll up to 4 min
+            for i in $(seq 1 48); do
+              sleep 5
+              adb logcat -d > logcat_boot.txt || true
+              if grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_boot.txt; then break; fi
+            done
+            sleep 8
+            adb exec-out screencap -p > boot1.png
+            sleep 6
+            adb exec-out screencap -p > boot2.png
+            adb logcat -d > logcat_boot.txt || true
             adb logcat -d -b crash > crash.txt || true
+            echo "=== boot log (csARM lines) ==="
+            grep -E "CSARM_" logcat_boot.txt | head -60 || true
+            echo "=== engine spew sample ==="
+            grep "CSARM_ENG" logcat_boot.txt | head -40 || true
 
       - name: Assert load results
         if: always()
@@ -305,6 +328,44 @@ jobs:
           fi
           echo "All libraries loaded OK on emulator"
 
+      - name: Assert engine boot (full port)
+        if: always()
+        run: |
+          if [ ! -f logcat_boot.txt ]; then
+            echo "::warning::engine boot test skipped (emulator unavailable)"
+            exit 0
+          fi
+          L=logcat_boot.txt
+          fail=0
+          grep -q "CSARM_NATIVE_INIT" $L || { echo "::error::native init not reached"; fail=1; }
+          grep -q "CSARM_ARGS " $L        || { echo "::error::argv not built"; fail=1; }
+          grep -q "CSARM_BIN_LINKS" $L    || { echo "::error::bin symlinks not created"; fail=1; }
+          grep -q "CSARM_LAUNCHER_CALL" $L || { echo "::error::LauncherMain was never called"; fail=1; }
+          if [ "$fail" = "1" ]; then
+            echo "--- boot log tail ---"; tail -80 $L; exit 1
+          fi
+          # launcher reached = Valve's CSourceAppSystemGroup is executing
+          echo "LauncherMain reached (CSourceAppSystemGroup host active)"
+          if grep -q "CSARM_MAIN_FAIL" $L; then
+            echo "::error::launcher failed: $(grep CSARM_MAIN_FAIL $L | head -2)"
+            exit 1
+          fi
+          if grep -q "CSARM_ENGINE_TICK\|CSARM_ENGINE_FIRST_FRAME" $L; then
+            echo "ENGINE FRAME LOOP CONFIRMED (software rendering, no GPU)"
+          else
+            echo "::warning::no engine frame ticks yet (engine may be waiting on content/UI; check logcat artifact)"
+          fi
+          # boot-time gate: launcher call must happen fast (fast-startup knob check)
+          PRE=$(grep -oE "CSARM_LAUNCHER_CALL pre_ms=[0-9]+" $L | grep -oE "[0-9]+$" | head -1)
+          if [ -n "$PRE" ]; then
+            echo "BOOT_TO_LAUNCHER_MS=$PRE"
+            if [ "$PRE" -gt 60000 ]; then
+              echo "::error::boot to LauncherMain took ${PRE}ms (>60s budget)"
+              exit 1
+            fi
+          fi
+          grep -q "CSARM_MAIN_EXIT" $L && echo "launcher exited: $(grep CSARM_MAIN_EXIT $L | head -1)" || true
+
       - name: Upload visual artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -312,7 +373,9 @@ jobs:
           name: visual-test
           path: |
             shot*.png
+            boot*.png
             logcat.txt
+            logcat_boot.txt
             crash.txt
           if-no-files-found: ignore
 

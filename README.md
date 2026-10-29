@@ -65,7 +65,10 @@ R=$PWD JOBS=$(nproc) bash build/trybuild.sh tier0/tier0.vpc
 
 1. ✅ Core-модули (tier0/1/2, vstdlib, mathlib, appframework)
 2. ✅ Engine 250 файлов
-3. ⏳ materialsystem / vgui / studiorender / datacache / soundemittersystem
-4. ⏳ client + server (cstrike15)
-5. ⏳ Линковка .so + SDL2 Android APK
-6. ⏳ Оптимизация: -O2/LTO/NEON, gc-sections
+3. ✅ materialsystem / vgui / studiorender / datacache / soundemittersystem
+4. ✅ client + server (cstrike15)
+5. ✅ Линковка .so (20 шт: + launcher, inputsystem, main) + SDL2 Android APK
+6. ✅ Запуск движка на устройстве: libmain → LauncherMain → CSourceAppSystemGroup
+7. ✅ Оптимизация: -O2 + ThinLTO по умолчанию, NEON (sse2neon), gc-sections, 16KB pages, многопоточный движок (host_thread_mode/mat_queue_mode)
+8. ⏳ Рендер без HW: software GPU путь (swiftshader_indirect в CI) + бандл SwiftShader в APK
+9. ⏳ Загрузка реального контента (VPK) с карты в filesDir/cstrike

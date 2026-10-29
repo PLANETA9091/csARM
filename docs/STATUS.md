@@ -147,19 +147,58 @@ Key link decisions:
 
 ## Optimization knobs
 
-`workflow_dispatch` inputs: `opt_level` (-O1 default / -O2 / -Oz), `lto`
-(ThinLTO; trybuild adds -flto=thin -ffunction/data-sections, link.sh links
-with -flto=thin), `strip` (llvm-strip --strip-debug on linked .so).
-Local spot-check: mathlib -O1 objects 436 KB vs -O2+ThinLTO 668 KB (inlining);
-linked libmathlib.so 357 KB -> 392 KB with only mathlib in LTO. Full-tree
-LTO run to be measured via workflow_dispatch.
+`workflow_dispatch` inputs: `opt_level` (**-O2 default** since 0.2 / -O1 / -Oz),
+`lto` (**ThinLTO default ON**: trybuild adds -flto=thin
+-ffunction/data-sections at compile, link.sh links with -flto=thin), `strip`
+(llvm-strip --strip-debug on linked .so). Every linked .so also gets
+`-Wl,-z,max-page-size=16384` (16 KB-page device compatibility, Android 15+).
+Engine threading (real acceleration on big.LITTLE) is enabled in the launch
+profile: `host_thread_mode 2`, `mat_queue_mode 2`, `cl_threaded_bone_setup 1`
+(autoexec.cfg + libmain defaults); mathlib runs through sse2neon NEON.
+
+## Runtime: full engine boot path (v0.2)
+
+The APK now actually **launches the engine** (not only dlopen checks):
+
+```
+CSARMActivity (Java, SDLActivity subclass)
+  └─ loads 19 port libs in dependency order (logcat CSARM_LIB_OK/FAIL)
+  └─ writes files/csarm.args + extracts assets/cstrike skeleton (gameinfo.txt)
+  └─ SDLActivity static: libSDL2.so + libmain.so
+       └─ libmain (launcher_native/csarm_main.cpp):
+            SDL_Android_Init -> stdout/stderr piped to logcat (CSARM_ENG tag)
+            argv builder (csarm.args or fast-boot defaults)
+            <files>/bin/<name>.so symlinks  (Valve Sys_LoadModule("<cwd>/bin/.."))
+            dlopen liblauncher.so -> dlsym "LauncherMain" -> call
+                 └─ Valve CSourceAppSystemGroup: filesystem_stdio -> materialsystem
+                    -> datacache -> studiorender -> soundemittersystem
+                    -> inputsystem -> vguimatsurface -> vgui2 -> engine
+                    (VEngineAPI007) -> IEngineAPI::Run()
+```
+
+New pieces since 0.1:
+- **launcher module** (`lists/launcher.txt`): Valve's `launcher/launcher.cpp`
+  + `reslistgenerator.cpp` + `public/filesystem_init.cpp` -> `liblauncher.so`.
+  `TryToLoadSteamOverlayDLL` is WIN32-only; POSIX launcher needs no steam_api.
+- **inputsystem module** (sparse + matrix): engine's appsystem list requires it.
+- **libmain.so** (`launcher_native/`): SDL android glue moved OUT of libSDL2
+  (no undefined SDL_main in libSDL2), logcat spew pipe, boot timer
+  (`CSARM_LAUNCHER_CALL pre_ms=...` asserted < 60 s by CI), bin/ symlinks.
+- **engine frame proof**: `patches/extras/csarm_boot.diff` logs
+  `CSARM_ENGINE_FIRST_FRAME` / `CSARM_ENGINE_TICK N` from `CEngine::Frame`
+  (`__ANDROID__`-only).
+- **CI boot gate**: emulator (`-gpu swiftshader_indirect` = pure software
+  rendering, no GPU) boots CSARMActivity; assertions: NATIVE_INIT -> ARGS ->
+  BIN_LINKS -> LAUNCHER_CALL; ENGINE_TICK confirms the frame loop runs
+  **без hardware**; `BOOT_TO_LAUNCHER_MS` recorded as the fast-start metric.
+- APK assets: minimal `cstrike/gameinfo.txt` + `cfg/autoexec.cfg` skeleton so
+  the filesystem mounts; real game VPKs are user-provided on device.
 
 ## Next
-1. Optimization measurement run: -O2 + LTO + strip via workflow_dispatch;
-   record size deltas in this table.
-2. Engine runtime smoke: glibc-aarch64 qemu harness linking tier0/1/2 +
-   vstdlib + engine subset; then bionic dlopen once runners allow emulation
-   (or a real device via adb over the internet).
-3. Game-data strategy: user-provided CS:GO VPKs -> engine boot with real
-   gameinfo.txt on-device.
+1. Fix whatever the first boot run uncovers (module/interface mismatches are
+   expected — iterate against logcat artifact `visual-test/logcat_boot.txt`).
+2. Game-data strategy: user-provided CS:GO VPKs -> filesDir/cstrike with real
+   content; menu + map load on device.
+3. Measure -O2+ThinLTO size/perf deltas; consider PGO-style profile hints.
 4. Re-enable hard emulator gate when GitHub restores KVM/HVF.
+

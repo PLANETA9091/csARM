@@ -23,9 +23,27 @@ echo "SDK: build-tools=$BT platform=$PLAT"
 OUT="$A/out"; GEN="$A/gen"; CLS="$A/classes"; DEX="$A/dex"
 rm -rf "$OUT" "$GEN" "$CLS" "$DEX"; mkdir -p "$OUT" "$GEN" "$CLS" "$DEX"
 
-# 1. manifest -> apk skeleton + R.java
+# 0. SDL2 Java glue: SDLActivity + SDLSurface come from the SAME pinned SDL
+#    tarball setup_sdl2.sh compiles (order of loadLibrary calls is untouched —
+#    libmain.so carries the JNI entry, so bionic resolves it whenever loaded).
+SDLJDIR="$A/src/org/libsdl/app"
+if [ ! -f "$SDLJDIR/SDLActivity.java" ]; then
+  mkdir -p "$SDLJDIR"
+  SDLSRC="$A/../.cache/SDL-2.0.2/android-project/src/org/libsdl/app/SDLActivity.java"
+  if [ ! -f "$SDLSRC" ]; then
+    mkdir -p /tmp/csarm-sdl && cd /tmp/csarm-sdl
+    curl -sfL --retry 3 -o sdl.tgz "https://libsdl.org/release/SDL2-2.0.2.tar.gz" \
+      || curl -sfL --retry 3 -o sdl.tgz "https://github.com/libsdl-org/SDL/releases/download/release-2.0.2/SDL2-2.0.2.tar.gz"
+    tar xzf sdl.tgz SDL2-2.0.2/android-project/src/org/libsdl/app/SDLActivity.java 2>/dev/null || true
+    SDLSRC=/tmp/csarm-sdl/SDL2-2.0.2/android-project/src/org/libsdl/app/SDLActivity.java
+  fi
+  cp -v "$SDLSRC"* "$SDLJDIR/" || { echo "SDLActivity.java extraction failed"; exit 1; }
+fi
+
+# 1. manifest -> apk skeleton + R.java (assets: game content skeleton)
 "$BT/aapt2" link -o "$OUT/base.apk" \
-  --manifest "$A/AndroidManifest.xml" -I "$AJAR" --java "$GEN"
+  --manifest "$A/AndroidManifest.xml" -I "$AJAR" --java "$GEN" \
+  $([ -d "$A/assets" ] && echo "-A $A/assets")
 
 # 2. java -> class (android toolchain way: source/target 1.8 + android.jar bootclasspath)
 find "$A/src" "$GEN" -name "*.java" > /tmp/csarm-javac.list
@@ -57,7 +75,7 @@ if ls "$A"/libs/*.so >/dev/null 2>&1; then
 fi
 NLIB=$(ls "$A"/lib/arm64-v8a/*.so 2>/dev/null | wc -l)
 echo "native libs: $NLIB"
-[ "$NLIB" -ge 18 ] || { echo "ERROR: expected >=18 native libs (17 port libs + libc++_shared), got $NLIB"; exit 1; }
+[ "$NLIB" -ge 21 ] || { echo "ERROR: expected >=21 native libs (20 port libs incl. main/SDL2/launcher/inputsystem + libc++_shared), got $NLIB"; exit 1; }
 (cd "$A" && zip -q -u "$OUT/unsigned.apk" lib/arm64-v8a/*.so)
 
 # 5. align + sign (debug key)
