@@ -441,7 +441,7 @@ jobs:
     needs: link
     if: always() && !failure() && !cancelled()
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
 
@@ -454,58 +454,76 @@ jobs:
       - name: Build APK (x86_64)
         run: bash android/build_apk.sh x86_64
 
-      - name: Run engine boot test on emulator (software GPU)
-        uses: reactivecircus/android-emulator-runner@v2
-        continue-on-error: true   # TCG boot is slow; keep job non-blocking while we tune
-        with:
-          api-level: 30
-          target: google_apis
-          arch: x86_64
-          emulator-boot-timeout: 2400
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 3072 -no-accel
-          script: |
-            adb wait-for-device
-            # robust boot wait (TCG emulation is slow; up to 25 min)
-            for i in $(seq 1 150); do
-              B=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-              [ "$B" = "1" ] && break
-              sleep 10
-            done
-            echo "boot_completed=$B after $i polls"
-            sleep 20   # let package manager / services settle
-            # install with retries (PM may still be settling)
-            OK=0
-            for i in 1 2 3 4 5 6; do
-              if adb install -r android/out/csARM.apk; then OK=1; break; fi
-              echo "install retry $i"; sleep 20
-            done
-            [ "$OK" = "1" ] || { echo "install failed"; adb logcat -d > logcat_boot.txt; exit 1; }
-            adb shell settings put global window_animation_scale 0
-            adb shell am start -n com.csarm.port/.CSARMActivity
-            # poll up to 30 min for the engine boot chain
-            for i in $(seq 1 90); do
-              sleep 20
-              adb logcat -d > logcat_boot.txt || true
-              if grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_boot.txt; then break; fi
-            done
+      - name: Install emulator system image
+        run: |
+          SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "emulator" "system-images;android-30;google_apis;x86_64" > /dev/null
+
+      - name: Launch emulator (TCG software emulation, software GPU)
+        run: |
+          SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n test -k "system-images;android-30;google_apis;x86_64" -d pixel_4 --force
+          nohup "$SDK/emulator/emulator" -avd test -no-window -gpu swiftshader_indirect \
+            -no-snapshot -noaudio -no-boot-anim -memory 3072 -no-accel -port 5554 \
+            > emulator.log 2>&1 &
+          echo "emulator launched"
+          sleep 10
+
+      - name: Wait for boot + full engine boot test
+        run: |
+          SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          ADB=$SDK/platform-tools/adb
+          $ADB start-server || true
+          BOOTED=0
+          for i in $(seq 1 180); do
+            B=$($ADB -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)
+            if [ "$B" = "1" ]; then BOOTED=1; echo "BOOTED after ~$((i*10))s"; break; fi
             sleep 10
-            adb exec-out screencap -p > boot1.png
-            sleep 8
-            adb exec-out screencap -p > boot2.png
-            adb logcat -d > logcat_boot.txt || true
-            adb logcat -d -b crash > crash.txt || true
-            echo "=== csARM boot chain ==="
-            grep -E "CSARM_" logcat_boot.txt | head -80 || true
-            echo "=== engine spew sample ==="
-            grep "CSARM_ENG" logcat_boot.txt | head -60 || true
-            echo "=== AndroidRuntime crashes ==="
-            grep -A5 "AndroidRuntime" logcat_boot.txt | head -40 || true
+          done
+          if [ "$BOOTED" != "1" ]; then
+            echo "::warning::emulator did not reach sys.boot_completed (TCG boot too slow)"
+            tail -25 emulator.log || true
+            exit 0
+          fi
+          sleep 25   # package manager settle
+          OK=0
+          for i in 1 2 3 4 5 6; do
+            if $ADB -s emulator-5554 install -r android/out/csARM.apk; then OK=1; break; fi
+            echo "install retry $i"; sleep 20
+          done
+          if [ "$OK" != "1" ]; then
+            echo "::error::APK install failed"
+            $ADB -s emulator-5554 logcat -d > logcat_boot.txt || true
+            exit 1
+          fi
+          $ADB -s emulator-5554 shell settings put global window_animation_scale 0 || true
+          $ADB -s emulator-5554 logcat -c || true
+          $ADB -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
+          # engine boot poll: up to 25 min
+          for i in $(seq 1 75); do
+            sleep 20
+            $ADB -s emulator-5554 logcat -d > logcat_boot.txt 2>/dev/null || true
+            grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_boot.txt && break
+          done
+          sleep 10
+          $ADB -s emulator-5554 exec-out screencap -p > boot1.png || true
+          sleep 8
+          $ADB -s emulator-5554 exec-out screencap -p > boot2.png || true
+          $ADB -s emulator-5554 logcat -d > logcat_boot.txt || true
+          $ADB -s emulator-5554 logcat -d -b crash > crash.txt || true
+          echo "=== csARM boot chain ==="
+          grep -E "CSARM_" logcat_boot.txt | head -80 || true
+          echo "=== engine spew sample ==="
+          grep "CSARM_ENG" logcat_boot.txt | head -60 || true
+          echo "=== AndroidRuntime crashes ==="
+          grep -A5 "AndroidRuntime" logcat_boot.txt | head -40 || true
 
       - name: Assert engine boot
         if: always()
         run: |
           if [ ! -f logcat_boot.txt ]; then
-            echo "::warning::emulator unavailable; boot test skipped this run"
+            echo "::warning::boot log missing (emulator unavailable this run)"
             exit 0
           fi
           L=logcat_boot.txt
@@ -540,6 +558,7 @@ jobs:
             boot*.png
             logcat_boot.txt
             crash.txt
+            emulator.log
           if-no-files-found: ignore
 
   # Job 3: aarch64 math/unit tests under qemu (validates NEON math patches)

@@ -131,19 +131,19 @@ Key link decisions:
   -DANDROID=1 (SDL 2.0.2 predates __ANDROID__ gating in SDL_rwops.h); dynapi
   patched off; render/yuv2rgb dropped (engine renders via ToGL).
 
-## CI status: GREEN (run 40781800098, 2026-10-28)
+## CI status: GREEN (run 40879810114, 2026-10-29, dual-ABI)
 
-- build matrix: 9/9 jobs, 1831 files, 0 errors
-- link: 18/18 .so produced
+- build matrix: **16/16 jobs** (8 tags × arm64-v8a/x86_64), -O2 + ThinLTO, 0 errors
+- link: **20/20 .so per ABI** (18 port libs + launcher + inputsystem) + libmain.so
 - tests/qemu-aarch64: math suite ALL PASSED + **VISUAL_OK** (480x320 PNG
   rendered by the ported mathlib under qemu-aarch64, artifact
   `test-results/out/frame.png`)
-- visual/emulator: APK builds (19 native libs incl. libc++_shared) and is
-  uploaded as `csARM-apk`; emulator run is opportunistic — GitHub-hosted
-  runners currently have NO hardware acceleration (ubuntu: no /dev/kvm;
-  macos-14 M1: HVF returns HV_UNSUPPORTED for every archived emulator build,
-  incl. 11525734). The job is `continue-on-error` with per-lib dlopen
-  assertions that will hard-fail again once runners regain HW accel.
+- **boot/emulator-x86**: universal flow check on ubuntu runner — x86_64
+  emulator runs TCG-only (no KVM on GH runners) and reached "All files loaded,
+  notifying device" ~7 min in; first attempts hit package-manager settling
+  (broken-pipe install) — boot wait + install retries added (d026e2b)
+- visual/emulator (macos-14, arm64): opportunistic, HVF HV_UNSUPPORTED on
+  GH runners; APK artifact `csARM-apk` uploads regardless
 
 ## Optimization knobs
 
