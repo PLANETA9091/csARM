@@ -464,6 +464,12 @@ jobs:
           curl -sfL --retry 3 -o /tmp/emu.zip https://dl.google.com/android/repository/emulator-linux_x64-11525734.zip
           rm -rf "$SDK/emu34" && unzip -q /tmp/emu.zip -d "$SDK/emu34"
           chmod +x "$SDK/emu34/emulator/emulator" || true
+          # runner images no longer ship pulseaudio/x11 libs the qemu binary needs
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libpulse0 libasound2 libnss3 libgl1 libxkbcommon0 libdbus-1-3 fontconfig 2>/dev/null \
+            || sudo apt-get install -y -qq libpulse0 libasound2t64 libnss3 libgl1 libxkbcommon0 libdbus-1-3 fontconfig
+          echo "--- qemu missing libs (must be empty) ---"
+          ldd "$SDK/emu34/emulator/qemu/linux-x86_64/qemu-system-x86_64" | grep "not found" || echo "none"
           "$SDK/emu34/emulator/emulator" -version | head -2
 
       - name: Launch emulator (TCG software emulation, software GPU)
