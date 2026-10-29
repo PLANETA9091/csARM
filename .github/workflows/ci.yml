@@ -464,7 +464,22 @@ jobs:
           emulator-boot-timeout: 2400
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 3072 -no-accel
           script: |
-            adb install -r android/out/csARM.apk
+            adb wait-for-device
+            # robust boot wait (TCG emulation is slow; up to 25 min)
+            for i in $(seq 1 150); do
+              B=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+              [ "$B" = "1" ] && break
+              sleep 10
+            done
+            echo "boot_completed=$B after $i polls"
+            sleep 20   # let package manager / services settle
+            # install with retries (PM may still be settling)
+            OK=0
+            for i in 1 2 3 4 5 6; do
+              if adb install -r android/out/csARM.apk; then OK=1; break; fi
+              echo "install retry $i"; sleep 20
+            done
+            [ "$OK" = "1" ] || { echo "install failed"; adb logcat -d > logcat_boot.txt; exit 1; }
             adb shell settings put global window_animation_scale 0
             adb shell am start -n com.csarm.port/.CSARMActivity
             # poll up to 30 min for the engine boot chain
