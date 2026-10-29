@@ -236,6 +236,18 @@ extern "C" int SDL_main(int argc, char *argv[])
     setenv("STEAMAPPID", "730", 0);
 
     makeModuleLinks(filesDir, nativeLibDir());
+
+    // --- GL driver report: bundled SwiftShader shadows system EGL ----------
+    // When the APK ships libEGL.so/libGLESv2.so (SwiftShader), the app
+    // nativeLibraryDir is searched before /system/lib64 -> every dlopen
+    // of "libEGL.so" (including DT_NEEDED from the engine) resolves to it.
+    {
+        std::string bundled = nativeLibDir() + "/libEGL.so";
+        FILE *f = fopen(bundled.c_str(), "rb");
+        LOGI("CSARM_EGL %s", f ? "bundled(swiftshader) - software rendering" : "system");
+        if (f) fclose(f);
+    }
+
     if (chdir(filesDir.c_str()) != 0)
         LOGW("chdir(%s) failed: %s", filesDir.c_str(), strerror(errno));
 

@@ -57,14 +57,20 @@ find "$CLS" -name "*.class" > /tmp/csarm-d8.list
   --output "$DEX" @/tmp/csarm-d8.list
 
 # 4. pack dex + native libs
-# usage: build_apk.sh [abi]  — abi: x86_64 (boot-test) | universal (default: all ABIs present)
+# usage: build_apk.sh [abi] [swiftshader]
+#   abi: x86_64 | arm64-v8a | universal (default: all ABIs present)
+#   swiftshader: 2nd arg = bundle android/libs-swiftshader/<abi>/{libEGL,libGLESv2,...}.so
+#              into the APK as lib/<abi>/libEGL.so etc — they shadow the system
+#              EGL/GLES for the whole process (nativeLibraryDir precedes /system).
 APKABI=${1:-universal}
+SWBUNDLE=${2:-}
 cp "$OUT/base.apk" "$OUT/unsigned.apk"
 cp "$DEX/classes.dex" "$DEX/classes.dex" 2>/dev/null || true
 (cd "$DEX" && zip -q -u "$OUT/unsigned.apk" classes.dex)
 
 # our .so files have DT_NEEDED libc++_shared.so — take it from the NDK sysroot
 HOSTTAG=linux-x86_64; [ "$(uname)" = "Darwin" ] && HOSTTAG=darwin-x86_64
+rm -rf "$A/lib"   # fresh pack per invocation (sw vs normal variants)
 for ABI in arm64-v8a x86_64; do
   [ "$APKABI" = "universal" ] || [ "$APKABI" = "$ABI" ] || continue
   if ls "$A"/libs/$ABI/*.so >/dev/null 2>&1; then
@@ -78,6 +84,15 @@ for ABI in arm64-v8a x86_64; do
         f="$cand/toolchains/llvm/prebuilt/$HOSTTAG/sysroot/usr/lib/$LIBDIRNAME/libc++_shared.so"
         if [ -f "$f" ]; then cp "$f" "$A/lib/$ABI/libc++_shared.so"; echo "libc++_shared.so($ABI) from $cand"; break; fi
       done
+    fi
+    # optional SwiftShader bundle (software GL — works with zero GPU/driver)
+    if [ "$SWBUNDLE" = "swiftshader" ]; then
+      if ls "$A"/libs-swiftshader/$ABI/*.so >/dev/null 2>&1; then
+        cp "$A"/libs-swiftshader/$ABI/*.so "$A/lib/$ABI/"
+        echo "swiftshader($ABI): $(ls "$A"/lib/$ABI/libEGL.so "$A"/lib/$ABI/libGLESv2*.so 2>/dev/null | xargs -n1 basename 2>/dev/null | tr '\n' ' ')"
+      else
+        echo "ERROR: swiftshader requested but no libs for $ABI in $A/libs-swiftshader/$ABI"; exit 1
+      fi
     fi
     NLIB=$(ls "$A/lib/$ABI"/*.so 2>/dev/null | wc -l)
     echo "native libs [$ABI]: $NLIB"

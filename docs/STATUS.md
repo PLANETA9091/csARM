@@ -194,11 +194,38 @@ New pieces since 0.1:
 - APK assets: minimal `cstrike/gameinfo.txt` + `cfg/autoexec.cfg` skeleton so
   the filesystem mounts; real game VPKs are user-provided on device.
 
+## Emulator: boot/emulator-fast (v0.3)
+Old CI emulator jobs are gone: the macos-14 arm64 job always died with
+`HVF error: HV_UNSUPPORTED` (GitHub macOS runners have no nested virt) and
+burned a 20-min timeout; the ubuntu TCG job needed 30-45 min to boot. The new
+one-shot job `boot/emulator-fast`:
+- enables **/dev/kvm on GitHub ubuntu runners** (udev rule + `-accel on`) ->
+  x86_64 API 30 image boots in ~60-90 s;
+- preinstalled emulator 37.x under KVM; pinned 34.1.20 only as TCG fallback
+  (37.x hangs silently under `-no-accel`);
+- 5 s boot poll, fail-fast if the emulator process dies, HARD-fail on boot
+  timeout (no more silent skips);
+- builds 4 APK variants: {x86_64, arm64-v8a} x {system EGL, bundled SwiftShader}
+  and runs the full boot chain on each: MainActivity dlopen -> CSARMActivity ->
+  libmain -> LauncherMain -> ENGINE_TICK; screenshots + `BOOT_TO_LAUNCHER_MS`.
+- arm64 APK is additionally exercised through the API-30 image's ARM
+  translation (opportunistic); arm64-sw APK is an artifact for real devices.
+
+## SwiftShader bundle (software GL, zero GPU)
+- CI job `swiftshader/<abi>` builds google/swiftshader (ES/EGL only, no
+  LLVM/Vulkan stack) with the NDK for arm64-v8a + x86_64.
+- `android/build_apk.sh <abi> swiftshader` packs the result as
+  `lib/<abi>/libEGL.so|libGLESv2.so|libGLESv1_CM.so`; the app's
+  nativeLibraryDir precedes /system/lib64 in the linker namespace, so these
+  shadow the system driver for the whole process (engine + SDL2 included).
+- `libmain.so` reports the resolved driver as `CSARM_EGL bundled|system`;
+  CI asserts the engine reaches LauncherMain + ENGINE_TICK **with the bundled
+  software GL** — rendering with no GPU at all, on-device too.
+
 ## Next
 1. Fix whatever the first boot run uncovers (module/interface mismatches are
    expected — iterate against logcat artifact `visual-test/logcat_boot.txt`).
 2. Game-data strategy: user-provided CS:GO VPKs -> filesDir/cstrike with real
    content; menu + map load on device.
 3. Measure -O2+ThinLTO size/perf deltas; consider PGO-style profile hints.
-4. Re-enable hard emulator gate when GitHub restores KVM/HVF.
 

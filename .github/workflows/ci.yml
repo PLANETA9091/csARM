@@ -289,6 +289,79 @@ jobs:
           path: link.log
           if-no-files-found: ignore
 
+  # Job 2a: build SwiftShader (software GL). Bundling libEGL.so/libGLESv2.so
+  # into the APK makes the engine render with ZERO GPU: the app's
+  # nativeLibraryDir is searched before /system/lib64, so these shadow the
+  # system driver for the whole process (engine + SDL2 both go through it).
+  swiftshader:
+    name: swiftshader/${{ matrix.abi }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [ arm64-v8a, x86_64 ]
+    steps:
+      - name: Clone SwiftShader (ES-only, skip LLVM/Vulkan stack)
+        run: |
+          git clone --depth 1 --single-branch https://github.com/google/swiftshader.git
+          cd swiftshader
+          git rev-parse HEAD | tee ../swiftshader_commit.txt
+          # only what the GLES/EGL build needs
+          git submodule update --init --depth 1 \
+            third_party/marl third_party/astc-encoder third_party/json \
+            third_party/rapidjson third_party/git-hooks 2>/dev/null || true
+          echo "--- submodules ---"; ls third_party/ || true
+
+      - name: Setup NDK
+        run: |
+          if [ -d "$ANDROID_NDK_LATEST_HOME" ]; then
+            echo "NDKROOT=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
+          else
+            curl -sL -o /tmp/ndk.zip https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+            unzip -q /tmp/ndk.zip -d $HOME
+            echo "NDKROOT=$HOME/android-ndk-r27d" >> $GITHUB_ENV
+          fi
+
+      - name: Configure + build (ES/EGL only)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
+          cmake -S swiftshader -B out -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDKROOT/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24 \
+            -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSWIFTSHADER_BUILD_VULKAN=OFF \
+            -DSWIFTSHADER_BUILD_EGL=ON \
+            -DSWIFTSHADER_BUILD_GLESv2=ON \
+            -DSWIFTSHADER_BUILD_GLES_CM=ON \
+            -DSWIFTSHADER_BUILD_SAMPLES=OFF \
+            -DSWIFTSHADER_BUILD_TESTS=OFF \
+            -DSWIFTSHADER_BUILD_PVR=OFF \
+            -DSWIFTSHADER_WARNINGS_AS_ERRORS=OFF
+          cmake --build out --parallel $(nproc)
+
+      - name: Collect libs (rename to shadow system EGL/GLES)
+        run: |
+          mkdir -p bundle/${{ matrix.abi }}
+          find out -name "*.so" -exec cp {} bundle/${{ matrix.abi }}/ \; 2>/dev/null || true
+          cd bundle/${{ matrix.abi }}
+          for f in libEGL*.so; do [ "$f" = "libEGL.so" ] || mv -f "$f" libEGL.so || true; done
+          for f in libGLESv2*.so; do [ "$f" = "libGLESv2.so" ] || mv -f "$f" libGLESv2.so || true; done
+          for f in libGLESv1_CM*.so libGLES_CM*.so; do [ "$f" = "libGLESv1_CM.so" ] || mv -f "$f" libGLESv1_CM.so || true; done
+          ls -la
+          { [ -f libEGL.so ] && [ -f libGLESv2.so ]; } || { echo "::error::EGL/GLES libs missing"; find out -name "*.so"; exit 1; }
+          # sanity: correct arch
+          file libEGL.so | tee /dev/stderr | grep -q aarch64 && echo "arch arm64 OK" || true
+          file libEGL.so | grep -q "x86-64" && echo "arch x86_64 OK" || true
+
+      - name: Upload SwiftShader libs
+        uses: actions/upload-artifact@v4
+        with:
+          name: swiftshader-${{ matrix.abi }}
+          path: bundle/${{ matrix.abi }}/*.so
+          retention-days: 7
+
   # Job 2b: FULL ENGINE BOOT TEST — custom fast emulator runner.
   # Replaces: (a) the old macos-14 arm64 job that always exploded with
   # "HVF error: HV_UNSUPPORTED" (GitHub macOS runners have no nested virt)
@@ -302,8 +375,8 @@ jobs:
   # exercised opportunistically through the image's ARM64 translation.
   boot-test:
     name: boot/emulator-fast
-    needs: link
-    if: always() && !failure() && !cancelled()
+    needs: [ link, swiftshader ]
+    if: ${{ always() && !cancelled() && needs.link.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -328,13 +401,41 @@ jobs:
           for a in x86_64 arm64-v8a; do echo "$a: $(ls android/libs/$a/*.so 2>/dev/null | wc -l)"; done
           [ "$(ls android/libs/x86_64/*.so 2>/dev/null | wc -l)" -ge 21 ] || { echo "::error::missing x86_64 libs"; exit 1; }
 
-      - name: Build APKs (x86_64 native + arm64)
+      - name: Download SwiftShader libs
+        if: needs.swiftshader.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: swiftshader-*
+          path: android/libs-swiftshader
+
+      - name: Flatten SwiftShader dirs
+        if: needs.swiftshader.result == 'success'
+        run: |
+          for d in android/libs-swiftshader/swiftshader-*/; do
+            [ -d "$d" ] || continue
+            abi=$(basename "$d" | sed 's/^swiftshader-//')
+            mkdir -p "android/libs-swiftshader/$abi"
+            mv "$d"* "android/libs-swiftshader/$abi/" 2>/dev/null || true
+          done
+          rm -rf android/libs-swiftshader/swiftshader-*
+          for a in x86_64 arm64-v8a; do
+            echo "swiftshader $a: $(ls android/libs-swiftshader/$a/*.so 2>/dev/null | wc -l) so"
+            [ -f android/libs-swiftshader/$a/libEGL.so ] || echo "::warning::no bundled libEGL.so for $a"
+          done
+
+      - name: Build APKs (system EGL + bundled SwiftShader, both ABIs)
+        if: needs.swiftshader.result == 'success'
         run: |
           bash android/build_apk.sh x86_64
           mv android/out/csARM.apk android/out/csARM-x86_64.apk
+          bash android/build_apk.sh x86_64 swiftshader
+          mv android/out/csARM.apk android/out/csARM-x86_64-sw.apk
           bash android/build_apk.sh arm64-v8a
           mv android/out/csARM.apk android/out/csARM-arm64.apk
+          bash android/build_apk.sh arm64-v8a swiftshader
+          mv android/out/csARM.apk android/out/csARM-arm64-sw.apk
           ls -la android/out/
+          unzip -l android/out/csARM-x86_64-sw.apk | grep -E "libEGL|libGLESv2" || { echo "::error::swiftshader libs not in APK"; exit 1; }
 
       - name: Upload APKs
         if: always()
@@ -482,6 +583,48 @@ jobs:
           "$ADB" -s emulator-5554 exec-out screencap -p > arm64.png || true
           grep -E "CSARM_" logcat_arm64.txt | head -40 || true
 
+      - name: Engine boot with BUNDLED SwiftShader (x86_64, zero GPU)
+        if: needs.swiftshader.result == 'success'
+        run: |
+          SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          ADB=$SDK/platform-tools/adb
+          "$ADB" -s emulator-5554 install -r -t android/out/csARM-x86_64-sw.apk || { echo "::error::sw APK install failed"; exit 1; }
+          "$ADB" -s emulator-5554 logcat -c || true
+          "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
+          LIMIT=600
+          while [ $SECONDS -lt $LIMIT ]; do
+            "$ADB" -s emulator-5554 logcat -d > logcat_sw.txt 2>/dev/null || true
+            grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_sw.txt && break
+            kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died during sw test"; break; }
+            sleep 5
+          done
+          sleep 6
+          "$ADB" -s emulator-5554 exec-out screencap -p > sw1.png || true
+          sleep 6
+          "$ADB" -s emulator-5554 exec-out screencap -p > sw2.png || true
+          "$ADB" -s emulator-5554 logcat -d > logcat_sw.txt || true
+          "$ADB" -s emulator-5554 logcat -d -b crash > crash_sw.txt || true
+          echo "=== SwiftShader boot chain ==="
+          grep -E "CSARM_EGL|CSARM_" logcat_sw.txt | head -80 || true
+          grep "CSARM_ENG" logcat_sw.txt | head -40 || true
+
+      - name: Assert SwiftShader engine boot
+        if: always() && needs.swiftshader.result == 'success'
+        run: |
+          [ -f logcat_sw.txt ] || { echo "::error::no swiftshader boot log"; exit 1; }
+          L=logcat_sw.txt; fail=0
+          grep -q "CSARM_EGL bundled" $L || { echo "::error::bundled SwiftShader libEGL.so was NOT used"; fail=1; }
+          grep -q "CSARM_LAUNCHER_CALL" $L || { echo "::error::LauncherMain never called (sw path)"; fail=1; }
+          if grep -q "CSARM_MAIN_FAIL" $L; then
+            echo "::error::launcher failed under SwiftShader: $(grep CSARM_MAIN_FAIL $L | head -2)"; fail=1
+          fi
+          if [ "$fail" = "1" ]; then echo "--- tail ---"; tail -80 $L; exit 1; fi
+          if grep -qE "CSARM_ENGINE_TICK|CSARM_ENGINE_FIRST_FRAME" $L; then
+            echo "SWIFTSHADER RENDERING CONFIRMED (bundled software GL, zero GPU)"
+          else
+            echo "::warning::no engine ticks under SwiftShader yet (inspect artifacts)"
+          fi
+
       - name: Assert library load (x86_64)
         if: always()
         run: |
@@ -527,10 +670,13 @@ jobs:
             shot*.png
             boot*.png
             arm64*.png
+            sw*.png
             logcat.txt
             logcat_boot.txt
             logcat_arm64*.txt
+            logcat_sw.txt
             crash.txt
+            crash_sw.txt
             emulator.log
           if-no-files-found: ignore
 
