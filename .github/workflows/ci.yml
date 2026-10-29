@@ -323,6 +323,13 @@ jobs:
           # ES-only build still needs marl (Reactor includes marl/event.h) but
           # at this revision marl is gated on the Vulkan build -> force it on
           sed -i 's/set(BUILD_MARL ${SWIFTSHADER_BUILD_VULKAN})/set(BUILD_MARL TRUE)/' CMakeLists.txt
+          # NDK-standalone fixes: platform-only headers are not in the NDK.
+          # - FrameBufferAndroid.hpp needs cutils/native_handle.h only for the
+          #   non-NDK gralloc member (dead code under ANDROID_NDK_BUILD)
+          # - cutils/log.h is platform-only; NDK ships log/log.h (liblog)
+          sed -i 's|#include <cutils/native_handle.h>||' src/Main/FrameBufferAndroid.hpp
+          sed -i 's|buffer_handle_t bufferImportedHandle;|int bufferImportedHandle;|' src/Main/FrameBufferAndroid.hpp
+          sed -i 's|#include <cutils/log.h>|#include <log/log.h>|' src/Common/DebugAndroid.hpp src/OpenGL/common/debug.cpp
           grep -n "set(BUILD_MARL" CMakeLists.txt || true
 
       - name: Setup NDK (r27d — clang-21 of NDK 30 chokes on vendored LLVM-10)
