@@ -320,7 +320,10 @@ jobs:
           git fetch -q --depth 1 origin 02a91c9cc44530c813dae89e490fe33828353636
           git checkout -q FETCH_HEAD
           git rev-parse HEAD | tee ../swiftshader_commit.txt
-          ls third_party/ | head -30
+          # ES-only build still needs marl (Reactor includes marl/event.h) but
+          # at this revision marl is gated on the Vulkan build -> force it on
+          sed -i 's/set(BUILD_MARL ${SWIFTSHADER_BUILD_VULKAN})/set(BUILD_MARL TRUE)/' CMakeLists.txt
+          grep -n "set(BUILD_MARL" CMakeLists.txt || true
 
       - name: Setup NDK (r27d — clang-21 of NDK 30 chokes on vendored LLVM-10)
         run: |
