@@ -289,282 +289,232 @@ jobs:
           path: link.log
           if-no-files-found: ignore
 
-  # Job 2b: visual test — load all .so on a real Android (emulator) + render check.
-  # Runs on macOS ARM64: native arm64-v8a emulator with HVF acceleration
-  # (GitHub Linux runners have no KVM -> software emulation never boots).
-  visual-test:
-    name: visual/emulator
-    needs: link
-    if: always() && !failure() && !cancelled()
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download arm64 .so libraries
-        uses: actions/download-artifact@v4
-        with:
-          name: so-libs-arm64-v8a
-          path: android/libs/arm64-v8a
-
-      - name: List libs for APK
-        run: ls -la android/libs/
-
-      - name: Build APK
-        run: bash android/build_apk.sh
-
-      - name: Upload APK
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: csARM-apk
-          path: android/out/csARM.apk
-          if-no-files-found: ignore
-
-      - name: Run on emulator + visual capture + engine boot test
-        uses: reactivecircus/android-emulator-runner@v2
-        continue-on-error: true   # GitHub-hosted runners currently lack HW accel (no KVM / HVF HV_UNSUPPORTED); kept opportunistically
-        with:
-          api-level: 34
-          target: google_apis
-          arch: arm64-v8a
-          emulator-build: 11525734
-          emulator-boot-timeout: 1200
-          # emulator 37.x fails HVF init on M1 runners (HV_UNSUPPORTED); build
-          # 11525734 (emulator 34.x) is the newest archive build that works
-          # -gpu swiftshader_indirect = PURE SOFTWARE rendering (no GPU): the
-          # engine must still boot and tick — this is the "no-HW" proof.
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            adb install -r android/out/csARM.apk
-            # --- part 1: library load + GLES visual test (MainActivity) ---
-            adb shell am start -n com.csarm.port/.MainActivity
-            sleep 10
-            adb exec-out screencap -p > shot1.png
-            sleep 4
-            adb exec-out screencap -p > shot2.png
-            adb logcat -d > logcat.txt || true
-            grep -E "CSARM_LIB_OK|CSARM_LIB_FAIL|CSARM_LOAD_DONE|CSARM_FRAME" logcat.txt | sort -u || true
-            # --- part 2: FULL ENGINE BOOT TEST (CSARMActivity -> SDL -> LauncherMain) ---
-            adb logcat -c || true
-            adb shell am start -n com.csarm.port/.CSARMActivity
-            # engine boot can be slow under ARM translation; poll up to 4 min
-            for i in $(seq 1 48); do
-              sleep 5
-              adb logcat -d > logcat_boot.txt || true
-              if grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_boot.txt; then break; fi
-            done
-            sleep 8
-            adb exec-out screencap -p > boot1.png
-            sleep 6
-            adb exec-out screencap -p > boot2.png
-            adb logcat -d > logcat_boot.txt || true
-            adb logcat -d -b crash > crash.txt || true
-            echo "=== boot log (csARM lines) ==="
-            grep -E "CSARM_" logcat_boot.txt | head -60 || true
-            echo "=== engine spew sample ==="
-            grep "CSARM_ENG" logcat_boot.txt | head -40 || true
-
-      - name: Assert load results
-        if: always()
-        run: |
-          if [ ! -f logcat.txt ]; then
-            echo "::warning::emulator did not boot (GH runner HW-accel unavailable); dlopen test skipped this run"
-            exit 0
-          fi
-          grep -q "CSARM_LOAD_DONE" logcat.txt || { echo "::error::load report missing"; tail -50 logcat.txt; exit 1; }
-          if grep -q "CSARM_LIB_FAIL" logcat.txt; then
-            echo "::error::libraries failed to load on ARM64"
-            grep -E "CSARM_LIB_FAIL" logcat.txt
-            exit 1
-          fi
-          echo "All libraries loaded OK on emulator"
-
-      - name: Assert engine boot (full port)
-        if: always()
-        run: |
-          if [ ! -f logcat_boot.txt ]; then
-            echo "::warning::engine boot test skipped (emulator unavailable)"
-            exit 0
-          fi
-          L=logcat_boot.txt
-          fail=0
-          grep -q "CSARM_NATIVE_INIT" $L || { echo "::error::native init not reached"; fail=1; }
-          grep -q "CSARM_ARGS " $L        || { echo "::error::argv not built"; fail=1; }
-          grep -q "CSARM_BIN_LINKS" $L    || { echo "::error::bin symlinks not created"; fail=1; }
-          grep -q "CSARM_LAUNCHER_CALL" $L || { echo "::error::LauncherMain was never called"; fail=1; }
-          if [ "$fail" = "1" ]; then
-            echo "--- boot log tail ---"; tail -80 $L; exit 1
-          fi
-          # launcher reached = Valve's CSourceAppSystemGroup is executing
-          echo "LauncherMain reached (CSourceAppSystemGroup host active)"
-          if grep -q "CSARM_MAIN_FAIL" $L; then
-            echo "::error::launcher failed: $(grep CSARM_MAIN_FAIL $L | head -2)"
-            exit 1
-          fi
-          if grep -q "CSARM_ENGINE_TICK\|CSARM_ENGINE_FIRST_FRAME" $L; then
-            echo "ENGINE FRAME LOOP CONFIRMED (software rendering, no GPU)"
-          else
-            echo "::warning::no engine frame ticks yet (engine may be waiting on content/UI; check logcat artifact)"
-          fi
-          # boot-time gate: launcher call must happen fast (fast-startup knob check)
-          PRE=$(grep -oE "CSARM_LAUNCHER_CALL pre_ms=[0-9]+" $L | grep -oE "[0-9]+$" | head -1)
-          if [ -n "$PRE" ]; then
-            echo "BOOT_TO_LAUNCHER_MS=$PRE"
-            if [ "$PRE" -gt 60000 ]; then
-              echo "::error::boot to LauncherMain took ${PRE}ms (>60s budget)"
-              exit 1
-            fi
-          fi
-          grep -q "CSARM_MAIN_EXIT" $L && echo "launcher exited: $(grep CSARM_MAIN_EXIT $L | head -1)" || true
-
-      - name: Upload visual artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-test
-          path: |
-            shot*.png
-            boot*.png
-            logcat.txt
-            logcat_boot.txt
-            crash.txt
-          if-no-files-found: ignore
-
-
-  # Job 2c: FULL ENGINE BOOT TEST on x86_64 emulator.
-  # x86_64 needs no instruction translation -> runs on GH ubuntu runners
-  # (TCG software emulation, -no-accel). This exercises the REAL boot path:
-  # CSARMActivity -> libmain -> LauncherMain -> CSourceAppSystemGroup ->
-  # IEngineAPI::Run() with pure software rendering.
+  # Job 2b: FULL ENGINE BOOT TEST — custom fast emulator runner.
+  # Replaces: (a) the old macos-14 arm64 job that always exploded with
+  # "HVF error: HV_UNSUPPORTED" (GitHub macOS runners have no nested virt)
+  # and burned a 20-min timeout every run; (b) the TCG -no-accel ubuntu job
+  # that needed 30-45 min just to reach sys.boot_completed.
+  # This one: GitHub ubuntu runners DO expose /dev/kvm -> the x86_64 emulator
+  # boots under KVM in ~60-90s. The x86_64 APK (native code, no translation)
+  # exercises the REAL boot path: CSARMActivity -> libmain -> LauncherMain ->
+  # CSourceAppSystemGroup -> IEngineAPI::Run() with pure software rendering
+  # (swiftshader_indirect). The arm64 APK (the real device target) is then
+  # exercised opportunistically through the image's ARM64 translation.
   boot-test:
-    name: boot/emulator-x86
+    name: boot/emulator-fast
     needs: link
     if: always() && !failure() && !cancelled()
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download x86_64 .so libraries
+      - name: Download .so libraries (both ABIs)
         uses: actions/download-artifact@v4
         with:
-          name: so-libs-x86_64
-          path: android/libs/x86_64
+          pattern: so-libs-*
+          path: android/libs
 
-      - name: Build APK (x86_64)
-        run: bash android/build_apk.sh x86_64
+      - name: Flatten lib dirs
+        run: |
+          for d in android/libs/so-libs-*/; do
+            [ -d "$d" ] || continue
+            abi=$(basename "$d" | sed 's/^so-libs-//')
+            mkdir -p "android/libs/$abi"
+            mv "$d"* "android/libs/$abi/" 2>/dev/null || true
+          done
+          rm -rf android/libs/so-libs-*
+          echo "--- native libs per ABI ---"
+          for a in x86_64 arm64-v8a; do echo "$a: $(ls android/libs/$a/*.so 2>/dev/null | wc -l)"; done
+          [ "$(ls android/libs/x86_64/*.so 2>/dev/null | wc -l)" -ge 21 ] || { echo "::error::missing x86_64 libs"; exit 1; }
 
-      - name: Install emulator system image + PINNED emulator (34.1.20)
+      - name: Build APKs (x86_64 native + arm64)
+        run: |
+          bash android/build_apk.sh x86_64
+          mv android/out/csARM.apk android/out/csARM-x86_64.apk
+          bash android/build_apk.sh arm64-v8a
+          mv android/out/csARM.apk android/out/csARM-arm64.apk
+          ls -la android/out/
+
+      - name: Upload APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csARM-apks
+          path: android/out/*.apk
+          retention-days: 7
+
+      - name: Enable KVM (GitHub ubuntu runners have nested virt)
+        run: |
+          ls -l /dev/kvm || echo "::warning::/dev/kvm missing"
+          sudo chmod 666 /dev/kvm 2>/dev/null || true
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules > /dev/null
+          sudo udevadm control --reload-rules 2>/dev/null || true
+          sudo udevadm trigger --name-match=kvm 2>/dev/null || true
+          if [ -w /dev/kvm ]; then
+            echo "KVM: /dev/kvm writable -> hardware acceleration ON"
+            echo "KVMOK=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning::no writable /dev/kvm -> TCG fallback (slow but works)"
+            echo "KVMOK=0" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install system image + pick emulator (KVM vs pinned TCG)
         run: |
           SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
           "$SDK/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "system-images;android-30;google_apis;x86_64" > /dev/null
-          # sdkmanager ships emulator 37.x which hangs silently under TCG
-          # (-no-accel): only prints its banner. 34.1.20 (build 11525734) TCG-boots.
-          curl -sfL --retry 3 -o /tmp/emu.zip https://dl.google.com/android/repository/emulator-linux_x64-11525734.zip
-          rm -rf "$SDK/emu34" && unzip -q /tmp/emu.zip -d "$SDK/emu34"
-          chmod +x "$SDK/emu34/emulator/emulator" || true
-          # runner images no longer ship pulseaudio/x11 libs the qemu binary needs
+          # x11/pulse libs the qemu binary dlopens; runner images dropped them
           sudo apt-get update -qq
           sudo apt-get install -y -qq libpulse0 libasound2 libnss3 libgl1 libxkbcommon0 libdbus-1-3 fontconfig 2>/dev/null \
-            || sudo apt-get install -y -qq libpulse0 libasound2t64 libnss3 libgl1 libxkbcommon0 libdbus-1-3 fontconfig
-          echo "--- qemu missing libs (must be empty) ---"
-          ldd "$SDK/emu34/emulator/qemu/linux-x86_64/qemu-system-x86_64" | grep "not found" || echo "none"
-          "$SDK/emu34/emulator/emulator" -version | head -2
+            || sudo apt-get install -y -qq libpulse0 libasound2t64 libnss3 libgl1 libxkbcommon0 libdbus-1-3 fontconfig || true
+          if [ "${KVMOK:-0}" = "1" ] && "$SDK/emulator/emulator" -accel check > accel.log 2>&1; then
+            echo "EMU_BIN=$SDK/emulator/emulator" >> "$GITHUB_ENV"
+            cat accel.log
+            echo "emulator: preinstalled 37.x under KVM"
+          else
+            # 37.x hangs silently under TCG (-no-accel) -> pin 34.1.20 (11525734)
+            curl -sfL --retry 3 -o /tmp/emu.zip https://dl.google.com/android/repository/emulator-linux_x64-11525734.zip
+            rm -rf "$SDK/emu34" && unzip -q /tmp/emu.zip -d "$SDK/emu34"
+            chmod +x "$SDK/emu34/emulator/emulator" || true
+            echo "EMU_BIN=$SDK/emu34/emulator/emulator" >> "$GITHUB_ENV"
+            echo "emulator: pinned 34.1.20 (TCG fallback)"
+            ldd "$SDK/emu34/emulator/qemu/linux-x86_64/qemu-system-x86_64" | grep "not found" || echo "qemu deps: none missing"
+          fi
 
-      - name: Launch emulator (TCG software emulation, software GPU)
+      - name: Launch emulator
         run: |
           SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
-          export ANDROID_AVD_HOME=${ANDROID_AVD_HOME:-$HOME/.android/avd}
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
           echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n test -k "system-images;android-30;google_apis;x86_64" -d pixel_4 --force
-          echo "--- AVD dir ---"; ls -la "$ANDROID_AVD_HOME" || true
-          test -f "$ANDROID_AVD_HOME/test.ini" && echo "AVD OK" || { echo "::error::AVD test.ini missing"; exit 1; }
-          nohup env ANDROID_AVD_HOME="$ANDROID_AVD_HOME" "$SDK/emu34/emulator/emulator" -avd test -no-window -gpu swiftshader_indirect \
-            -no-snapshot -noaudio -no-boot-anim -memory 3072 -cores 2 -no-accel -port 5554 \
-            > emulator.log 2>&1 &
-          echo "emulator launched"
-          sleep 15
-          head -20 emulator.log || true
+          test -f "$ANDROID_AVD_HOME/test.ini" || { echo "::error::AVD test.ini missing"; ls -la "$ANDROID_AVD_HOME"; exit 1; }
+          ACCEL=on; [ "${KVMOK:-0}" != "1" ] && ACCEL=off
+          nohup env ANDROID_AVD_HOME="$ANDROID_AVD_HOME" "$EMU_BIN" -avd test -no-window \
+            -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
+            -accel $ACCEL -memory 4096 -cores 4 -port 5554 > emulator.log 2>&1 &
+          echo $! > emu.pid
+          sleep 10
+          head -30 emulator.log || true
+          kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died at launch"; tail -40 emulator.log; exit 1; }
 
-      - name: Wait for boot + full engine boot test
+      - name: Wait for Android boot (5s poll, fail-fast on death)
         run: |
           SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
           ADB=$SDK/platform-tools/adb
-          $ADB start-server || true
+          "$ADB" start-server || true
+          LIMIT=720; [ "${KVMOK:-0}" != "1" ] && LIMIT=2400
           BOOTED=0
-          for i in $(seq 1 45); do
-            B=$($ADB -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)
-            if [ "$B" = "1" ]; then BOOTED=1; echo "BOOTED after ~$((i*60))s"; break; fi
-            # fail fast if the emulator process died
-            if ! pgrep -f "emulator.*-avd test" > /dev/null; then echo "emulator process died"; head -30 emulator.log || true; break; fi
-            sleep 60
+          while [ $SECONDS -lt $LIMIT ]; do
+            B=$("$ADB" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
+            [ "$B" = "1" ] && { BOOTED=1; echo "Android BOOTED after ${SECONDS}s"; break; }
+            kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator process died while booting"; tail -50 emulator.log; break; }
+            sleep 5
           done
           if [ "$BOOTED" != "1" ]; then
-            echo "::warning::emulator did not reach sys.boot_completed (TCG boot too slow)"
-            tail -25 emulator.log || true
-            exit 0
-          fi
-          sleep 25   # package manager settle
-          OK=0
-          for i in 1 2 3 4 5 6; do
-            if $ADB -s emulator-5554 install -r android/out/csARM.apk; then OK=1; break; fi
-            echo "install retry $i"; sleep 20
-          done
-          if [ "$OK" != "1" ]; then
-            echo "::error::APK install failed"
-            $ADB -s emulator-5554 logcat -d > logcat_boot.txt || true
+            echo "::error::emulator did not reach sys.boot_completed in ${LIMIT}s"
+            tail -30 emulator.log || true
             exit 1
           fi
-          $ADB -s emulator-5554 shell settings put global window_animation_scale 0 || true
-          $ADB -s emulator-5554 logcat -c || true
-          $ADB -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
-          # engine boot poll: up to 25 min
-          for i in $(seq 1 75); do
-            sleep 20
-            $ADB -s emulator-5554 logcat -d > logcat_boot.txt 2>/dev/null || true
-            grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_boot.txt && break
+
+      - name: Engine boot test (x86_64 native, software rendering)
+        run: |
+          SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          ADB=$SDK/platform-tools/adb
+          sleep 12   # window manager settle
+          OK=0
+          for i in 1 2 3 4 5; do
+            "$ADB" -s emulator-5554 install -r -t android/out/csARM-x86_64.apk && { OK=1; break; }
+            echo "install retry $i"; sleep 8
           done
-          sleep 10
-          $ADB -s emulator-5554 exec-out screencap -p > boot1.png || true
+          [ "$OK" = "1" ] || { echo "::error::APK install failed"; "$ADB" -s emulator-5554 logcat -d > logcat_boot.txt || true; exit 1; }
+          "$ADB" -s emulator-5554 shell settings put global window_animation_scale 0 || true
+          # --- part 1: dlopen smoke test (MainActivity) ---
+          "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.MainActivity || true
           sleep 8
-          $ADB -s emulator-5554 exec-out screencap -p > boot2.png || true
-          $ADB -s emulator-5554 logcat -d > logcat_boot.txt || true
-          $ADB -s emulator-5554 logcat -d -b crash > crash.txt || true
+          "$ADB" -s emulator-5554 exec-out screencap -p > shot1.png || true
+          sleep 4
+          "$ADB" -s emulator-5554 exec-out screencap -p > shot2.png || true
+          "$ADB" -s emulator-5554 logcat -d > logcat.txt || true
+          grep -E "CSARM_LIB_OK|CSARM_LIB_FAIL|CSARM_LOAD_DONE" logcat.txt | sort -u || true
+          # --- part 2: FULL ENGINE BOOT (CSARMActivity -> libmain -> LauncherMain) ---
+          "$ADB" -s emulator-5554 logcat -c || true
+          "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
+          LIMIT=600
+          while [ $SECONDS -lt $LIMIT ]; do
+            "$ADB" -s emulator-5554 logcat -d > logcat_boot.txt 2>/dev/null || true
+            grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_boot.txt && break
+            kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died during engine test"; break; }
+            sleep 5
+          done
+          sleep 6
+          "$ADB" -s emulator-5554 exec-out screencap -p > boot1.png || true
+          sleep 6
+          "$ADB" -s emulator-5554 exec-out screencap -p > boot2.png || true
+          "$ADB" -s emulator-5554 logcat -d > logcat_boot.txt || true
+          "$ADB" -s emulator-5554 logcat -d -b crash > crash.txt || true
           echo "=== csARM boot chain ==="
           grep -E "CSARM_" logcat_boot.txt | head -80 || true
           echo "=== engine spew sample ==="
           grep "CSARM_ENG" logcat_boot.txt | head -60 || true
           echo "=== AndroidRuntime crashes ==="
-          grep -A5 "AndroidRuntime" logcat_boot.txt | head -40 || true
+          grep -B2 -A8 "AndroidRuntime" logcat_boot.txt | head -50 || true
 
-      - name: Assert engine boot
+      - name: Arm64 APK boot via ARM translation (opportunistic)
+        continue-on-error: true
+        run: |
+          SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          ADB=$SDK/platform-tools/adb
+          "$ADB" -s emulator-5554 install -r -t android/out/csARM-arm64.apk || { echo "arm64 install failed (no ARM translation on this image)"; exit 0; }
+          "$ADB" -s emulator-5554 logcat -c || true
+          "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.MainActivity || true
+          sleep 12
+          "$ADB" -s emulator-5554 logcat -d > logcat_arm64_load.txt || true
+          grep -E "CSARM_LIB_OK|CSARM_LIB_FAIL|CSARM_LOAD_DONE" logcat_arm64_load.txt | sort -u || true
+          "$ADB" -s emulator-5554 logcat -c || true
+          "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
+          LIMIT=240
+          while [ $SECONDS -lt $LIMIT ]; do
+            "$ADB" -s emulator-5554 logcat -d > logcat_arm64.txt 2>/dev/null || true
+            grep -qE "CSARM_LAUNCHER_CALL|CSARM_MAIN_FAIL|CSARM_MAIN_EXIT" logcat_arm64.txt && break
+            sleep 5
+          done
+          "$ADB" -s emulator-5554 exec-out screencap -p > arm64.png || true
+          grep -E "CSARM_" logcat_arm64.txt | head -40 || true
+
+      - name: Assert library load (x86_64)
         if: always()
         run: |
-          if [ ! -f logcat_boot.txt ]; then
-            echo "::warning::boot log missing (emulator unavailable this run)"
-            exit 0
+          [ -f logcat.txt ] || { echo "::warning::no logcat.txt (emulator never booted)"; exit 0; }
+          grep -q "CSARM_LOAD_DONE" logcat.txt || { echo "::error::load report missing"; tail -40 logcat.txt; exit 1; }
+          if grep -q "CSARM_LIB_FAIL" logcat.txt; then
+            echo "::error::libraries failed to load"; grep "CSARM_LIB_FAIL" logcat.txt; exit 1
           fi
-          L=logcat_boot.txt
-          fail=0
+          echo "All libraries dlopen OK"
+
+      - name: Assert engine boot (full port)
+        if: always()
+        run: |
+          [ -f logcat_boot.txt ] || { echo "::error::no boot log"; exit 1; }
+          L=logcat_boot.txt; fail=0
           grep -q "CSARM_NATIVE_INIT" $L   || { echo "::error::native init not reached"; fail=1; }
           grep -q "CSARM_ARGS " $L         || { echo "::error::argv not built"; fail=1; }
           grep -q "CSARM_BIN_LINKS" $L     || { echo "::error::bin symlinks not created"; fail=1; }
           grep -q "CSARM_LAUNCHER_CALL" $L || { echo "::error::LauncherMain was never called"; fail=1; }
-          if [ "$fail" = "1" ]; then echo "--- tail ---"; tail -60 $L; exit 1; fi
+          if [ "$fail" = "1" ]; then echo "--- tail ---"; tail -80 $L; exit 1; fi
           echo "LauncherMain reached: Valve CSourceAppSystemGroup host is live"
           if grep -q "CSARM_MAIN_FAIL" $L; then
             echo "::error::launcher failed: $(grep CSARM_MAIN_FAIL $L | head -2)"; exit 1
           fi
           if grep -qE "CSARM_ENGINE_TICK|CSARM_ENGINE_FIRST_FRAME" $L; then
-            echo "ENGINE FRAME LOOP CONFIRMED (pure software rendering)"
+            echo "ENGINE FRAME LOOP CONFIRMED (pure software rendering, no GPU)"
           else
-            echo "::warning::no engine ticks yet (inspect logcat artifact)"
+            echo "::warning::no engine ticks yet (engine may wait on content/UI; inspect artifacts)"
           fi
           PRE=$(grep -oE "CSARM_LAUNCHER_CALL pre_ms=[0-9]+" $L | grep -oE "[0-9]+$" | head -1)
           if [ -n "$PRE" ]; then
             echo "BOOT_TO_LAUNCHER_MS=$PRE"
-            if [ "$PRE" -gt 120000 ]; then echo "::error::slow boot ${PRE}ms (>120s)"; exit 1; fi
+            [ "$PRE" -le 60000 ] || { echo "::error::slow boot ${PRE}ms (>60s budget)"; exit 1; }
           fi
           grep -q "CSARM_MAIN_EXIT" $L && echo "launcher exit: $(grep CSARM_MAIN_EXIT $L | head -1)" || true
 
@@ -572,10 +522,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: boot-test
+          name: visual-test
           path: |
+            shot*.png
             boot*.png
+            arm64*.png
+            logcat.txt
             logcat_boot.txt
+            logcat_arm64*.txt
             crash.txt
             emulator.log
           if-no-files-found: ignore
