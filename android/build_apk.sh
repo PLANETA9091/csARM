@@ -20,7 +20,9 @@ fi
 AJAR="$PLAT/android.jar"
 echo "SDK: build-tools=$BT platform=$PLAT"
 
-OUT="$A/out"; GEN="$A/gen"; CLS="$A/classes"; DEX="$A/dex"
+# CSARM_OUT: per-variant output dir (CI builds 4 APK variants; each
+# invocation wipes OUT — without per-variant dirs the previous APK dies)
+OUT="${CSARM_OUT:-$A/out}"; GEN="$A/gen"; CLS="$A/classes"; DEX="$A/dex"
 rm -rf "$OUT" "$GEN" "$CLS" "$DEX"; mkdir -p "$OUT" "$GEN" "$CLS" "$DEX"
 
 # 0. SDL2 Java glue: SDLActivity + SDLSurface come from the SAME pinned SDL

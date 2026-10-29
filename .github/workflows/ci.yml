@@ -440,21 +440,24 @@ jobs:
 
       - name: Build APKs (system EGL, both ABIs)
         run: |
-          bash android/build_apk.sh x86_64
-          mv android/out/csARM.apk android/out/csARM-x86_64.apk
-          bash android/build_apk.sh arm64-v8a
-          mv android/out/csARM.apk android/out/csARM-arm64.apk
+          mkdir -p android/out
+          CSARM_OUT=$PWD/android/b-x86_64 bash android/build_apk.sh x86_64
+          mv android/b-x86_64/csARM.apk android/out/csARM-x86_64.apk
+          CSARM_OUT=$PWD/android/b-arm64 bash android/build_apk.sh arm64-v8a
+          mv android/b-arm64/csARM.apk android/out/csARM-arm64.apk
           ls -la android/out/
+          [ -f android/out/csARM-x86_64.apk ] && [ -f android/out/csARM-arm64.apk ]
 
       - name: Build SwiftShader APKs (bundled software GL)
         if: needs.swiftshader.result == 'success'
         run: |
-          bash android/build_apk.sh x86_64 swiftshader
-          mv android/out/csARM.apk android/out/csARM-x86_64-sw.apk
-          bash android/build_apk.sh arm64-v8a swiftshader
-          mv android/out/csARM.apk android/out/csARM-arm64-sw.apk
+          CSARM_OUT=$PWD/android/b-x86_64 bash android/build_apk.sh x86_64 swiftshader
+          mv android/b-x86_64/csARM.apk android/out/csARM-x86_64-sw.apk
+          CSARM_OUT=$PWD/android/b-arm64 bash android/build_apk.sh arm64-v8a swiftshader
+          mv android/b-arm64/csARM.apk android/out/csARM-arm64-sw.apk
           unzip -l android/out/csARM-x86_64-sw.apk | grep -E "libEGL|libGLESv2" || { echo "::error::swiftshader libs not in APK"; exit 1; }
           ls -la android/out/
+          [ -f android/out/csARM-x86_64-sw.apk ] && [ -f android/out/csARM-arm64-sw.apk ]
 
       - name: Upload APKs
         if: always()
