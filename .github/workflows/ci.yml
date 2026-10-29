@@ -26,34 +26,74 @@ env:
 jobs:
   # Job 1: build all module groups in parallel matrix
   build:
-    name: build/${{ matrix.tag }}
+    name: build/${{ matrix.abi }}/${{ matrix.tag }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - tag: core
+          - abi: arm64-v8a
+            tag: core
             modules: "tier0/tier0.vpc tier1/tier1.vpc tier2/tier2.vpc vstdlib/vstdlib.vpc mathlib/mathlib.vpc appframework/appframework.vpc utils/bzip2/bzip2.vpc"
             defs: ""
-          - tag: engine
+          - abi: arm64-v8a
+            tag: engine
             modules: "engine/engine.vpc"
             defs: ""
-          - tag: render
+          - abi: arm64-v8a
+            tag: render
             modules: "materialsystem/materialsystem.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
             defs: ""
-          - tag: vgui
+          - abi: arm64-v8a
+            tag: vgui
             modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc"
             defs: ""
-          - tag: data
+          - abi: arm64-v8a
+            tag: data
             modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt"
             defs: ""
-          - tag: client
+          - abi: arm64-v8a
+            tag: client
             modules: "game/client/client_cstrike15.vpc"
             defs: "DCLIENT_DLL=1 DCSTRIKE_CLIENT_DLL=1 DCSTRIKE_DLL=1 DCSTRIKE15=1 DGAMEUI_EMBEDDED=1 DGAMEUI_EXPORTS=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DUSE_ECONOMY_FEATURES=1"
-          - tag: server
+          - abi: arm64-v8a
+            tag: server
             modules: "game/server/server_cstrike15.vpc"
             defs: "DGAME_DLL=1 DCSTRIKE_DLL=1 DCSTRIKE15=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DPROTECTED_THINGS_ENABLE=1"
-          - tag: pb25
+          - abi: arm64-v8a
+            tag: pb25
+            modules: "lists/protobuf25.txt"
+            defs: "HAVE_PTHREAD=1"
+          - abi: x86_64
+            tag: core
+            modules: "tier0/tier0.vpc tier1/tier1.vpc tier2/tier2.vpc vstdlib/vstdlib.vpc mathlib/mathlib.vpc appframework/appframework.vpc utils/bzip2/bzip2.vpc"
+            defs: ""
+          - abi: x86_64
+            tag: engine
+            modules: "engine/engine.vpc"
+            defs: ""
+          - abi: x86_64
+            tag: render
+            modules: "materialsystem/materialsystem.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
+            defs: ""
+          - abi: x86_64
+            tag: vgui
+            modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc"
+            defs: ""
+          - abi: x86_64
+            tag: data
+            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt"
+            defs: ""
+          - abi: x86_64
+            tag: client
+            modules: "game/client/client_cstrike15.vpc"
+            defs: "DCLIENT_DLL=1 DCSTRIKE_CLIENT_DLL=1 DCSTRIKE_DLL=1 DCSTRIKE15=1 DGAMEUI_EMBEDDED=1 DGAMEUI_EXPORTS=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DUSE_ECONOMY_FEATURES=1"
+          - abi: x86_64
+            tag: server
+            modules: "game/server/server_cstrike15.vpc"
+            defs: "DGAME_DLL=1 DCSTRIKE_DLL=1 DCSTRIKE15=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DPROTECTED_THINGS_ENABLE=1"
+          - abi: x86_64
+            tag: pb25
             modules: "lists/protobuf25.txt"
             defs: "HAVE_PTHREAD=1"
 
@@ -90,7 +130,7 @@ jobs:
           set -u
           export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           export R=$GITHUB_WORKSPACE
-          export CC=aarch64-linux-android24-clang
+          if [ "${{ matrix.abi }}" = "x86_64" ]; then export CC=x86_64-linux-android24-clang; else export CC=aarch64-linux-android24-clang; fi
           export OPT=${{ github.event.inputs.opt_level || '-O2' }}
           export LTO=${{ github.event.inputs.lto || '1' }}
           export JOBS=4
@@ -128,24 +168,28 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: logs-${{ matrix.tag }}
+          name: logs-${{ matrix.abi }}-${{ matrix.tag }}
           path: logs.tgz
           if-no-files-found: ignore
 
       - name: Upload object files
         uses: actions/upload-artifact@v4
         with:
-          name: obj-${{ matrix.tag }}
+          name: obj-${{ matrix.abi }}-${{ matrix.tag }}
           path: obj/
           retention-days: 3
           compression-level: 6
 
   # Job 2: link all modules into shared libraries
   link:
-    name: link/.so
+    name: link/.so/${{ matrix.abi }}
     needs: build
     if: always() && !failure() && !cancelled()
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [ arm64-v8a, x86_64 ]
     steps:
       - uses: actions/checkout@v4
 
@@ -162,7 +206,7 @@ jobs:
       - name: Download all objects
         uses: actions/download-artifact@v4
         with:
-          pattern: obj-*
+          pattern: obj-${{ matrix.abi }}-*
           path: obj/
 
       - name: Flatten artifact dirs
@@ -194,6 +238,7 @@ jobs:
       - name: Link shared libraries
         run: |
           export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          if [ "${{ matrix.abi }}" = "x86_64" ]; then export CC=x86_64-linux-android27-clang; else export CC=aarch64-linux-android27-clang; fi
           export LTO=${{ github.event.inputs.lto || '1' }}
           export STRIP=${{ github.event.inputs.strip || '0' }}
           mkdir -p out
@@ -226,7 +271,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: so-libs
+          name: so-libs-${{ matrix.abi }}
           path: out/*.so
           if-no-files-found: ignore
 
@@ -249,11 +294,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download .so libraries
+      - name: Download arm64 .so libraries
         uses: actions/download-artifact@v4
         with:
-          name: so-libs
-          path: android/libs
+          name: so-libs-arm64-v8a
+          path: android/libs/arm64-v8a
 
       - name: List libs for APK
         run: ls -la android/libs/
@@ -375,6 +420,103 @@ jobs:
             shot*.png
             boot*.png
             logcat.txt
+            logcat_boot.txt
+            crash.txt
+          if-no-files-found: ignore
+
+
+  # Job 2c: FULL ENGINE BOOT TEST on x86_64 emulator.
+  # x86_64 needs no instruction translation -> runs on GH ubuntu runners
+  # (TCG software emulation, -no-accel). This exercises the REAL boot path:
+  # CSARMActivity -> libmain -> LauncherMain -> CSourceAppSystemGroup ->
+  # IEngineAPI::Run() with pure software rendering.
+  boot-test:
+    name: boot/emulator-x86
+    needs: link
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download x86_64 .so libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: so-libs-x86_64
+          path: android/libs/x86_64
+
+      - name: Build APK (x86_64)
+        run: bash android/build_apk.sh x86_64
+
+      - name: Run engine boot test on emulator (software GPU)
+        uses: reactivecircus/android-emulator-runner@v2
+        continue-on-error: true   # TCG boot is slow; keep job non-blocking while we tune
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          emulator-boot-timeout: 2400
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 3072 -no-accel
+          script: |
+            adb install -r android/out/csARM.apk
+            adb shell settings put global window_animation_scale 0
+            adb shell am start -n com.csarm.port/.CSARMActivity
+            # poll up to 30 min for the engine boot chain
+            for i in $(seq 1 90); do
+              sleep 20
+              adb logcat -d > logcat_boot.txt || true
+              if grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_boot.txt; then break; fi
+            done
+            sleep 10
+            adb exec-out screencap -p > boot1.png
+            sleep 8
+            adb exec-out screencap -p > boot2.png
+            adb logcat -d > logcat_boot.txt || true
+            adb logcat -d -b crash > crash.txt || true
+            echo "=== csARM boot chain ==="
+            grep -E "CSARM_" logcat_boot.txt | head -80 || true
+            echo "=== engine spew sample ==="
+            grep "CSARM_ENG" logcat_boot.txt | head -60 || true
+            echo "=== AndroidRuntime crashes ==="
+            grep -A5 "AndroidRuntime" logcat_boot.txt | head -40 || true
+
+      - name: Assert engine boot
+        if: always()
+        run: |
+          if [ ! -f logcat_boot.txt ]; then
+            echo "::warning::emulator unavailable; boot test skipped this run"
+            exit 0
+          fi
+          L=logcat_boot.txt
+          fail=0
+          grep -q "CSARM_NATIVE_INIT" $L   || { echo "::error::native init not reached"; fail=1; }
+          grep -q "CSARM_ARGS " $L         || { echo "::error::argv not built"; fail=1; }
+          grep -q "CSARM_BIN_LINKS" $L     || { echo "::error::bin symlinks not created"; fail=1; }
+          grep -q "CSARM_LAUNCHER_CALL" $L || { echo "::error::LauncherMain was never called"; fail=1; }
+          if [ "$fail" = "1" ]; then echo "--- tail ---"; tail -60 $L; exit 1; fi
+          echo "LauncherMain reached: Valve CSourceAppSystemGroup host is live"
+          if grep -q "CSARM_MAIN_FAIL" $L; then
+            echo "::error::launcher failed: $(grep CSARM_MAIN_FAIL $L | head -2)"; exit 1
+          fi
+          if grep -qE "CSARM_ENGINE_TICK|CSARM_ENGINE_FIRST_FRAME" $L; then
+            echo "ENGINE FRAME LOOP CONFIRMED (pure software rendering)"
+          else
+            echo "::warning::no engine ticks yet (inspect logcat artifact)"
+          fi
+          PRE=$(grep -oE "CSARM_LAUNCHER_CALL pre_ms=[0-9]+" $L | grep -oE "[0-9]+$" | head -1)
+          if [ -n "$PRE" ]; then
+            echo "BOOT_TO_LAUNCHER_MS=$PRE"
+            if [ "$PRE" -gt 120000 ]; then echo "::error::slow boot ${PRE}ms (>120s)"; exit 1; fi
+          fi
+          grep -q "CSARM_MAIN_EXIT" $L && echo "launcher exit: $(grep CSARM_MAIN_EXIT $L | head -1)" || true
+
+      - name: Upload boot artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-test
+          path: |
+            boot*.png
             logcat_boot.txt
             crash.txt
           if-no-files-found: ignore

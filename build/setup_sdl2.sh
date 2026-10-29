@@ -41,7 +41,7 @@ sed -i 's/#define SDL_DYNAMIC_API 1/#define SDL_DYNAMIC_API 0/' "$SRCDIR/src/dyn
 grep -q "#define SDL_DYNAMIC_API 0" "$SRCDIR/src/dynapi/SDL_dynapi.h" || { echo "dynapi patch failed"; exit 1; }
 
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-CC=aarch64-linux-android24-clang
+CC=${CC:-aarch64-linux-android24-clang}   # x86_64 link jobs pass x86_64-linux-android24-clang
 
 # File list mirroring SDL 2.0.2's Android.mk (android backend set).
 # src/render/* and src/video/yuv2rgb excluded: engine renders via ToGL and

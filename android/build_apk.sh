@@ -57,26 +57,37 @@ find "$CLS" -name "*.class" > /tmp/csarm-d8.list
   --output "$DEX" @/tmp/csarm-d8.list
 
 # 4. pack dex + native libs
+# usage: build_apk.sh [abi]  — abi: x86_64 (boot-test) | universal (default: all ABIs present)
+APKABI=${1:-universal}
 cp "$OUT/base.apk" "$OUT/unsigned.apk"
 cp "$DEX/classes.dex" "$DEX/classes.dex" 2>/dev/null || true
 (cd "$DEX" && zip -q -u "$OUT/unsigned.apk" classes.dex)
-mkdir -p "$A/lib/arm64-v8a"
+
 # our .so files have DT_NEEDED libc++_shared.so — take it from the NDK sysroot
-if [ ! -f "$A/libs/libc++_shared.so" ]; then
-  HOSTTAG=linux-x86_64; [ "$(uname)" = "Darwin" ] && HOSTTAG=darwin-x86_64
-  for cand in "${ANDROID_NDK_LATEST_HOME:-}" "${ANDROID_NDK_HOME:-}" "$SDK/ndk/"*/ ; do
-    [ -n "$cand" ] || continue
-    f="$cand/toolchains/llvm/prebuilt/$HOSTTAG/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
-    if [ -f "$f" ]; then cp "$f" "$A/libs/libc++_shared.so"; echo "libc++_shared.so from $cand"; break; fi
-  done
-fi
-if ls "$A"/libs/*.so >/dev/null 2>&1; then
-  cp "$A"/libs/*.so "$A/lib/arm64-v8a/"
-fi
-NLIB=$(ls "$A"/lib/arm64-v8a/*.so 2>/dev/null | wc -l)
-echo "native libs: $NLIB"
-[ "$NLIB" -ge 21 ] || { echo "ERROR: expected >=21 native libs (20 port libs incl. main/SDL2/launcher/inputsystem + libc++_shared), got $NLIB"; exit 1; }
-(cd "$A" && zip -q -u "$OUT/unsigned.apk" lib/arm64-v8a/*.so)
+HOSTTAG=linux-x86_64; [ "$(uname)" = "Darwin" ] && HOSTTAG=darwin-x86_64
+for ABI in arm64-v8a x86_64; do
+  [ "$APKABI" = "universal" ] || [ "$APKABI" = "$ABI" ] || continue
+  if ls "$A"/libs/$ABI/*.so >/dev/null 2>&1; then
+    mkdir -p "$A/lib/$ABI"
+    cp "$A"/libs/$ABI/*.so "$A/lib/$ABI/"
+    # libc++_shared per ABI
+    LIBDIRNAME=aarch64-linux-android; [ "$ABI" = "x86_64" ] && LIBDIRNAME=x86_64-linux-android
+    if ! ls "$A/lib/$ABI/libc++_shared.so" >/dev/null 2>&1; then
+      for cand in "${ANDROID_NDK_LATEST_HOME:-}" "${ANDROID_NDK_HOME:-}" "$SDK/ndk/"*/ ; do
+        [ -n "$cand" ] || continue
+        f="$cand/toolchains/llvm/prebuilt/$HOSTTAG/sysroot/usr/lib/$LIBDIRNAME/libc++_shared.so"
+        if [ -f "$f" ]; then cp "$f" "$A/lib/$ABI/libc++_shared.so"; echo "libc++_shared.so($ABI) from $cand"; break; fi
+      done
+    fi
+    NLIB=$(ls "$A/lib/$ABI"/*.so 2>/dev/null | wc -l)
+    echo "native libs [$ABI]: $NLIB"
+    [ "$NLIB" -ge 21 ] || { echo "ERROR: expected >=21 native libs for $ABI (20 port libs incl. main/SDL2/launcher/inputsystem + libc++_shared), got $NLIB"; exit 1; }
+    (cd "$A" && zip -q -u "$OUT/unsigned.apk" lib/$ABI/*.so)
+  else
+    echo "no libs for $ABI (skipping; APKABI=$APKABI)"
+    [ "$APKABI" = "universal" ] || { echo "ERROR: requested ABI $ABI has no libs"; exit 1; }
+  fi
+done
 
 # 5. align + sign (debug key)
 "$BT/zipalign" -f 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
