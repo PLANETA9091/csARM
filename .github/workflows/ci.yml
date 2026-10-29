@@ -475,12 +475,17 @@ jobs:
       - name: Launch emulator (TCG software emulation, software GPU)
         run: |
           SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          export ANDROID_AVD_HOME=${ANDROID_AVD_HOME:-$HOME/.android/avd}
+          mkdir -p "$ANDROID_AVD_HOME"
           echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n test -k "system-images;android-30;google_apis;x86_64" -d pixel_4 --force
-          nohup "$SDK/emu34/emulator/emulator" -avd test -no-window -gpu swiftshader_indirect \
+          echo "--- AVD dir ---"; ls -la "$ANDROID_AVD_HOME" || true
+          test -f "$ANDROID_AVD_HOME/test.ini" && echo "AVD OK" || { echo "::error::AVD test.ini missing"; exit 1; }
+          nohup env ANDROID_AVD_HOME="$ANDROID_AVD_HOME" "$SDK/emu34/emulator/emulator" -avd test -no-window -gpu swiftshader_indirect \
             -no-snapshot -noaudio -no-boot-anim -memory 3072 -cores 2 -no-accel -port 5554 \
             > emulator.log 2>&1 &
           echo "emulator launched"
-          sleep 10
+          sleep 15
+          head -20 emulator.log || true
 
       - name: Wait for boot + full engine boot test
         run: |
@@ -492,7 +497,7 @@ jobs:
             B=$($ADB -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)
             if [ "$B" = "1" ]; then BOOTED=1; echo "BOOTED after ~$((i*60))s"; break; fi
             # fail fast if the emulator process died
-            if ! pgrep -f "emulator.*-avd test" > /dev/null; then echo "emulator process died"; break; fi
+            if ! pgrep -f "emulator.*-avd test" > /dev/null; then echo "emulator process died"; head -30 emulator.log || true; break; fi
             sleep 60
           done
           if [ "$BOOTED" != "1" ]; then
