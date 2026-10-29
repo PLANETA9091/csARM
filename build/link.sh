@@ -42,7 +42,10 @@ else
   done
 fi
 if [ -n "$CPPSHAREDDIR" ]; then
-  LFLAGS="$LFLAGS -L$CPPSHAREDDIR -lc++_shared"
+  # link the EXPLICIT file (no -L): adding the sysroot dir to the search path
+  # made lld pull other libs from it (x86_64 dir carries extras) and broke
+  # PC32 relocs; a direct path just records DT_NEEDED libc++_shared.so
+  LFLAGS="$LFLAGS $CPPSHAREDDIR/libc++_shared.so"
   echo "libc++_shared.so from $CPPSHAREDDIR" | tee -a "$LOG"
 else
   echo "WARN: libc++_shared.so not found under $CPPSHBASE — libs will dlopen-fail on device" | tee -a "$LOG"
