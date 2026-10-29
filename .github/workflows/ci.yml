@@ -233,7 +233,13 @@ jobs:
           fi
 
       - name: Build SDL2 static lib
-        run: bash build/setup_sdl2.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
+        run: |
+          if [ "${{ matrix.abi }}" = "x86_64" ]; then
+            export CC=x86_64-linux-android24-clang
+          else
+            export CC=aarch64-linux-android24-clang
+          fi
+          bash build/setup_sdl2.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
 
       - name: Link shared libraries
         run: |
