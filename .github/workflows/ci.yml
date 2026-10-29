@@ -354,7 +354,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DREACTOR_BACKEND=${{ matrix.backend }} \
             -DLLVM_SUBZERO_PLATFORM_INCLUDE_DIR=build/Android/include \
-            -DCMAKE_SHARED_LINKER_FLAGS="-landroid" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-landroid -llog" \
             -DSWIFTSHADER_BUILD_VULKAN=OFF \
             -DSWIFTSHADER_BUILD_EGL=ON \
             -DSWIFTSHADER_BUILD_GLESv2=ON \
