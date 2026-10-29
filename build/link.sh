@@ -180,7 +180,14 @@ link_so() {
     local n=$(ls obj/$tag/*.o 2>/dev/null | wc -l)
     if [ "$n" -eq 0 ]; then echo "!! module $tag has no objects -> skip $name" | tee -a "$LOG"; return 1; fi
     for o in obj/$tag/*.o; do
-      basename "$o" | grep -qE "$EXCLUDE_RE" || { objs+=("$o"); total=$((total+1)); }
+      basename "$o" | grep -qE "$EXCLUDE_RE" && continue
+      # mem_helpers.cpp must stay linked (g_bInitMemory) but its g_pszModule
+      # collides with memoverride.cpp's — localize the duplicate symbol
+      if basename "$o" | grep -q "tier0_mem_helpers"; then
+        local lo="$OUTDIR/mem_helpers.loc.o"
+        cp "$o" "$lo" && llvm-objcopy --localize-symbol=g_pszModule "$lo" 2>>"$LOG" && o="$lo"
+      fi
+      objs+=("$o"); total=$((total+1))
     done
   done
   local ldeps=""
