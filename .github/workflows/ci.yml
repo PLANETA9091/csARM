@@ -302,16 +302,19 @@ jobs:
       matrix:
         abi: [ arm64-v8a, x86_64 ]
     steps:
-      - name: Clone SwiftShader (ES-only, skip LLVM/Vulkan stack)
+      - name: Clone SwiftShader at known-good Android-capable revision
         run: |
-          git clone --depth 1 --single-branch https://github.com/google/swiftshader.git
-          cd swiftshader
+          # main() dropped standalone-CMake Android support (Vulkan block is
+          # unconditional and matches no Android platform branch).  02a91c9c
+          # (2021-08-20) still has SWIFTSHADER_BUILD_EGL/GLESv2 options, the
+          # Android branch, and marl/astc-encoder/subzero/SPIRV checked
+          # IN-TREE -> no submodules needed for an ES-only build.
+          git init -q swiftshader && cd swiftshader
+          git remote add origin https://github.com/google/swiftshader.git
+          git fetch -q --depth 1 origin 02a91c9cc44530c813dae89e490fe33828353636
+          git checkout -q FETCH_HEAD
           git rev-parse HEAD | tee ../swiftshader_commit.txt
-          # only what the GLES/EGL build needs
-          git submodule update --init --depth 1 \
-            third_party/marl third_party/astc-encoder third_party/json \
-            third_party/rapidjson third_party/git-hooks 2>/dev/null || true
-          echo "--- submodules ---"; ls third_party/ || true
+          ls third_party/ | head -30
 
       - name: Setup NDK
         run: |
@@ -331,13 +334,13 @@ jobs:
             -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24 \
             -DANDROID_STL=c++_static \
             -DCMAKE_BUILD_TYPE=Release \
+            -DREACTOR_BACKEND=Subzero \
             -DSWIFTSHADER_BUILD_VULKAN=OFF \
             -DSWIFTSHADER_BUILD_EGL=ON \
             -DSWIFTSHADER_BUILD_GLESv2=ON \
-            -DSWIFTSHADER_BUILD_GLES_CM=ON \
-            -DSWIFTSHADER_BUILD_SAMPLES=OFF \
-            -DSWIFTSHADER_BUILD_TESTS=OFF \
             -DSWIFTSHADER_BUILD_PVR=OFF \
+            -DSWIFTSHADER_BUILD_TESTS=OFF \
+            -DSWIFTSHADER_BUILD_BENCHMARKS=OFF \
             -DSWIFTSHADER_WARNINGS_AS_ERRORS=OFF
           cmake --build out --parallel $(nproc)
 
