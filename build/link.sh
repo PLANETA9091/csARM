@@ -86,20 +86,31 @@ record_link() {
   R_OBJS[$1]="$2"; R_DEPS[$1]="$3"; R_TAIL[$1]="$4"
 }
 
+# dynamic symbol listing via llvm-readelf (llvm-nm proved unreliable here);
+# columns: Num: Value Size Type Bind Vis Ndx Name — name may carry @VERSION
+dsyms() {  # $1 = lib, $2 = "def"|"und"
+  # def  = STRONG defined globals (weak defs give no resolution guarantee)
+  # und  = STRONG undefined (WEAK UND legally resolve to NULL — not a dep)
+  llvm-readelf -W --dyn-syms "$1" 2>/dev/null | awk -v mode="$2" '
+    NF >= 8 && $4 != "SECTION" {
+      if (mode=="def" && $5=="GLOBAL" && $7!="UND") { n=$8; sub(/@.*/, "", n); if (n!="") print n }
+      if (mode=="und" && $7=="UND" && $5!="WEAK")   { n=$8; sub(/@.*/, "", n); if (n!="") print n }
+    }'
+}
+
 build_symmap() {
   : > "$OUTDIR/.symmap"
   local so base
   for so in "$OUTDIR"/lib*.so; do
     base=$(basename "$so" .so)
-    llvm-nm -D --defined-only "$so" 2>/dev/null \
-      | awk -v b="$base" '$2 !~ /^[WwVvuTU]$/ {print $3, b}' >> "$OUTDIR/.symmap"
+    dsyms "$so" def | awk -v b="$base" '{print $1, b}' >> "$OUTDIR/.symmap"
   done
   sort -u -o "$OUTDIR/.symmap" "$OUTDIR/.symmap"
 }
 
 auto_extra_deps() {
   local base="$1"
-  llvm-nm -D --undefined-only "$OUTDIR/$base.so" 2>/dev/null | awk '{print $NF}' | sort -u \
+  dsyms "$OUTDIR/$base.so" und | sort -u \
     | awk -v B="$base" 'NR==FNR { defs[$1]=$2; next } $0 in defs && defs[$0] != B { print defs[$0] }' \
         "$OUTDIR/.symmap" - | sort -u
 }
@@ -144,23 +155,26 @@ und_gate() {
   local lib
   for lib in "$SYS"/libc.so "$SYS"/libm.so "$SYS"/libdl.so "$SYS"/liblog.so "$SYS"/libz.so \
              "$SYS"/libandroid.so "$SYS"/libEGL.so "$SYS"/libGLESv2.so "$SYS"/libGLESv1_CM.so \
-             "$SYS"/libOpenSLES.so "$SYS"/libc++_shared.so "$SYS"/libc++_static.a "$SYS"/libc++abi.a \
+             "$SYS"/libOpenSLES.so "$SYS"/libc++_shared.so \
              "$SYS"/*/libandroid.so "$SYS"/*/libEGL.so "$SYS"/*/libGLESv2.so \
              "$SYS"/*/libc.so "$SYS"/*/libm.so "$SYS"/*/liblog.so "$SYS"/*/libz.so \
              "$SYS"/*/libOpenSLES.so "$SYS"/*/libnativewindow.so "$SYS"/*/libmediandk.so \
              "$SYS"/*/libaaudio.so "$SYS"/*/libunwind.so "$SYS"/*/libc++_shared.so; do
     [ -e "$lib" ] || continue
-    llvm-nm -D --defined-only "$lib" 2>/dev/null | awk '$2 !~ /^[WwVvuTU]$/ {print $3}'
-    case "$lib" in *.a) llvm-nm --defined-only "$lib" 2>/dev/null | awk '$2 ~ /^[TDRBA]$/ {print $3}';; esac
+    case "$lib" in
+      *.a) llvm-readelf -W --syms "$lib" 2>/dev/null | awk '$5=="GLOBAL" && $7!="UND" {n=$8; sub(/@.*/,"",n); print n}' ;;
+      *)   dsyms "$lib" def ;;
+    esac
   done | sort -u > "$OUTDIR/.allowed"
   cat "$OUTDIR/.symmap" | awk '{print $1}' >> "$OUTDIR/.allowed"
   sort -u -o "$OUTDIR/.allowed" "$OUTDIR/.allowed"
+  echo "[und-gate] symmap=$(wc -l < "$OUTDIR/.symmap") allowed=$(wc -l < "$OUTDIR/.allowed")" | tee -a "$LOG"
 
   local so base BAD TOTAL
   : > "$OUTDIR/.unresolved"
   for so in "$OUTDIR"/lib*.so; do
     base=$(basename "$so" .so)
-    BAD=$(llvm-nm -D --undefined-only "$so" 2>/dev/null | awk '{print $NF}' | sort -u \
+    BAD=$(dsyms "$so" und | sort -u \
           | awk 'NR==FNR{a[$1]=1;next} !($0 in a)' "$OUTDIR/.allowed" -)
     if [ -n "$BAD" ]; then
       TOTAL=$(echo "$BAD" | wc -l)
