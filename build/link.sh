@@ -52,6 +52,12 @@ else
 fi
 # LTO=1 (must match trybuild.sh) -> ThinLTO at link; soname passed separately
 if [ "${LTO:-0}" = "1" ]; then LFLAGS="$LFLAGS -flto=thin"; fi
+
+# g_bInitMemory stub (see EXCLUDE_RE note) — referenced by tier0/tier1 objects
+cat > "$OUTDIR/gbinit.cpp" <<'EOF'
+bool g_bInitMemory = true;
+EOF
+$CC -c -fPIC -O1 -w -o "$OUTDIR/gbinit.cpp.o" "$OUTDIR/gbinit.cpp" 2>>"$LOG"
 if [ "${STRIP:-0}" = "1" ]; then
   STRIPBIN="${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
 fi
@@ -62,9 +68,9 @@ fi
 #   client: weapon_parse_default.cpp + c_mod_lesson_stubs.cpp are mod-defaults that
 #           cstrike15 overrides (cs_weapon_parse.cpp / c_cs_lesson.cpp).
 #   server: game/server/player_pickup.cpp overridden by game/shared/cstrike15 version.
-#   NOTE: tier0/mem_helpers.cpp must STAY linked — it defines g_bInitMemory which
-#   other tier0 objects reference (dropping it broke dlopen on device).
-EXCLUDE_RE='game_shared_weapon_parse_default\.cpp\.o$|game_client_c_mod_lesson_stubs\.cpp\.o$|game_server_player_pickup\.cpp\.o$'
+#   tier0: mem_helpers.cpp excluded — duplicate g_pszModule; its g_bInitMemory
+#          (the only symbol others reference) is provided by the GBINIT stub.
+EXCLUDE_RE='tier0_mem_helpers\.cpp\.o$|game_shared_weapon_parse_default\.cpp\.o$|game_client_c_mod_lesson_stubs\.cpp\.o$|game_server_player_pickup\.cpp\.o$'
 
 # ---------------------------------------------------------------------------
 # Automatic cross-lib dependency resolution (2-pass linking).
@@ -180,15 +186,13 @@ link_so() {
     local n=$(ls obj/$tag/*.o 2>/dev/null | wc -l)
     if [ "$n" -eq 0 ]; then echo "!! module $tag has no objects -> skip $name" | tee -a "$LOG"; return 1; fi
     for o in obj/$tag/*.o; do
-      basename "$o" | grep -qE "$EXCLUDE_RE" && continue
-      # mem_helpers.cpp must stay linked (g_bInitMemory) but its g_pszModule
-      # collides with memoverride.cpp's — localize the duplicate symbol
-      if basename "$o" | grep -q "tier0_mem_helpers"; then
-        local lo="$OUTDIR/mem_helpers.loc.o"
-        cp "$o" "$lo" && llvm-objcopy --localize-symbol=g_pszModule "$lo" 2>>"$LOG" && o="$lo"
-      fi
-      objs+=("$o"); total=$((total+1))
+      basename "$o" | grep -qE "$EXCLUDE_RE" || { objs+=("$o"); total=$((total+1)); }
     done
+    # tier0 needs g_bInitMemory from mem_helpers.cpp — but that file also has a
+    # duplicate g_pszModule and its objects are LTO bitcode (llvm-objcopy can't
+    # localize symbols in bitcode), so the file is excluded and a one-symbol
+    # stub (GBINIT, compiled below) provides exactly what others reference.
+    [ "$tag" = "tier0" ] && [ -f "$OUTDIR/gbinit.cpp.o" ] && { objs+=("$OUTDIR/gbinit.cpp.o"); total=$((total+1)); }
   done
   local ldeps=""
   for d in $deps; do ldeps="$ldeps -L$OUTDIR -l$d"; done
