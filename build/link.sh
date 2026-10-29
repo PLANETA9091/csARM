@@ -24,7 +24,19 @@ for pb in genproto/*.pb.cc; do
   $CC -c -fPIC -O1 -w -std=gnu++17 $PBINC -D_POSIX=1 -DLINUX=1 -DGNUC=1 -DENGINE_DLL=1 "$pb" -o "$obj" >> "$LOG" 2>&1
 done
 
-LFLAGS="-shared -fPIC -fuse-ld=lld -stdlib=libc++_shared -Wl,--gc-sections -Wl,-z,max-page-size=16384"
+LFLAGS="-shared -fPIC -fuse-ld=lld -stdlib=libc++ -Wl,--gc-sections -Wl,-z,max-page-size=16384"
+# Every port lib must carry DT_NEEDED libc++_shared.so (the APK ships it,
+# build_apk.sh copies it from the NDK).  -stdlib=libc++_shared is NOT a real
+# clang flag — without -lc++_shared the .so keep UND __gxx_personality_v0 /
+# std::__ndk1 symbols and bionic dlopen fails on device.
+TRIP=$(echo "$CC" | sed -E 's/-[0-9]+-clang$//')
+CPPSHAREDDIR=$(dirname "$(find "${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TRIP" -maxdepth 2 -name libc++_shared.so 2>/dev/null | sort | tail -1)" 2>/dev/null || true)
+if [ -n "$CPPSHAREDDIR" ] && [ "$CPPSHAREDDIR" != "." ]; then
+  LFLAGS="$LFLAGS -L$CPPSHAREDDIR -lc++_shared"
+  echo "libc++_shared.so from $CPPSHAREDDIR" | tee -a "$LOG"
+else
+  echo "WARN: libc++_shared.so not found in sysroot for $TRIP — libs will dlopen-fail on device" | tee -a "$LOG"
+fi
 # LTO=1 (must match trybuild.sh) -> ThinLTO at link; soname passed separately
 if [ "${LTO:-0}" = "1" ]; then LFLAGS="$LFLAGS -flto=thin"; fi
 if [ "${STRIP:-0}" = "1" ]; then

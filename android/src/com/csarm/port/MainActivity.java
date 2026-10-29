@@ -26,6 +26,7 @@ public class MainActivity extends Activity implements GLSurfaceView.Renderer {
     static final String TAG = "CSARM";
 
     static final String[] LIBS = {
+        "c++_shared",
         "protobuf", "tier0", "tier1", "tier2", "vstdlib", "mathlib",
         "appframework", "datacache", "studiorender", "soundemittersystem",
         "vguimatsurface", "vgui", "vgui_controls", "materialsystem",
