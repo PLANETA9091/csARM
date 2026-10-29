@@ -62,7 +62,113 @@ fi
 #   client: weapon_parse_default.cpp + c_mod_lesson_stubs.cpp are mod-defaults that
 #           cstrike15 overrides (cs_weapon_parse.cpp / c_cs_lesson.cpp).
 #   server: game/server/player_pickup.cpp overridden by game/shared/cstrike15 version.
-EXCLUDE_RE='tier0_mem_helpers\.cpp\.o$|game_shared_weapon_parse_default\.cpp\.o$|game_client_c_mod_lesson_stubs\.cpp\.o$|game_server_player_pickup\.cpp\.o$'
+#   NOTE: tier0/mem_helpers.cpp must STAY linked — it defines g_bInitMemory which
+#   other tier0 objects reference (dropping it broke dlopen on device).
+EXCLUDE_RE='game_shared_weapon_parse_default\.cpp\.o$|game_client_c_mod_lesson_stubs\.cpp\.o$|game_server_player_pickup\.cpp\.o$'
+
+# ---------------------------------------------------------------------------
+# Automatic cross-lib dependency resolution (2-pass linking).
+# bionic resolves a dlopen'ed lib's UND symbols ONLY through its DT_NEEDED
+# graph (System.loadLibrary is RTLD_LOCAL) — so every cross-reference between
+# our .so must be a DT_NEEDED. Manual dep tables drift; instead we scan the
+# linked libs' dynamic symbols and relink with the complete -l set, then
+# FAIL the link if any UND symbol remains that neither a port lib nor an
+# Android system lib defines (those are guaranteed dlopen failures).
+# ---------------------------------------------------------------------------
+declare -A R_OBJS R_DEPS R_TAIL
+record_link() {
+  R_OBJS[$1]="$2"; R_DEPS[$1]="$3"; R_TAIL[$1]="$4"
+}
+
+build_symmap() {
+  : > "$OUTDIR/.symmap"
+  local so base
+  for so in "$OUTDIR"/lib*.so; do
+    base=$(basename "$so" .so)
+    llvm-nm -D --defined-only "$so" 2>/dev/null \
+      | awk -v b="$base" '$2 !~ /^[WwVvuTU]$/ {print $3, b}' >> "$OUTDIR/.symmap"
+  done
+  sort -u -o "$OUTDIR/.symmap" "$OUTDIR/.symmap"
+}
+
+auto_extra_deps() {
+  local base="$1"
+  llvm-nm -D --undefined-only "$OUTDIR/$base.so" 2>/dev/null | awk '{print $NF}' | sort -u \
+    | awk -v B="$base" 'NR==FNR { defs[$1]=$2; next } $0 in defs && defs[$0] != B { print defs[$0] }' \
+        "$OUTDIR/.symmap" - | sort -u
+}
+
+relink_with() {
+  local name="$1"; shift
+  local extra="$1"; shift
+  local objs ldeps lextra d
+  read -r -a objs <<< "${R_OBJS[$name]}"
+  ldeps=""; for d in ${R_DEPS[$name]};  do ldeps="$ldeps -L$OUTDIR -l$d"; done
+  lextra=""; for d in $extra; do lextra="$lextra -L$OUTDIR -l$d"; done
+  echo "[auto-dep] relink $name extra_libs=[$extra]" | tee -a "$LOG"
+  $CC $LFLAGS -Wl,-soname,"$name" -o "$OUTDIR/$name" "${objs[@]}" $ldeps $lextra ${R_TAIL[$name]} 2>>"$LOG" \
+    && echo "   OK: $name (auto-dep relink)" | tee -a "$LOG" \
+    || { echo "   LINK FAILED: $name (auto-dep relink)" | tee -a "$LOG"; return 1; }
+}
+
+auto_dep_rounds() {
+  local round so base extra changed
+  for round in 1 2 3; do
+    build_symmap
+    changed=0
+    for so in "$OUTDIR"/lib*.so; do
+      base=$(basename "$so" .so)
+      [ -n "${R_OBJS[$base]:-}" ] || continue   # libSDL2 is a copy — no relink data
+      extra=$(auto_extra_deps "$base")
+      [ -z "$extra" ] && continue
+      case "$extra" in *$base*) echo "[auto-dep] SKIP $base (self-reference)" | tee -a "$LOG"; continue;; esac
+      if relink_with "$base" "$extra"; then changed=1; fi
+    done
+    [ "$changed" -eq 0 ] && break
+  done
+}
+
+und_gate() {
+  build_symmap
+  # system libs that legitimately provide symbols at runtime
+  local TRIP SYS REALLOWED
+  TRIP=$(echo "$CC" | sed -E 's/[0-9]+-clang$//')
+  SYS="${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TRIP"
+  : > "$OUTDIR/.allowed"
+  local lib
+  for lib in "$SYS"/libc.so "$SYS"/libm.so "$SYS"/libdl.so "$SYS"/liblog.so "$SYS"/libz.so \
+             "$SYS"/libandroid.so "$SYS"/libEGL.so "$SYS"/libGLESv2.so "$SYS"/libGLESv1_CM.so \
+             "$SYS"/libOpenSLES.so "$SYS"/libc++_shared.so "$SYS"/libc++_static.a "$SYS"/libc++abi.a \
+             "$SYS"/*/libandroid.so "$SYS"/*/libEGL.so "$SYS"/*/libGLESv2.so \
+             "$SYS"/*/libc.so "$SYS"/*/libm.so "$SYS"/*/liblog.so "$SYS"/*/libz.so \
+             "$SYS"/*/libOpenSLES.so "$SYS"/*/libnativewindow.so "$SYS"/*/libmediandk.so \
+             "$SYS"/*/libaaudio.so "$SYS"/*/libunwind.so "$SYS"/*/libc++_shared.so; do
+    [ -e "$lib" ] || continue
+    llvm-nm -D --defined-only "$lib" 2>/dev/null | awk '$2 !~ /^[WwVvuTU]$/ {print $3}'
+    case "$lib" in *.a) llvm-nm --defined-only "$lib" 2>/dev/null | awk '$2 ~ /^[TDRBA]$/ {print $3}';; esac
+  done | sort -u > "$OUTDIR/.allowed"
+  cat "$OUTDIR/.symmap" | awk '{print $1}' >> "$OUTDIR/.allowed"
+  sort -u -o "$OUTDIR/.allowed" "$OUTDIR/.allowed"
+
+  local so base BAD TOTAL
+  : > "$OUTDIR/.unresolved"
+  for so in "$OUTDIR"/lib*.so; do
+    base=$(basename "$so" .so)
+    BAD=$(llvm-nm -D --undefined-only "$so" 2>/dev/null | awk '{print $NF}' | sort -u \
+          | awk 'NR==FNR{a[$1]=1;next} !($0 in a)' "$OUTDIR/.allowed" -)
+    if [ -n "$BAD" ]; then
+      TOTAL=$(echo "$BAD" | wc -l)
+      echo "[und-gate] $base: $TOTAL unresolved symbol(s)" | tee -a "$LOG"
+      echo "$BAD" | head -25 | sed 's/^/    UND /' | tee -a "$LOG"
+      echo "$BAD" | sed "s/^/$base /" >> "$OUTDIR/.unresolved"
+    fi
+  done
+  if [ -s "$OUTDIR/.unresolved" ]; then
+    echo "link.sh: UNRESOLVED symbols remain (guaranteed dlopen failures on device)" | tee -a "$LOG"
+    exit 2
+  fi
+  echo "[und-gate] all dynamic symbols resolvable (port libs + system)" | tee -a "$LOG"
+}
 
 link_so() {
   local name="$1"; shift
@@ -81,6 +187,7 @@ link_so() {
   for d in $deps; do ldeps="$ldeps -L$OUTDIR -l$d"; done
   echo "[link] $name  objs=$total  deps=[$deps]" | tee -a "$LOG"
   $CC $LFLAGS -Wl,-soname,"$name" -o "$OUTDIR/$name" "${objs[@]}" $ldeps -ldl -llog -lm -lc -lz 2>>"$LOG"
+  record_link "$name" "${objs[*]}" "$deps" "-ldl -llog -lm -lc -lz"
   local rc=$?
   if [ $rc -ne 0 ]; then echo "   LINK FAILED: $name" | tee -a "$LOG"; else echo "   OK: $name" | tee -a "$LOG"; fi
   if [ $rc -eq 0 ] && [ -n "${STRIPBIN:-}" ] && [ "${STRIP:-0}" = "1" ]; then "$STRIPBIN" --strip-debug "$OUTDIR/$name" || true; fi
@@ -114,10 +221,13 @@ link_so libinputsystem.so "tier0 tier1 vstdlib SDL2" inputsystem || true
 GENPROTO_OBJS=$(ls obj/genproto/*.o 2>/dev/null)
 if [ -n "$GENPROTO_OBJS" ] && [ -f "$OUTDIR/libmathlib.so" ]; then
   echo "[link] libengine.so (engine + genproto)" | tee -a "$LOG"
+  ENGINE_TAIL="-ldl -llog -lm -lc -lz -landroid -lEGL -lGLESv2 -lOpenSLES"
+  ENGINE_BASE_OBJS=$(ls obj/engine/*.o 2>/dev/null)
   $CC $LFLAGS -Wl,-soname,"libengine.so" -o "$OUTDIR/libengine.so" obj/engine/*.o $GENPROTO_OBJS \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 \
-     -ldl -llog -lm -lc -lz -landroid -lEGL -lGLESv2 -lOpenSLES 2>>"$LOG" \
+     $ENGINE_TAIL 2>>"$LOG" \
      && { echo "   OK: libengine.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/libengine.so" || true; } || echo "   LINK FAILED: libengine.so" | tee -a "$LOG"
+  record_link "libengine.so" "$ENGINE_BASE_OBJS $GENPROTO_OBJS" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2" "$ENGINE_TAIL"
 fi
 
 # 3b. Launcher (Valve CSourceAppSystemGroup host; dlopen'ed by libmain)
@@ -140,7 +250,12 @@ for GAMEDLL in client server; do
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 \
      -ldl -llog -lm -lc -lz 2>>"$LOG" \
      && { echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/lib$GAMEDLL.so" || true; } || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
+  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2" "-ldl -llog -lm -lc -lz"
 done
+
+# resolve every cross-lib reference into a real DT_NEEDED, then gate
+auto_dep_rounds || true
+und_gate || true
 
 echo "=== linked results ===" | tee -a "$LOG"
 ls -la "$OUTDIR" 2>/dev/null | tee -a "$LOG"

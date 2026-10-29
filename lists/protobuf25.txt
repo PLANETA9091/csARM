@@ -17,7 +17,8 @@ thirdparty/protobuf-2.5.0/src/google/protobuf/message_lite.cc
 thirdparty/protobuf-2.5.0/src/google/protobuf/reflection_ops.cc
 thirdparty/protobuf-2.5.0/src/google/protobuf/repeated_field.cc
 thirdparty/protobuf-2.5.0/src/google/protobuf/service.cc
-thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/common.cc
+thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops_internals_x86_gcc.cc
+stubs/common.cc
 thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/hash.cc
 thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/once.cc
 thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/stringprintf.cc

@@ -43,3 +43,4 @@ tier1/miniprofiler_hash.cpp
 tier1/sparsematrix.cpp
 tier1/memoverride_dummy.cpp
 tier1/pathmatch.cpp
+interfaces/interfaces.cpp

@@ -30,7 +30,7 @@ $CC -c -fPIC -O2 -std=gnu++17 -w \
 $CC -shared -fPIC -fuse-ld=lld -Wl,-soname,libmain.so \
   -Wl,-z,max-page-size=16384 \
   -o "$OUTDIR/libmain.so" "$R/launcher_native/csarm_main.o" \
-  -L"$OUTDIR" -lSDL2 -ltier0 -llog -ldl -lm -lc -landroid \
+  -L"$OUTDIR" -lSDL2 -ltier0 -llauncher -llog -ldl -lm -lc -landroid \
   ${CPPSHDIR:+$CPPSHDIR/libc++_shared.so} \
   2> "$R/launcher_native/link.log" \
   || { echo "libmain.so link failed:"; cat "$R/launcher_native/link.log"; exit 1; }
