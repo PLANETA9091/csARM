@@ -8,8 +8,13 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 R=${1:-$REPO_DIR}
 CACHE=${2:-$R/.cache}
 NDKROOT=${NDKROOT:?NDKROOT must be set}
-TRIP=$(echo "${CC:-aarch64-linux-android27-clang}" | sed -E 's/-[0-9]+-clang$//')
-CPPSHDIR=$(dirname "$(find "${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TRIP" -maxdepth 2 -name libc++_shared.so 2>/dev/null | sort | tail -1)" 2>/dev/null || true)
+TRIP=$(echo "${CC:-aarch64-linux-android27-clang}" | sed -E 's/[0-9]+-clang$//')
+CPPSHBASE="${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TRIP"
+CPPSHDIR=""
+if [ -f "$CPPSHBASE/libc++_shared.so" ]; then CPPSHDIR="$CPPSHBASE"
+else
+  for d in "$CPPSHBASE"/*/; do [ -f "$d/libc++_shared.so" ] && { CPPSHDIR="${d%/}"; break; }; done
+fi
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 CC=${CC:-aarch64-linux-android24-clang}
 OUTDIR="$R/out"; mkdir -p "$OUTDIR"

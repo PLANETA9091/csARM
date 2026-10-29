@@ -75,7 +75,6 @@ src/timer/unix/*.c
 src/video/*.c
 src/video/android/*.c
 src/video/dummy/*.c
-# src/main/android/SDL_android_main.c  # defines/calls SDL_main -> UND in libSDL2; libmain.so owns SDL_main
 EOF
 )
 

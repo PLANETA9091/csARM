@@ -29,13 +29,23 @@ LFLAGS="-shared -fPIC -fuse-ld=lld -stdlib=libc++ -Wl,--gc-sections -Wl,-z,max-p
 # build_apk.sh copies it from the NDK).  -stdlib=libc++_shared is NOT a real
 # clang flag — without -lc++_shared the .so keep UND __gxx_personality_v0 /
 # std::__ndk1 symbols and bionic dlopen fails on device.
-TRIP=$(echo "$CC" | sed -E 's/-[0-9]+-clang$//')
-CPPSHAREDDIR=$(dirname "$(find "${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TRIP" -maxdepth 2 -name libc++_shared.so 2>/dev/null | sort | tail -1)" 2>/dev/null || true)
-if [ -n "$CPPSHAREDDIR" ] && [ "$CPPSHAREDDIR" != "." ]; then
+# NDK clang naming: <triple><api>-clang (e.g. x86_64-linux-android27-clang —
+# digits are glued to the triple, no dash!) -> strip "27-clang" not "-27-clang"
+TRIP=$(echo "$CC" | sed -E 's/[0-9]+-clang$//')
+CPPSHBASE="${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TRIP"
+CPPSHAREDDIR=""
+if [ -f "$CPPSHBASE/libc++_shared.so" ]; then
+  CPPSHAREDDIR="$CPPSHBASE"
+else
+  for d in "$CPPSHBASE"/*/; do
+    [ -f "$d/libc++_shared.so" ] && { CPPSHAREDDIR="${d%/}"; break; }
+  done
+fi
+if [ -n "$CPPSHAREDDIR" ]; then
   LFLAGS="$LFLAGS -L$CPPSHAREDDIR -lc++_shared"
   echo "libc++_shared.so from $CPPSHAREDDIR" | tee -a "$LOG"
 else
-  echo "WARN: libc++_shared.so not found in sysroot for $TRIP — libs will dlopen-fail on device" | tee -a "$LOG"
+  echo "WARN: libc++_shared.so not found under $CPPSHBASE — libs will dlopen-fail on device" | tee -a "$LOG"
 fi
 # LTO=1 (must match trybuild.sh) -> ThinLTO at link; soname passed separately
 if [ "${LTO:-0}" = "1" ]; then LFLAGS="$LFLAGS -flto=thin"; fi
