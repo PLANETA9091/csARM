@@ -4,6 +4,7 @@ import sys, re, os
 DEFAULT_DEFINES = set([
     'POSIX', 'LINUX', 'LINUXALL', 'LINUX64', 'GNUC', '_LINUX',
     'PLATFORM_64BITS', 'X64BITS', 'COMPILER_GCC', 'CROSS_PLATFORM_VERSION',
+    'SDL',  # android port builds with SDL (engine audio backends, sdlmgr, ...)
 ])
 
 def cond_true(cond, defines):
@@ -74,6 +75,21 @@ class Parser:
     def tokenize_paths(self, line):
         return re.findall(r'"([^"]+)"', line)
 
+    def file_entries(self, line, cur_dir, parent_eff):
+        # "$File" statement: pairs of "path" [cond] "path" [cond] ...
+        # each condition applies to the path IMMEDIATELY BEFORE it;
+        # a path with no condition inherits the parent effective flag.
+        out = []
+        matches = list(re.finditer(r'"([^"]+)"\s*(\[[^\]]*\])?', line))
+        for i, m in enumerate(matches):
+            path = m.group(1)
+            cond = m.group(2)
+            cval = cond_true(cond, self.defines) if cond else True
+            if not (parent_eff and cval):
+                continue
+            out.append(self.rel(self.abspath(cur_dir, path)))
+        return out
+
     def parse(self, path, parent_eff=True):
         path = os.path.normpath(path)
         if not os.path.exists(path):
@@ -82,7 +98,9 @@ class Parser:
             text = open(path, 'r', errors='replace').read()
         except Exception:
             return
-        text = text.replace('\\\n', ' ')
+        # join continuation lines: a trailing backslash may be followed by
+        # trailing whitespace before the newline ("[!$DEDICATED]\ \n" is legal)
+        text = re.sub(r'\\[ \t]*\r?\n', ' ', text)
         lines = text.split('\n')
         cur_dir = os.path.dirname(path)
         stack = [parent_eff]
@@ -149,17 +167,21 @@ class Parser:
                     pending_cond = True
                     continue
                 if ll.lstrip().startswith('-$file'):
-                    if eff:
-                        for p in self.tokenize_paths(line2):
-                            f = self.rel(self.abspath(cur_dir, p))
+                    if stack[-1]:
+                        # use the ORIGINAL line: last_cond() stripped the last
+                        # [cond] from line2, but per-file parsing needs it
+                        for f in self.file_entries(line, cur_dir, stack[-1]):
                             if f in self.files:
                                 self.files.remove(f)
                     pending_cond = True
                     continue
                 if ll.lstrip().startswith('$file'):
-                    if eff and '$configuration' not in ll:
-                        for p in self.tokenize_paths(line2):
-                            f = self.rel(self.abspath(cur_dir, p))
+                    # NOTE: do NOT gate on eff — eff is derived from the LAST
+                    # [cond] on the line, and a multi-file $File statement can
+                    # end with e.g. [$PS3] while earlier files are unconditional.
+                    # file_entries() evaluates each file's own condition instead.
+                    if stack[-1] and '$configuration' not in ll:
+                        for f in self.file_entries(line, cur_dir, stack[-1]):
                             if f not in self.seen:
                                 self.seen.add(f)
                                 self.files.append(f)

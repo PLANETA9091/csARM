@@ -53,6 +53,7 @@ else
 /tier0/
 /tier1/
 /tier2/
+/tier3/
 /vgui2/
 /vguimatsurface/
 /vgui_controls/
@@ -60,6 +61,15 @@ else
 /vpc_scripts/
 /utils/common/
 /utils/bzip2/
+/interfaces/
+/dmxloader/
+/bitmap/
+/vtf/
+/scenefilecache/
+/vpklib/
+/bonesetup/
+/soundsystem/
+/videocfg/
 EOF
   git sparse-checkout init --no-cone 2>/dev/null || true
   cp .git/info/sparse-checkout "$(git rev-parse --git-dir)/info/sparse-checkout" 2>/dev/null || true
@@ -68,11 +78,20 @@ EOF
   echo "source commit: $(git rev-parse HEAD)"
 fi
 
-# Sparse patterns may have gained new dirs (launcher/, inputsystem/) since the
-# cached tree was materialized — refresh those paths if missing (idempotent).
-if [ -d "$SRC/.git" ] && { [ ! -d "$SRC/launcher" ] || [ ! -d "$SRC/inputsystem" ]; }; then
-  echo "Refreshing sparse checkout for launcher/inputsystem..."
-  (cd "$SRC" && git checkout -q HEAD -- launcher inputsystem 2>/dev/null || true)
+# Sparse patterns may have gained new dirs (launcher/, inputsystem/, tier3/,
+# dmxloader/, bitmap/, vtf/, interfaces/, scenefilecache/) since the cached
+# tree was materialized — extend the sparse file and materialize (idempotent).
+NEW_SPARSE_DIRS=""
+for d in launcher inputsystem tier3 dmxloader bitmap vtf interfaces scenefilecache vpklib bonesetup soundsystem videocfg; do
+  [ -d "$SRC/$d" ] || NEW_SPARSE_DIRS="$NEW_SPARSE_DIRS $d"
+done
+if [ -d "$SRC/.git" ] && [ -n "$NEW_SPARSE_DIRS" ]; then
+  echo "Refreshing sparse checkout for:$NEW_SPARSE_DIRS"
+  SP="$SRC/.git/info/sparse-checkout"
+  [ -f "$SP" ] || SP="$(git -C "$SRC" rev-parse --git-dir)/info/sparse-checkout"
+  touch "$SP"
+  for d in $NEW_SPARSE_DIRS; do grep -q "^/$d/$" "$SP" || echo "/$d/" >> "$SP"; done
+  (cd "$SRC" && git checkout -q HEAD -- $NEW_SPARSE_DIRS 2>/dev/null || true)
 fi
 
 cd "$SRC"

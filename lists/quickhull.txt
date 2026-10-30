@@ -1,0 +1,5 @@
+thirdparty/quickhull/qhConvex.cpp
+thirdparty/quickhull/qhHalfEdge.cpp
+thirdparty/quickhull/qhMass.cpp
+thirdparty/quickhull/qhMath.cpp
+thirdparty/quickhull/qhMemory.cpp

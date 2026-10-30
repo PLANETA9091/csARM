@@ -1,0 +1,4 @@
+game/shared/choreoevent.cpp
+game/shared/choreoactor.cpp
+game/shared/choreochannel.cpp
+game/shared/choreoscene.cpp

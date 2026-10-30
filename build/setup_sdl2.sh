@@ -84,6 +84,11 @@ for pat in $SRCS; do
     [ -f "$f" ] && FILES="$FILES $f"
   done
 done
+# SDL_compat.c is the 1.2->2.0 shim (SDL_SetVideoMode etc.): it is the ONLY
+# non-render file that references SDL_CreateRenderer/SDL_RenderCopy/... and the
+# engine never calls 1.2 APIs.  Leaving it in leaves those symbols UND in
+# libSDL2.so -> guaranteed dlopen failure on device.
+FILES=$(echo "$FILES" | tr ' ' '\n' | grep -v "src/SDL_compat.c" | tr '\n' ' ')
 echo "SDL sources: $(echo $FILES | wc -w)"
 [ "$(echo $FILES | wc -w)" -lt 60 ] && { echo "too few SDL sources — file list broken"; exit 1; }
 
@@ -115,6 +120,11 @@ if [ -f "$SRCDIR/build-err/fails.txt" ]; then
 fi
 
 rm -f "$OUTDIR/libSDL2.a" "$OUTDIR/libSDL2.so"
+# renderer-API stubs (SDL_video.c references SDL_CreateRenderer etc. via its
+# window-framebuffer path; src/render/* is excluded from this build)
+SDLSTUB="$R/build/stub_sdl_render.c"
+[ -f "$SDLSTUB" ] && $CC -c -fPIC -O2 -w -DANDROID=1 -I"$SRCDIR/include" \
+  "$SDLSTUB" -o "$SRCDIR/build-obj/csarm_sdl_render_stub.o" || echo "WARN: no sdl render stub"
 ar rcs "$OUTDIR/libSDL2.a" "$SRCDIR/build-obj"/*.o
 # shared build: single SDL instance shared by engine/vgui/vguimatsurface (DT_NEEDED)
 $CC -shared -fPIC -fuse-ld=lld -Wl,-soname,libSDL2.so \

@@ -38,19 +38,19 @@ jobs:
             defs: ""
           - abi: arm64-v8a
             tag: engine
-            modules: "engine/engine.vpc"
+            modules: "engine/engine.vpc videocfg/videocfg.vpc vgui2/matsys_controls/matsys_controls.vpc lists/cryptopp.txt lists/quickhull.txt"
             defs: ""
           - abi: arm64-v8a
             tag: render
-            modules: "materialsystem/materialsystem.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
+            modules: "materialsystem/materialsystem.vpc materialsystem/shaderlib/shaderlib.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
             defs: ""
           - abi: arm64-v8a
             tag: vgui
-            modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc"
+            modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc vgui2/vgui_surfacelib/vgui_surfacelib.vpc"
             defs: ""
           - abi: arm64-v8a
             tag: data
-            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt"
+            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt tier3/tier3.vpc dmxloader/dmxloader.vpc bitmap/bitmap.vpc vtf/vtf.vpc scenefilecache/scenefilecache.vpc interfaces/interfaces.vpc vpklib/vpklib.vpc bonesetup/bonesetup.vpc lists/choreo.txt lists/mathlib_extra.txt soundsystem/soundsystem.vpc soundsystem/lowlevel/soundsystem_lowlevel.vpc"
             defs: ""
           - abi: arm64-v8a
             tag: client
@@ -70,19 +70,19 @@ jobs:
             defs: ""
           - abi: x86_64
             tag: engine
-            modules: "engine/engine.vpc"
+            modules: "engine/engine.vpc videocfg/videocfg.vpc vgui2/matsys_controls/matsys_controls.vpc lists/cryptopp.txt lists/quickhull.txt"
             defs: ""
           - abi: x86_64
             tag: render
-            modules: "materialsystem/materialsystem.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
+            modules: "materialsystem/materialsystem.vpc materialsystem/shaderlib/shaderlib.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
             defs: ""
           - abi: x86_64
             tag: vgui
-            modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc"
+            modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc vgui2/vgui_surfacelib/vgui_surfacelib.vpc"
             defs: ""
           - abi: x86_64
             tag: data
-            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt"
+            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt tier3/tier3.vpc dmxloader/dmxloader.vpc bitmap/bitmap.vpc vtf/vtf.vpc scenefilecache/scenefilecache.vpc interfaces/interfaces.vpc vpklib/vpklib.vpc bonesetup/bonesetup.vpc lists/choreo.txt lists/mathlib_extra.txt soundsystem/soundsystem.vpc soundsystem/lowlevel/soundsystem_lowlevel.vpc"
             defs: ""
           - abi: x86_64
             tag: client
@@ -115,6 +115,15 @@ jobs:
           test -f c15/engine/engine.vpc || { echo "source incomplete"; exit 1; }
           echo "source files: $(find c15 -type f | wc -l)"
 
+      - name: Cache host protoc
+        uses: actions/cache@v4
+        with:
+          path: .cache/protoc25
+          key: protoc25-linux
+
+      - name: Generate protobuf messages (genproto)
+        run: bash build/setup_proto.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
+
       - name: Setup NDK
         run: |
           if [ -d "$ANDROID_NDK_LATEST_HOME" ]; then
@@ -134,8 +143,16 @@ jobs:
           export OPT=${{ github.event.inputs.opt_level || '-O2' }}
           export LTO=${{ github.event.inputs.lto || '1' }}
           export JOBS=4
+          if [ "${{ matrix.tag }}" = "vgui" ]; then
+            bash build/setup_freetype.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
+          fi
           for m in ${{ matrix.modules }}; do
             echo "=== MODULE $m ==="
+            # crypto++ 5.61 predates C++17 (std::byte clash, std::auto_ptr)
+            case "$m" in
+              *cryptopp*) export CXXSTD=gnu++11 ;;
+              *)          unset CXXSTD ;;
+            esac
             DEFX="${{ matrix.defs }}" bash build/trybuild.sh "$m" || true
           done
 
@@ -241,6 +258,15 @@ jobs:
           fi
           bash build/setup_sdl2.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
 
+      - name: Build FreeType (font stack)
+        run: |
+          if [ "${{ matrix.abi }}" = "x86_64" ]; then
+            export CC=x86_64-linux-android24-clang
+          else
+            export CC=aarch64-linux-android24-clang
+          fi
+          bash build/setup_freetype.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
+
       - name: Link shared libraries
         run: |
           export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
@@ -287,6 +313,16 @@ jobs:
         with:
           name: link-log
           path: link.log
+          if-no-files-found: ignore
+
+      - name: Upload unresolved symbol report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unresolved-${{ matrix.abi }}
+          path: |
+            out/.unresolved
+            out/.unresolved_warn
           if-no-files-found: ignore
 
   # Job 2a: build SwiftShader (software GL). Bundling libEGL.so/libGLESv2.so

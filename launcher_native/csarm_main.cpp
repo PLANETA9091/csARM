@@ -149,7 +149,10 @@ static const char *kModules[] = {
     "protobuf", "tier0", "tier1", "tier2", "vstdlib", "mathlib",
     "appframework", "datacache", "studiorender", "soundemittersystem",
     "vguimatsurface", "vgui", "vgui_controls", "materialsystem",
-    "inputsystem", "launcher", "filesystem_stdio", "engine", "client", "server", nullptr
+    "inputsystem", "launcher", "filesystem_stdio", "engine", "client", "server",
+    "bzip2", "tier3", "dmxloader", "bitmap", "vtf", "shaderlib", "scenefilecache",
+    "soundsystem", "soundsystem_lowlevel", "matsys_controls", "videocfg", "vpklib",
+    "bonesetup", "choreo", "cryptopp", "quickhull", nullptr
 };
 
 static std::string nativeLibDir()
