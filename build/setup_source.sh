@@ -6,92 +6,62 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 R=${1:-$REPO_DIR}
 MIRROR=${MIRROR:-https://github.com/perilouswithadollarsign/cstrike15_src.git}
 SRC="$R/c15"
+PINNED_SHA=f82112a2388b841d72cb62ca48ab1846dfcc11c8
+PATTERNS="$REPO_DIR/build/sparse-patterns.txt"
 
-FRESH=0
-if [ -d "$SRC/.git" ] && [ -f "$SRC/.git/info/sparse-checkout" ]; then
-  echo "c15 already present, skipping clone"
-else
+# Completeness gate: every directory the module build compiles/links from must
+# exist and be non-empty.  Guards against a STALE actions/cache (a cache saved
+# before a newly added module dir entered the sparse list): the 2026-10-30 run
+# failed exactly this way — videocfg/tier3/vpklib/soundsystem/... "produced 0
+# objects" because the restored 80 MB cache predated those dirs and
+# `git checkout -q HEAD -- <dirs>` silently did nothing.
+NEEDED_DIRS="appframework bitmap bonesetup common datacache dmxloader engine external filesystem gcsdk inputsystem interfaces launcher materialsystem mathlib public scaleformui scenefilecache soundemittersystem soundsystem studiorender tier0 tier1 tier2 tier3 vgui2 vguimatsurface vstdlib videocfg vpc_scripts vpklib game/client game/server game/shared utils/bzip2 thirdparty/SDL2 thirdparty/protobuf-2.5.0 thirdparty/telemetry thirdparty/quickhull"
+
+check_complete() {
+  MISSING=""
+  local d
+  for d in $NEEDED_DIRS; do
+    if [ ! -d "$SRC/$d" ] || [ -z "$(ls -A "$SRC/$d" 2>/dev/null)" ]; then
+      MISSING="$MISSING $d"
+    fi
+  done
+  [ -z "$MISSING" ]
+}
+
+apply_sparse() {
+  # NOTE ordering: `git sparse-checkout init` may (re)write the pattern file,
+  # so our patterns are copied AFTER it.
+  git sparse-checkout init --no-cone 2>/dev/null || true
+  cp "$PATTERNS" "$(git rev-parse --absolute-git-dir)/info/sparse-checkout"
+}
+
+do_clone() {
   FRESH=1
   rm -rf "$SRC"
-  PINNED_SHA=f82112a2388b841d72cb62ca48ab1846dfcc11c8
   git clone --filter=blob:none --no-checkout "$MIRROR" "$SRC"
-  cd "$SRC"
-  # sparse checkout FIRST (before any checkout) — only modules we need (61% of repo)
-  cat > .git/info/sparse-checkout <<'EOF'
-/*
-!/*/
-/game/
-!/game/*/
-/thirdparty/
-!/thirdparty/*/
-/utils/
-!/utils/*/
-/appframework/
-/common/
-/datacache/
-/engine/
-/external/
-/filesystem/
-/game/client/
-/game/server/
-/game/shared/
-/gcsdk/
-/materialsystem/
-/mathlib/
-/public/
-/scaleformui/
-/soundemittersystem/
-/studiorender/
-/inputsystem/
-/launcher/
-/thirdparty/SDL2/
-/thirdparty/libpng-1.5.2/
-/thirdparty/protobuf-2.5.0/
-/thirdparty/zlib-1.2.5/
-/thirdparty/quickhull/
-/thirdparty/telemetry/
-/tier0/
-/tier1/
-/tier2/
-/tier3/
-/vgui2/
-/vguimatsurface/
-/vgui_controls/
-/vstdlib/
-/vpc_scripts/
-/utils/common/
-/utils/bzip2/
-/interfaces/
-/dmxloader/
-/bitmap/
-/vtf/
-/scenefilecache/
-/vpklib/
-/bonesetup/
-/soundsystem/
-/videocfg/
-EOF
-  git sparse-checkout init --no-cone 2>/dev/null || true
-  cp .git/info/sparse-checkout "$(git rev-parse --git-dir)/info/sparse-checkout" 2>/dev/null || true
-  git sparse-checkout list 2>/dev/null | head -3 || true
-  git checkout -q "$PINNED_SHA" 2>/dev/null || git checkout -q origin/master || git checkout -q master
-  echo "source commit: $(git rev-parse HEAD)"
-fi
+  (
+    cd "$SRC"
+    apply_sparse
+    git checkout -q "$PINNED_SHA" 2>/dev/null || git checkout -q origin/master || git checkout -q master
+    echo "source commit: $(git rev-parse HEAD)"
+  )
+}
 
-# Sparse patterns may have gained new dirs (launcher/, inputsystem/, tier3/,
-# dmxloader/, bitmap/, vtf/, interfaces/, scenefilecache/) since the cached
-# tree was materialized — extend the sparse file and materialize (idempotent).
-NEW_SPARSE_DIRS=""
-for d in launcher inputsystem tier3 dmxloader bitmap vtf interfaces scenefilecache vpklib bonesetup soundsystem videocfg; do
-  [ -d "$SRC/$d" ] || NEW_SPARSE_DIRS="$NEW_SPARSE_DIRS $d"
-done
-if [ -d "$SRC/.git" ] && [ -n "$NEW_SPARSE_DIRS" ]; then
-  echo "Refreshing sparse checkout for:$NEW_SPARSE_DIRS"
-  SP="$SRC/.git/info/sparse-checkout"
-  [ -f "$SP" ] || SP="$(git -C "$SRC" rev-parse --git-dir)/info/sparse-checkout"
-  touch "$SP"
-  for d in $NEW_SPARSE_DIRS; do grep -q "^/$d/$" "$SP" || echo "/$d/" >> "$SP"; done
-  (cd "$SRC" && git checkout -q HEAD -- $NEW_SPARSE_DIRS 2>/dev/null || true)
+FRESH=0
+if [ -d "$SRC/.git" ] && check_complete; then
+  echo "c15 already present and complete, skipping clone"
+elif [ -d "$SRC/.git" ]; then
+  echo "cached c15 missing dirs:$MISSING"
+  echo " -> re-materializing from sparse patterns (lazy blob fetch)"
+  ( cd "$SRC" && apply_sparse && git read-tree -mu HEAD ) || true
+  if check_complete; then
+    echo "re-materialized OK"
+  else
+    echo " -> read-tree insufficient (still missing:$MISSING), forcing fresh sparse clone"
+    do_clone
+  fi
+else
+  do_clone
 fi
 
 cd "$SRC"

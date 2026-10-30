@@ -105,7 +105,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v4
+          key: cstrike15-src-v5
 
       - name: Fetch pristine source + apply patches (idempotent, always)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -215,7 +215,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v4
+          key: cstrike15-src-v5
 
       - name: Fetch source + patches (needed for genproto compile and SDL2 headers)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -426,12 +426,14 @@ jobs:
   # "HVF error: HV_UNSUPPORTED" (GitHub macOS runners have no nested virt)
   # and burned a 20-min timeout every run; (b) the TCG -no-accel ubuntu job
   # that needed 30-45 min just to reach sys.boot_completed.
-  # This one: GitHub ubuntu runners DO expose /dev/kvm -> the x86_64 emulator
-  # boots under KVM in ~60-90s. The x86_64 APK (native code, no translation)
-  # exercises the REAL boot path: CSARMActivity -> libmain -> LauncherMain ->
-  # CSourceAppSystemGroup -> IEngineAPI::Run() with pure software rendering
-  # (swiftshader_indirect). The arm64 APK (the real device target) is then
-  # exercised opportunistically through the image's ARM64 translation.
+  # This one: GitHub ubuntu x86_64 runners DO expose /dev/kvm (their arm64
+  # runners do NOT, checked 2026-10) -> the x86_64 emulator boots under KVM
+  # in ~60-90s on a LIGHT AOSP ATD image (Automated Test Device, no Google
+  # APIs, ~2x faster boot than google_apis). The x86_64 APK (native code, no
+  # translation) exercises the REAL boot path: CSARMActivity -> libmain ->
+  # LauncherMain -> CSourceAppSystemGroup -> IEngineAPI::Run() with pure
+  # software rendering (swiftshader_indirect + bundled SwiftShader variant).
+  # The arm64 target is covered by tests/qemu-aarch64 + arm64 APK artifacts.
   boot-test:
     name: boot/emulator-fast
     needs: [ link, swiftshader ]
@@ -526,11 +528,30 @@ jobs:
             echo "KVMOK=0" >> "$GITHUB_ENV"
           fi
 
-      - name: Install system image + pick emulator (KVM vs pinned TCG)
+      - name: Cache emulator system image + AVD
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/lib/android/sdk/system-images
+            ~/.android/avd
+          key: emu-img-android30-aosp-atd-x86_64-v1
+
+      - name: Install system image (AOSP ATD, no Google APIs) + pick emulator (KVM vs pinned TCG)
         run: |
           SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "system-images;android-30;google_apis;x86_64" > /dev/null
+          # Lightweight image WITHOUT Google APIs: aosp_atd (Automated Test
+          # Device) boots ~2x faster than google_apis and has no GMS bloat.
+          # Fall back to default -> google_apis only if ATD is unavailable.
+          IMG=""
+          LIST=$("$SDK/cmdline-tools/latest/bin/sdkmanager" --list 2>/dev/null | grep "system-images;android-3" || true)
+          for c in "system-images;android-30;aosp_atd;x86_64" "system-images;android-30;default;x86_64" "system-images;android-30;google_apis;x86_64"; do
+            if echo "$LIST" | grep -qF "$c"; then IMG=$c; break; fi
+          done
+          [ -n "$IMG" ] || { echo "::error::no candidate system image found"; echo "$LIST" | head -15; exit 1; }
+          echo "IMG=$IMG" >> "$GITHUB_ENV"
+          echo "system image: $IMG"
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "$IMG" > /dev/null
           # x11/pulse libs the qemu binary dlopens; runner images dropped them
           sudo apt-get update -qq
           sudo apt-get install -y -qq libpulse0 libasound2 libnss3 libgl1 libxkbcommon0 libdbus-1-3 fontconfig 2>/dev/null \
@@ -550,34 +571,34 @@ jobs:
             ldd "$SDK/emu34/emulator/qemu/linux-x86_64/qemu-system-x86_64" | grep "not found" || echo "qemu deps: none missing"
           fi
 
-      - name: Launch emulator
+      - name: Launch emulator (no-window / no-audio / no-boot-anim / swiftshader_indirect / accel on)
         run: |
           SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
-          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n test -k "system-images;android-30;google_apis;x86_64" -d pixel_4 --force
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n test -k "$IMG" -d pixel_4 --force
           test -f "$ANDROID_AVD_HOME/test.ini" || { echo "::error::AVD test.ini missing"; ls -la "$ANDROID_AVD_HOME"; exit 1; }
           ACCEL=on; [ "${KVMOK:-0}" != "1" ] && ACCEL=off
-          nohup env ANDROID_AVD_HOME="$ANDROID_AVD_HOME" "$EMU_BIN" -avd test -no-window \
-            -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim \
-            -accel $ACCEL -memory 4096 -cores 4 -port 5554 > emulator.log 2>&1 &
+          nohup env ANDROID_AVD_HOME="$ANDROID_AVD_HOME" "$EMU_BIN" -avd test \
+            -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect -accel $ACCEL -memory 4096 -cores 4 -port 5554 > emulator.log 2>&1 &
           echo $! > emu.pid
-          sleep 10
+          sleep 5
           head -30 emulator.log || true
           kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died at launch"; tail -40 emulator.log; exit 1; }
 
-      - name: Wait for Android boot (5s poll, fail-fast on death)
+      - name: Wait for Android boot (2s poll, fail-fast on death)
         run: |
           SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
           ADB=$SDK/platform-tools/adb
           "$ADB" start-server || true
-          LIMIT=720; [ "${KVMOK:-0}" != "1" ] && LIMIT=2400
+          LIMIT=600; [ "${KVMOK:-0}" != "1" ] && LIMIT=1800
           BOOTED=0
           while [ $SECONDS -lt $LIMIT ]; do
-            B=$("$ADB" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
+            B=$(timeout 10 "$ADB" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)
             [ "$B" = "1" ] && { BOOTED=1; echo "Android BOOTED after ${SECONDS}s"; break; }
             kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator process died while booting"; tail -50 emulator.log; break; }
-            sleep 5
+            sleep 2
           done
           if [ "$BOOTED" != "1" ]; then
             echo "::error::emulator did not reach sys.boot_completed in ${LIMIT}s"
@@ -590,6 +611,9 @@ jobs:
           SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
           ADB=$SDK/platform-tools/adb
           sleep 12   # window manager settle
+          # background logcat: continuous parallel capture for ALL phases
+          "$ADB" -s emulator-5554 logcat -v time > logcat_stream.txt 2>&1 &
+          echo $! > logcat.pid
           OK=0
           for i in 1 2 3 4 5; do
             "$ADB" -s emulator-5554 install -r -t android/out/csARM-x86_64.apk && { OK=1; break; }
@@ -717,7 +741,7 @@ jobs:
             echo "::error::launcher failed: $(grep CSARM_MAIN_FAIL $L | head -2)"; exit 1
           fi
           if grep -qE "CSARM_ENGINE_TICK|CSARM_ENGINE_FIRST_FRAME" $L; then
-            echo "ENGINE FRAME LOOP CONFIRMED (pure software rendering, no GPU)"
+            echo "ENGINE FRAME LOOP CONFIRMED (software rendering, no GPU)"
           else
             echo "::warning::no engine ticks yet (engine may wait on content/UI; inspect artifacts)"
           fi
@@ -727,6 +751,7 @@ jobs:
             [ "$PRE" -le 60000 ] || { echo "::error::slow boot ${PRE}ms (>60s budget)"; exit 1; }
           fi
           grep -q "CSARM_MAIN_EXIT" $L && echo "launcher exit: $(grep CSARM_MAIN_EXIT $L | head -1)" || true
+          kill "$(cat logcat.pid 2>/dev/null)" 2>/dev/null || true
 
       - name: Upload boot artifacts
         if: always()
@@ -742,6 +767,7 @@ jobs:
             logcat_boot.txt
             logcat_arm64*.txt
             logcat_sw.txt
+            logcat_stream.txt
             crash.txt
             crash_sw.txt
             emulator.log
@@ -759,7 +785,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v3
+          key: cstrike15-src-v5
 
       - name: Fetch/refresh source (idempotent)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
