@@ -40,6 +40,7 @@
 /vtf/
 /vpklib/
 /bonesetup/
+/responserules/
 /vgui2/
 /vguimatsurface/
 /vgui_controls/

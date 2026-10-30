@@ -15,7 +15,7 @@ PATTERNS="$REPO_DIR/build/sparse-patterns.txt"
 # failed exactly this way — videocfg/tier3/vpklib/soundsystem/... "produced 0
 # objects" because the restored 80 MB cache predated those dirs and
 # `git checkout -q HEAD -- <dirs>` silently did nothing.
-NEEDED_DIRS="appframework bitmap bonesetup common datacache dmxloader engine external filesystem gcsdk inputsystem interfaces launcher materialsystem mathlib public scaleformui scenefilecache soundemittersystem soundsystem studiorender tier0 tier1 tier2 tier3 vgui2 vguimatsurface vstdlib videocfg vpc_scripts vpklib game/client game/server game/shared utils/bzip2 thirdparty/SDL2 thirdparty/protobuf-2.5.0 thirdparty/telemetry thirdparty/quickhull"
+NEEDED_DIRS="appframework bitmap bonesetup common datacache dmxloader engine external filesystem gcsdk inputsystem interfaces launcher materialsystem mathlib public responserules scaleformui scenefilecache soundemittersystem soundsystem studiorender tier0 tier1 tier2 tier3 vgui2 vguimatsurface vstdlib videocfg vpc_scripts vpklib game/client game/server game/shared utils/bzip2 thirdparty/SDL2 thirdparty/protobuf-2.5.0 thirdparty/telemetry thirdparty/quickhull"
 
 check_complete() {
   MISSING=""
