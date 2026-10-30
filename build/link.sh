@@ -473,7 +473,7 @@ link_so() {
   case "$name" in
     libfilesystem_stdio.so|libinputsystem.so|libmaterialsystem.so|libdatacache.so|\
     libstudiorender.so|libsoundemittersystem.so|libvguimatsurface.so|libvgui.so|\
-    libvstdlib.so)
+    libvstdlib.so|liblocalize.so)
       [ -n "$IFACE_OBJ" ] && { objs+=("$IFACE_OBJ"); total=$((total+1)); } ;;
   esac
   # Steamworks / platform glue only where the sources actually reference it
