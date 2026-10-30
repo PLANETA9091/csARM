@@ -24,8 +24,13 @@
 
 // ---------------------------------------------------------------------------
 // Scaleform UI probe — force the standard GameUI path
+// NOTE: weak.  game/client/cstrike15/gameui/gameui_interface.cpp defines the
+// real IScaleformUI* ScaleformUI() under INCLUDE_SCALEFORM — same mangled
+// name (_Z11ScaleformUIv; return types are not mangled) — so a strong stub
+// made libclient.so fail with "duplicate symbol".  The strong definition
+// must win wherever it exists.
 // ---------------------------------------------------------------------------
-bool ScaleformUI(void) { return false; }
+__attribute__((weak)) bool ScaleformUI(void) { return false; }
 
 // ---------------------------------------------------------------------------
 // Addon/workshop search paths — the ENGINE's real implementation lives in
