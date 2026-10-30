@@ -24,3 +24,267 @@
  	// Watch for data from the CPU frequency monitoring system and print it to the console.
  	const CPUFrequencyResults frequency = GetCPUFrequencyResults();
  	static double s_lastFrequencyTimestamp;
+diff --git a/common/csarm_log.h b/common/csarm_log.h
+new file mode 100644
+--- /dev/null
++++ b/common/csarm_log.h
+@@ -0,0 +1,17 @@
++// csARM - direct logcat logging from patched Valve sources.
++// printf/stderr are redirected to logcat by libmain, but the app-framework
++// failure paths run before any spew listener is installed and the process
++// can exit(0) without flushing - __android_log_print cannot be missed.
++#ifndef CSARM_LOG_H
++#define CSARM_LOG_H
++
++#ifdef __ANDROID__
++#include <android/log.h>
++#define CSARM_LOGI(...) __android_log_print(ANDROID_LOG_INFO,  "CSARM_LNCH", __VA_ARGS__)
++#define CSARM_LOGW(...) __android_log_print(ANDROID_LOG_WARN,  "CSARM_LNCH", __VA_ARGS__)
++#else
++#define CSARM_LOGI(...) ((void)0)
++#define CSARM_LOGW(...) ((void)0)
++#endif
++
++#endif // CSARM_LOG_H
+diff --git a/appframework/AppSystemGroup.cpp b/appframework/AppSystemGroup.cpp
+--- a/appframework/AppSystemGroup.cpp
++++ b/appframework/AppSystemGroup.cpp
+@@ -20,6 +20,7 @@
+ #include "interface.h"
+ #include "filesystem.h"
+ #include "filesystem_init.h"
++#include "common/csarm_log.h"
+ #include <algorithm>
+ 
+ // memdbgon must be the last include file in a .cpp file!!!
+@@ -302,10 +303,12 @@
+ {
+ 	while ( pSystemList->m_pModuleName[0] )
+ 	{
++		CSARM_LOGI( "AddSystem %s <- %s", pSystemList->m_pInterfaceName, pSystemList->m_pModuleName );
+ 		AppModule_t module = LoadModule( pSystemList->m_pModuleName );
+ 		IAppSystem *pSystem = AddSystem( module, pSystemList->m_pInterfaceName );
+ 		if ( !pSystem )
+ 		{
++			CSARM_LOGW( "FAILED AddSystem %s <- %s", pSystemList->m_pInterfaceName, pSystemList->m_pModuleName );
+ 			Warning( "Unable to load interface %s from %s, requested from EXE.\n", pSystemList->m_pInterfaceName, pSystemList->m_pModuleName );
+ 			return false;
+ 		}
+@@ -810,33 +813,57 @@
+ 
+ 	// Call an installed application creation function
+ 	m_nCurrentStage = CREATION;
++	CSARM_LOGI( "stage CREATION" );
+ 	if ( !Create() )
++	{
++		CSARM_LOGW( "FAILED at stage CREATION" );
+ 		return -1;
++	}
+ 
+ 	// Load dependent libraries
+ 	m_nCurrentStage = DEPENDENCIES;
++	CSARM_LOGI( "stage DEPENDENCIES" );
+ 	if ( !LoadDependentSystems() )
++	{
++		CSARM_LOGW( "FAILED at stage DEPENDENCIES" );
+ 		return -1;
++	}
+ 
+ 	// Let all systems know about each other
+ 	m_nCurrentStage = CONNECTION;
++	CSARM_LOGI( "stage CONNECTION" );
+ 	if ( !ConnectSystems() )
++	{
++		CSARM_LOGW( "FAILED at stage CONNECTION" );
+ 		return -1;
++	}
+ 
+ 	// Allow the application to do some work before init
+ 	m_nCurrentStage = PREINITIALIZATION;
++	CSARM_LOGI( "stage PREINITIALIZATION" );
+ 	if ( !PreInit() )
++	{
++		CSARM_LOGW( "FAILED at stage PREINITIALIZATION" );
+ 		return -1;
++	}
+ 
+ 	// Call Init on all App Systems
+ 	m_nCurrentStage = INITIALIZATION;
++	CSARM_LOGI( "stage INITIALIZATION" );
+ 	int nRetVal = InitSystems();
+ 	if ( nRetVal != INIT_OK )
++	{
++		CSARM_LOGW( "FAILED at stage INITIALIZATION" );
+ 		return -1;
++	}
+ 
+ 	m_nCurrentStage = POSTINITIALIZATION;
++	CSARM_LOGI( "stage POSTINITIALIZATION" );
+ 	if ( !PostInit() )
++	{
++		CSARM_LOGW( "FAILED at stage POSTINITIALIZATION" );
+ 		return -1;
++	}
+ 
+ 	m_nCurrentStage = RUNNING;
+ 	return nRetVal;
+
+diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
+--- a/launcher/launcher.cpp
++++ b/launcher/launcher.cpp
+@@ -28,6 +28,7 @@
+ #include "appframework/ilaunchermgr.h"
+ #include <stdio.h>
+ #include "tier0/icommandline.h"
++#include "common/csarm_log.h"
+ #include "engine_launcher_api.h"
+ #include "ifilesystem.h"
+ #include "tier1/interface.h"
+@@ -710,6 +711,7 @@
+ bool CSourceAppSystemGroup::Create()
+ {
+ 	COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );
++	CSARM_LOGI( "CSourceAppSystemGroup::Create enter" );
+ 
+ 	double start, elapsed;
+ 	start = Plat_FloatTime();
+@@ -736,14 +738,25 @@
+ 		{ LAUNCHER_APPSYSTEM( "filesystem_stdio" ),		XBOXINSTALLER_INTERFACE_VERSION },
+ #endif
+ 		{ LAUNCHER_APPSYSTEM( "inputsystem" ),			INPUTSYSTEM_INTERFACE_VERSION },
++		#ifdef __ANDROID__
++		// csARM: the cstrike15 source mirror does not ship the vphysics
++		// library; physics is map-load-time functionality, boot does not
++		// need it.  Restore once vphysics is ported.
++		#else
+ 		{ LAUNCHER_APPSYSTEM( "vphysics" ),				VPHYSICS_INTERFACE_VERSION },
++		#endif
+ 		{ LAUNCHER_APPSYSTEM( "materialsystem" ),		MATERIAL_SYSTEM_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "datacache" ),			DATACACHE_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "datacache" ),			MDLCACHE_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "datacache" ),			STUDIO_DATA_CACHE_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "studiorender" ),			STUDIO_RENDER_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "soundemittersystem" ),	SOUNDEMITTERSYSTEM_INTERFACE_VERSION },
++		#ifdef __ANDROID__
++		// csARM: vscript (Squirrel/Lua VM) is not ported yet - the boot
++		// path does not execute game scripts.  Restore with the port.
++		#else
+ 		{ LAUNCHER_APPSYSTEM( "vscript" ),				VSCRIPT_INTERFACE_VERSION },
++		#endif
+ #ifdef WIN32
+ 		{ LAUNCHER_APPSYSTEM("soundsystem"),			SOUNDSYSTEM_INTERFACE_VERSION },
+ #endif
+@@ -763,7 +776,11 @@
+ #endif
+ 		// NOTE: This has to occur before vgui2.dll so it replaces vgui2's surface implementation
+ 		{ LAUNCHER_APPSYSTEM( "vguimatsurface" ),		VGUI_SURFACE_INTERFACE_VERSION },
++		#ifdef __ANDROID__
++		{ LAUNCHER_APPSYSTEM( "vgui" ),				VGUI_IVGUI_INTERFACE_VERSION }, // csARM: our vgui2 build is libvgui.so
++		#else
+ 		{ LAUNCHER_APPSYSTEM( "vgui2" ),				VGUI_IVGUI_INTERFACE_VERSION },
++		#endif
+ 		{ LAUNCHER_APPSYSTEM( "engine" ),				VENGINE_LAUNCHER_API_VERSION },
+ 
+ 		{ "", "" }					// Required to terminate the list
+@@ -776,7 +793,11 @@
+ #endif
+ 
+ 	if ( !AddSystems( appSystems ) ) 
++	{
++		CSARM_LOGW( "Create: AddSystems FAILED" );
+ 		return false;
++	}
++	CSARM_LOGI( "Create: AddSystems OK" );
+ 
+ 	// SF4 TODO
+ 	// Windows - See if we need to launch SF4 instead of SF3
+@@ -879,6 +900,7 @@
+ 
+ bool CSourceAppSystemGroup::PreInit()
+ {
++	CSARM_LOGI( "PreInit enter" );
+ 	CreateInterfaceFn factory = GetFactory();
+ 	ConnectTier1Libraries( &factory, 1 );
+ 	ConVar_Register( );
+@@ -886,7 +908,10 @@
+ 	ConnectTier3Libraries( &factory, 1 );
+ 
+ 	if ( !g_pFullFileSystem || !g_pMaterialSystem )
++	{
++		CSARM_LOGW( "PreInit FAILED: no filesystem/materialsystem factory" );
+ 		return false;
++	}
+ 
+ #ifdef _PS3
+ 	g_pVJobs = ( IVJobs* )factory( VJOBS_INTERFACE_VERSION, NULL );  // this is done only once; g_pVJobs doesn't change even after multiple reloads of VJobs.prx
+@@ -907,14 +932,20 @@
+ 		}
+ 	}
+ 	if ( FileSystem_SetupSteamEnvironment( steamInfo ) != FS_OK )
++	{
++		CSARM_LOGW( "PreInit FAILED: SetupSteamEnvironment" );
+ 		return false;
++	}
+ 
+ 	CFSMountContentInfo fsInfo;
+ 	fsInfo.m_pFileSystem = g_pFullFileSystem;
+ 	fsInfo.m_bToolsMode = m_bEditMode;
+ 	fsInfo.m_pDirectoryName = steamInfo.m_GameInfoPath;
+ 	if ( FileSystem_MountContent( fsInfo ) != FS_OK )
++	{
++		CSARM_LOGW( "PreInit FAILED: MountContent" );
+ 		return false;
++	}
+ 
+ #if defined( SUPPORT_VPK )
+ 	Msg( "start timing %f\n", Plat_FloatTime() );
+@@ -963,11 +994,13 @@
+ 	info.m_pParentAppSystemGroup = this;
+ 	info.m_bTextMode = g_bTextMode;
+ 
++	CSARM_LOGI( "PreInit OK -> SetStartupInfo" );
+ 	return g_pEngineAPI->SetStartupInfo( info );
+ }
+ 
+ int CSourceAppSystemGroup::Main()
+ {
++	CSARM_LOGI( "Main -> CEngineAPI::Run" );
+ 	return g_pEngineAPI->Run();
+ }
+ 
+@@ -1879,6 +1912,7 @@
+ 		int nRetval = ValveCocoaMain( &steamApplication ); 
+ #else
+ 		int nRetval = steamApplication.Run();
++		CSARM_LOGI( "LauncherMain: steamApplication.Run() returned %d (stage=%d)", nRetval, (int)steamApplication.GetCurrentStage() );
+ #endif		
+ #if ENABLE_HARDWARE_PROFILER 
+ 		// Hack fix, causes memory leak, but prevents crash due to bad coding not doing proper teardown
+
+diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
+--- a/engine/sys_dll2.cpp
++++ b/engine/sys_dll2.cpp
+@@ -28,6 +28,7 @@
+ #include "idedicatedexports.h"
+ #include "engine_launcher_api.h"
+ #include "ivideomode.h"
++#include "common/csarm_log.h"
+ #include "common.h"
+ #include "iregistry.h"
+ #include "keys.h"
+@@ -1408,6 +1409,7 @@
+ //-----------------------------------------------------------------------------
+ int CEngineAPI::RunListenServer()
+ {
++	CSARM_LOGI( "CEngineAPI::RunListenServer enter" );
+ 	//
+ 	// NOTE: Systems set up here should depend on the mod 
+ 	// Systems which are mod-independent should be set up in the launcher or Init()
+@@ -1735,6 +1737,7 @@
+ //-----------------------------------------------------------------------------
+ int CEngineAPI::Run()
+ {
++	CSARM_LOGI( "CEngineAPI::Run enter" );
+ 	if ( CommandLine()->FindParm("-insecure") )
+ 	{
+ 		extern void Host_DisallowSecureServers();
