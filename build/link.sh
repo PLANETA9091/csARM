@@ -180,18 +180,25 @@ auto_extra_deps() {
 relink_with() {
   local name="$1"; shift
   local extra="$1"; shift
-  local objs ldeps lextra d WRAPS FT
+  local objs ldeps lextra d WRAPS FT SNDG
   read -r -a objs <<< "${R_OBJS[$name]}"
   ldeps=""; for d in ${R_DEPS[$name]};  do ldeps="$ldeps -L$OUTDIR -l$d"; done
-  lextra=""; for d in $extra; do lextra="$lextra -L$OUTDIR -l$d"; done
+  # extra deps come from .symmap_strong keys = FULL basenames ("libtier0"),
+  # while R_DEPS entries are already prefix-free ("tier0") -> strip "lib"
+  # here or the linker gets -llibtier0 and EVERY relink fails (and ld deletes
+  # the previously-good output .so on error).
+  lextra=""; for d in $extra; do lextra="$lextra -L$OUTDIR -l${d#lib}"; done
   # reapply the per-lib flags from the original link (wraps, freetype, snd glue)
   WRAPS=""; case "$name" in libtier0.so|libtier1.so) WRAPS="$WRAPLIST" ;; esac
   FT=""; case "$name" in libvguimatsurface.so) [ -n "$FREETYPE_A" ] && FT="$FREETYPE_A"; [ -n "$FCSTUB_O" ] && FT="$FT $FCSTUB_O" ;; esac
   SNDG=""; case "$name" in libsoundsystem.so) [ -n "$GLUE_SND_O" ] && SNDG="$GLUE_SND_O" ;; esac
   echo "[auto-dep] relink $name extra_libs=[$extra]" | tee -a "$LOG"
-  $CC $LFLAGS $WRAPS -Wl,-soname,"$name" -o "$OUTDIR/$name" "${objs[@]}" $ldeps $lextra $FT $SNDG ${R_TAIL[$name]} 2>>"$LOG" \
+  # link to a scratch output first: a failed relink must never destroy the
+  # good .so from the first pass (ld removes its output file on error)
+  $CC $LFLAGS $WRAPS -Wl,-soname,"$name" -o "$OUTDIR/$name.relink" "${objs[@]}" $ldeps $lextra $FT $SNDG ${R_TAIL[$name]} 2>"$OUTDIR/.relink_err" \
+    && mv -f "$OUTDIR/$name.relink" "$OUTDIR/$name" \
     && echo "   OK: $name (auto-dep relink)" | tee -a "$LOG" \
-    || { echo "   LINK FAILED: $name (auto-dep relink)" | tee -a "$LOG"; return 1; }
+    || { echo "   LINK FAILED: $name (auto-dep relink)" | tee -a "$LOG"; grep -m4 -E "error|undefined|cannot find" "$OUTDIR/.relink_err" | sed 's/^/     /' | tee -a "$LOG"; return 1; }
 }
 
 auto_dep_rounds() {
@@ -207,7 +214,9 @@ auto_dep_rounds() {
       [ -n "${R_OBJS[$name]:-}" ] || continue   # libSDL2 is a copy — no relink data
       extra=$(auto_extra_deps "$name")
       [ -z "$extra" ] && continue
-      case "$extra" in *$base*) echo "[auto-dep] SKIP $base (self-reference)" | tee -a "$LOG"; continue;; esac
+      # exact-word self check: *$base* would false-positive on libvgui vs
+      # libvgui_controls and wrongly skip the relink
+      case " $extra " in *" $base "*) echo "[auto-dep] SKIP $base (self-reference)" | tee -a "$LOG"; continue;; esac
       if relink_with "$name" "$extra"; then changed=1; fi
     done
     [ "$changed" -eq 0 ] && break
