@@ -171,9 +171,9 @@ build_symmap() {
 }
 
 auto_extra_deps() {
-  local base="$1"
-  dsyms "$OUTDIR/$base.so" und | sort -u \
-    | awk -v B="$base" 'NR==FNR { defs[$1]=$2; next } $0 in defs && defs[$0] != B { print defs[$0] }' \
+  local base="$1"   # lib file name WITH .so, e.g. libengine.so
+  dsyms "$OUTDIR/$base" und | sort -u \
+    | awk -v B="${base%.so}" 'NR==FNR { defs[$1]=$2; next } $0 in defs && defs[$0] != B { print defs[$0] }' \
         "$OUTDIR/.symmap_strong" - | sort -u
 }
 
@@ -201,11 +201,14 @@ auto_dep_rounds() {
     changed=0
     for so in "$OUTDIR"/lib*.so; do
       base=$(basename "$so" .so)
-      [ -n "${R_OBJS[$base]:-}" ] || continue   # libSDL2 is a copy — no relink data
-      extra=$(auto_extra_deps "$base")
+      local name="$base.so"
+      # record_link() keys R_OBJS by the FULL file name (libengine.so) —
+      # the old base-only lookup never matched, so auto-dep silently no-op'ed
+      [ -n "${R_OBJS[$name]:-}" ] || continue   # libSDL2 is a copy — no relink data
+      extra=$(auto_extra_deps "$name")
       [ -z "$extra" ] && continue
       case "$extra" in *$base*) echo "[auto-dep] SKIP $base (self-reference)" | tee -a "$LOG"; continue;; esac
-      if relink_with "$base" "$extra"; then changed=1; fi
+      if relink_with "$name" "$extra"; then changed=1; fi
     done
     [ "$changed" -eq 0 ] && break
   done
@@ -326,8 +329,11 @@ link_so() {
   case "$name" in libsoundsystem.so) [ -n "$GLUE_SND_O" ] && SNDG="$GLUE_SND_O" ;; esac
   echo "[link] $name  objs=$total  deps=[$deps]" | tee -a "$LOG"
   $CC $LFLAGS $WRAPS -Wl,-soname,"$name" -o "$OUTDIR/$name" "${objs[@]}" $ldeps $FT $SNDG -ldl -llog -lm -lc -lz 2>>"$LOG"
-  record_link "$name" "${objs[*]} $SNDG" "$deps" "-ldl -llog -lm -lc -lz"
+  # capture the link status BEFORE record_link() runs — a function call resets
+  # $?, and with the old order every failed link printed "OK" and the missing
+  # .so only surfaced later as und-gate "unresolved" noise (x64 libcrypto++).
   local rc=$?
+  record_link "$name" "${objs[*]} $SNDG" "$deps" "-ldl -llog -lm -lc -lz"
   if [ $rc -ne 0 ]; then echo "   LINK FAILED: $name" | tee -a "$LOG"; else echo "   OK: $name" | tee -a "$LOG"; fi
   if [ $rc -eq 0 ] && [ -n "${STRIPBIN:-}" ] && [ "${STRIP:-0}" = "1" ]; then "$STRIPBIN" --strip-debug "$OUTDIR/$name" || true; fi
   return $rc

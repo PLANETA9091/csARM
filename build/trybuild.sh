@@ -53,6 +53,14 @@ DEF="-std=${CXXSTD:-gnu++17} -include $R/build/protocompat.h -Wno-narrowing -Wno
 INC="$INC $INCX $VINC"
 DEF="$DEF $VDEFS"
 
+# crypto++ 5.61 carries hand-written x86 inline asm that the NDK's ThinLTO
+# link-time assembler rejects ("unknown token in expression" in integer.cpp)
+# -> build the pure-C++ paths everywhere; the C variants are plenty for the
+# auth-token hashing the engine does.  (aarch64 already compiled without it.)
+case "$TAG" in
+  cryptopp) DEF="$DEF -DCRYPTOPP_DISABLE_ASM=1" ;;
+esac
+
 # Project-local headers come first (Valve semantics: e.g. soundemittersystem
 # has its own lightweight cbase.h that must shadow game/server/cbase.h)
 INC="-I c15/$(dirname "$PROJ") $INC"
