@@ -91,13 +91,21 @@ else
   fi
 fi
 
-# csARM engine boot/frame proof (separate diff: applies after all_patches)
+# csARM engine boot/frame proof (separate diff: applies after all_patches).
+# The boot diff is REGENERATED whenever the probe set changes, so a cached
+# tree can hold any older revision of it (or none).  Restore the files the
+# boot diff owns (all_patches does not touch them — verified: only
+# engine/sys_dll2.cpp overlaps, and the boot hunks there sit in regions
+# all_patches never modifies) to pristine, drop the generated header, and
+# apply the current revision cleanly.
+BOOT_PRISTINE="engine/sys_engine.cpp appframework/AppSystemGroup.cpp launcher/launcher.cpp"
 if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_boot.diff" 2>/dev/null; then
   echo "csarm_boot.diff already applied"
-elif git apply --whitespace=nowarn --check "$REPO_DIR/patches/extras/csarm_boot.diff" 2>/dev/null; then
-  git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_boot.diff" || { echo "csarm_boot.diff APPLY FAILED"; exit 1; }
 else
-  echo "csarm_boot.diff does not apply (context drift?)"; exit 1
+  echo "csarm_boot.diff revision change -> normalizing probe files"
+  git checkout -f -- $BOOT_PRISTINE 2>/dev/null || git checkout -- $BOOT_PRISTINE || true
+  rm -f "$SRC/common/csarm_log.h"
+  git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_boot.diff" || { echo "csarm_boot.diff APPLY FAILED"; exit 1; }
 fi
 
 echo "Copying extra files..."
