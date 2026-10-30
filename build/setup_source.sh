@@ -64,6 +64,14 @@ else
   do_clone
 fi
 
+# Post-clone/cached verification: a missing dir here silently becomes a
+# "module X produced 0 objects" failure minutes later — fail fast instead.
+if ! check_complete; then
+  echo "sparse tree incomplete after setup:$MISSING -> read-tree retry"
+  ( cd "$SRC" && apply_sparse && git read-tree -mu HEAD ) || true
+  check_complete || { echo "FATAL: still missing:$MISSING (sparse patterns vs source tree mismatch)"; exit 1; }
+fi
+
 cd "$SRC"
 echo "Applying patches (FRESH=$FRESH)..."
 if [ "$FRESH" = "1" ]; then
