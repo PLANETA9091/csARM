@@ -28,6 +28,13 @@ for pb in genproto/*.pb.cc; do
 done
 
 LFLAGS="-shared -fPIC -fuse-ld=lld -stdlib=libc++ -Wl,--gc-sections -Wl,-z,max-page-size=16384"
+# CreateInterface is the Valve factory entry point — it is only ever reached
+# through dlsym("CreateInterface") (Sys_GetFactory), the linker never sees an
+# internal reference, so --gc-sections + LTO may drop the export entirely
+# (run 41107054404: libengine.so shipped the full interface registry but NO
+# CreateInterface export -> 'Unable to create system VEngineCvar007').
+# --export-dynamic-symbol marks it a GC root and exports it.
+LFLAGS="$LFLAGS -Wl,--export-dynamic-symbol=CreateInterface"
 # Every port lib must carry DT_NEEDED libc++_shared.so (the APK ships it,
 # build_apk.sh copies it from the NDK).  -stdlib=libc++_shared is NOT a real
 # clang flag — without -lc++_shared the .so keep UND __gxx_personality_v0 /

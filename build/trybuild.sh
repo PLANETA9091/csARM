@@ -49,7 +49,7 @@ if [ -n "$DEFX" ]; then
   done
   DEFX="$out"
 fi
-DEF="-std=${CXXSTD:-gnu++17} -include $R/build/protocompat.h -Wno-narrowing -Wno-register -DDX_TO_GL_ABSTRACTION -DCSARM_GL_SHIM -DX64BITS -DPOSIX=1 -DLINUX=1 -D_LINUX=1 -DGNUC=1 -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1 -D_POSIX=1 -D__ANDROID__=1 -DANDROID=1 -DENGINE_DLL=1 -DUSE_SDL=1 -Dpthread_yield=sched_yield -Dstricmp=strcasecmp -D_stricmp=strcasecmp -Dstrnicmp=strncasecmp -D_strnicmp=strncasecmp $DEFX"
+DEF="-std=${CXXSTD:-gnu++17} -include $R/build/protocompat.h -Wno-narrowing -Wno-register -DDX_TO_GL_ABSTRACTION -DCSARM_GL_SHIM -DX64BITS -DPOSIX=1 -DLINUX=1 -D_LINUX=1 -DGNUC=1 -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1 -D_POSIX=1 -D__ANDROID__=1 -DANDROID=1 -DENGINE_DLL=1 -DUSE_SDL=1 -Dpthread_yield=sched_yield -Dstricmp=strcasecmp -D_stricmp=strcasecmp -Dstrnicmp=strncasecmp -D_strnicmp=strncasecmp -D_DLL_EXT=.so $DEFX"
 INC="$INC $INCX $VINC"
 DEF="$DEF $VDEFS"
 

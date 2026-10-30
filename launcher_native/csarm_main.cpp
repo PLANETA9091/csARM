@@ -171,6 +171,9 @@ static void makeModuleLinks(const std::string &filesDir, const std::string &libD
 {
     std::string bin = filesDir + "/bin";
     mkdir(bin.c_str(), 0755);
+    // Valve's POSIX x64 loader looks in <game>/bin/linux64/ first
+    // (Sys_LoadModule builds basedir/bin/linux64/<name>.so paths)
+    mkdir((bin + "/linux64").c_str(), 0755);
     int made = 0;
     for (int i = 0; kModules[i]; i++)
     {
@@ -184,6 +187,10 @@ static void makeModuleLinks(const std::string &filesDir, const std::string &libD
         std::string link2 = bin + "/" + kModules[i];
         unlink(link2.c_str());
         symlink(real.c_str(), link2.c_str());
+        // bin/linux64/ form (Sys_LoadModule POSIX x64 search path)
+        std::string link3 = bin + "/linux64/" + kModules[i] + ".so";
+        unlink(link3.c_str());
+        symlink(real.c_str(), link3.c_str());
     }
     LOGI("CSARM_BIN_LINKS made=%d dir=%s", made, bin.c_str());
 }

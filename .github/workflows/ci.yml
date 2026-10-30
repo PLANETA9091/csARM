@@ -309,6 +309,25 @@ jobs:
             file "$so"
             $NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -d "$so" | head -12
           done
+          # Valve factory gate: every app-system lib must export
+          # CreateInterface (Sys_GetFactory dlsyms it).  Missing exports were
+          # invisible until the emulator boot died with
+          # 'Unable to create system VEngineCvar007' (run 41107054404).
+          FAILS=0
+          for so in out/libengine.so out/libvstdlib.so out/libtier1.so \
+                    out/libfilesystem_stdio.so out/libinputsystem.so \
+                    out/libmaterialsystem.so out/libdatacache.so \
+                    out/libstudiorender.so out/libsoundemittersystem.so \
+                    out/libvguimatsurface.so out/libvgui.so; do
+            [ -e "$so" ] || continue
+            if ! $NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -W --dyn-syms "$so" \
+                 | awk '$7!="UND" && $8=="CreateInterface" {found=1} END{exit !found}'; then
+              echo "::error::$so does not export CreateInterface"
+              FAILS=$((FAILS+1))
+            fi
+          done
+          [ "$FAILS" = "0" ] || exit 1
+          echo "factory gate: all app-system libs export CreateInterface"
 
       - name: Upload libraries
         if: always()
