@@ -472,7 +472,8 @@ link_so() {
   # tier1/interface.cpp; run 41120885075 SIGSEGV at dlopen).
   case "$name" in
     libfilesystem_stdio.so|libinputsystem.so|libmaterialsystem.so|libdatacache.so|\
-    libstudiorender.so|libsoundemittersystem.so|libvguimatsurface.so|libvgui.so)
+    libstudiorender.so|libsoundemittersystem.so|libvguimatsurface.so|libvgui.so|\
+    libvstdlib.so)
       [ -n "$IFACE_OBJ" ] && { objs+=("$IFACE_OBJ"); total=$((total+1)); } ;;
   esac
   # Steamworks / platform glue only where the sources actually reference it
