@@ -289,13 +289,22 @@ auto_dep_rounds() {
         case "$NEEDED" in *" ${d#lib} "*) ;; *) MISSING="$MISSING $d";; esac
       done
       [ -z "$MISSING" ] && continue
-      # layer guard: never introduce an UPWARD dependency (tier0 -> libserver
-      # made bionic fail every dlopen: libmain -> libtier0 -> libserver)
-      local TR ALLOWED=""
+      # layer guard: NEVER depend on the game DLLs.  They are content-path
+      # (loaded late, may carry UND of their own) — tier0 -> libserver made
+      # bionic fail every dlopen in run 41068282338.  Everything else is part
+      # of the always-loaded port bundle; Valve's own layering quirks
+      # (tier1 -> mathlib Four_* SSE constants, tier3 -> choreo/bonesetup
+      # Studio_*) are legitimate and must resolve through DT_NEEDED.
+      local TR ALLOWED="" BLOCK
       TR=$(lib_rank "$name")
       for d in $MISSING; do
-        if [ "$(lib_rank "$d.so")" -gt "$TR" ]; then
-          echo "[auto-dep] DROP $name <- $d (upward dep, layer violation)" | tee -a "$LOG"
+        BLOCK=""
+        case "$d" in
+          libclient|libserver)
+            case "$name" in libclient.so|libserver.so) ;; *) BLOCK=1 ;; esac ;;
+        esac
+        if [ -n "$BLOCK" ]; then
+          echo "[auto-dep] DROP $name <- $d (game-DLL dep, layer violation)" | tee -a "$LOG"
         else
           ALLOWED="$ALLOWED $d"
         fi
@@ -361,6 +370,62 @@ und_gate() {
     exit 2
   fi
   echo "[und-gate] boot path: all dynamic symbols resolvable (port libs + system)" | tee -a "$LOG"
+}
+
+# Per-lib REACHABILITY gate: every STRONG UND of a boot-path lib must be
+# resolvable from the lib's OWN DT_NEEDED closure or the system.  The global
+# und-gate above misses the deadly case where a provider exists in SOME port
+# lib but is NOT in this lib's dependency graph (tier1 UND Four_Zeros with no
+# DT_NEEDED libmathlib passed the global gate and died at dlopen: run 41081092407).
+reachability_gate() {
+  python3 - "$OUTDIR" <<'PYEOF'
+import sys, os, glob
+from elftools.elf.elffile import ELFFile
+outdir = sys.argv[1]
+sysmap = set()
+p = os.path.join(outdir, '.sysmap')
+if os.path.exists(p):
+    sysmap = set(x.strip() for x in open(p) if x.strip())
+libs = {}
+for f in sorted(glob.glob(os.path.join(outdir, 'lib*.so'))):
+    e = ELFFile(open(f, 'rb'))
+    ds = e.get_section_by_name('.dynsym')
+    und, defs = set(), set()
+    for i in range(ds.num_symbols()):
+        s = ds.get_symbol(i)
+        if s['st_shndx'] == 'SHN_UNDEF':
+            if s.name and s['st_info']['bind'] != 'STB_WEAK':
+                und.add(s.name)
+        elif s.name:
+            defs.add(s.name)
+    dyn = e.get_section_by_name('.dynamic')
+    nd = [t.needed for t in dyn.iter_tags() if t.entry.d_tag == 'DT_NEEDED']
+    libs[os.path.basename(f)] = {'und': und, 'defs': defs, 'needed': nd}
+def closure(name, seen):
+    if name in seen or name not in libs:
+        return set()
+    seen.add(name)
+    out = set(libs[name]['defs'])
+    for n in libs[name]['needed']:
+        out |= closure(n, seen)
+    return out
+CONTENT = {'libclient.so', 'libserver.so'}
+bad_total = 0
+for f in sorted(libs):
+    if f in CONTENT:
+        continue
+    reach = closure(f, set()) | sysmap
+    starve = sorted(libs[f]['und'] - reach)
+    if starve:
+        bad_total += len(starve)
+        print(f'[reach-gate] {f}: {len(starve)} UND unreachable from its DT_NEEDED closure:')
+        for n in starve[:40]:
+            print('    UND ' + n)
+if bad_total:
+    print(f'link.sh: reachability gate FAILED ({bad_total} symbols will break dlopen)')
+    sys.exit(2)
+print('[reach-gate] boot path: every lib resolves its own UND through its DT_NEEDED closure + system')
+PYEOF
 }
 
 link_so() {
@@ -516,6 +581,7 @@ done
 build_sysmap
 auto_dep_rounds || true
 und_gate || true
+reachability_gate || exit 2
 
 echo "=== linked results ===" | tee -a "$LOG"
 ls -la "$OUTDIR" 2>/dev/null | tee -a "$LOG"

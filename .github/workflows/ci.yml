@@ -257,6 +257,9 @@ jobs:
             echo "NDKROOT=$HOME/android-ndk-r27d" >> $GITHUB_ENV
           fi
 
+      - name: Install pyelftools (reachability gate)
+        run: python3 -m pip install --quiet --user pyelftools
+
       - name: Build SDL2 static lib
         run: |
           if [ "${{ matrix.abi }}" = "x86_64" ]; then
