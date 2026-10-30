@@ -83,6 +83,16 @@ for cand in obj/interfaces/interfaces_interfaces.cpp.o "$OUTDIR/interfaces.cpp.o
   [ -f "$cand" ] && { INTERFACES_O="$cand"; break; }
 done
 [ -n "$INTERFACES_O" ] && echo "[glue] interfaces.o: $INTERFACES_O" | tee -a "$LOG" || echo "[glue] WARN: interfaces.o missing" | tee -a "$LOG"
+# tier1/interface.cpp: the Valve module factory entry (CreateInterface —
+# reached ONLY via dlsym from Sys_GetFactory) plus the Sys_LoadModule
+# plumbing.  Valve links tier1 STATICALLY into every DLL, so each module has
+# its own copy; our tier1 is a shared lib, so hand every OTHER lib the same
+# object (the tier1 build's own output — correct flags, includes memdbgon).
+IFACE_OBJ=""
+for cand in obj/tier1/tier1_interface.cpp.o "$OUTDIR/tier1_interface.cpp.o"; do
+  [ -f "$cand" ] && { IFACE_OBJ="$cand"; break; }
+done
+[ -n "$IFACE_OBJ" ] && echo "[glue] iface.o: $IFACE_OBJ" | tee -a "$LOG" || echo "[glue] WARN: tier1_interface.o missing (no CreateInterface in module libs!)" | tee -a "$LOG"
 # Steamworks stub (no Steam on Android) — needed by engine/client/server/inputsystem/vgui_controls
 STEAM_O=""
 $CC -c -fPIC -O1 -w -o "$OUTDIR/stub_steam_api.cpp.o" "$SCRIPT_DIR/stub_steam_api.c" 2>>"$LOG" && STEAM_O="$OUTDIR/stub_steam_api.cpp.o"
@@ -456,6 +466,8 @@ link_so() {
   # Valve links interfaces.lib into every module — do the same (own copy of the
   # global interface pointers per .so, initialized by ConnectTier*Libraries).
   if [ -n "$INTERFACES_O" ] && [ -f "$INTERFACES_O" ]; then objs+=("$INTERFACES_O"); total=$((total+1)); fi
+  # factory entry per module (skip tier1: it links its own copy)
+  if [ "$name" != "libtier1.so" ] && [ -n "$IFACE_OBJ" ]; then objs+=("$IFACE_OBJ"); total=$((total+1)); fi
   # Steamworks / platform glue only where the sources actually reference it
   case "$name" in
     libengine.so|libclient.so|libserver.so)
@@ -549,11 +561,11 @@ if [ -n "$GENPROTO_OBJS" ] && [ -f "$OUTDIR/libmathlib.so" ]; then
   ENGINE_TAIL="-ldl -llog -lm -lc -lz -landroid -lEGL -lGLESv2 -lOpenSLES"
   ENGINE_BASE_OBJS=$(ls obj/engine/*.o 2>/dev/null)
   $CC $LFLAGS -Wl,-soname,"libengine.so" -o "$OUTDIR/libengine.so" obj/engine/*.o $GENPROTO_OBJS \
-     $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O \
+     $INTERFACES_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 -lbzip2 \
      $ENGINE_TAIL 2>>"$LOG" \
      && { echo "   OK: libengine.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/libengine.so" || true; } || echo "   LINK FAILED: libengine.so" | tee -a "$LOG"
-  record_link "libengine.so" "$ENGINE_BASE_OBJS $GENPROTO_OBJS $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "$ENGINE_TAIL"
+  record_link "libengine.so" "$ENGINE_BASE_OBJS $GENPROTO_OBJS $INTERFACES_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "$ENGINE_TAIL"
 fi
 
 # 3b. Launcher (Valve CSourceAppSystemGroup host; dlopen'ed by libmain)
@@ -577,11 +589,11 @@ for GAMEDLL in client server; do
   [ "$GTOTAL" -eq 0 ] && continue
   echo "[link] lib$GAMEDLL.so (tags: $TAGS) objs=$GTOTAL" | tee -a "$LOG"
   $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS $RR_OBJS \
-     $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O \
+     $INTERFACES_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 -lbzip2 \
      -ldl -llog -lm -lc -lz 2>>"$LOG" \
      && { echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/lib$GAMEDLL.so" || true; } || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
-  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_OBJS $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
+  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_OBJS $INTERFACES_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
 done
 
 # resolve every cross-lib reference into a real DT_NEEDED, then gate
