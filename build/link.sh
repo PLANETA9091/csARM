@@ -177,6 +177,12 @@ auto_extra_deps() {
         "$OUTDIR/.symmap_strong" - | sort -u
 }
 
+# DT_NEEDED basenames of a .so, prefix-free ("tier0", "SDL2", ...) — matches
+# extra-dep entries after the "lib" strip in relink_with.
+needed_of() {
+  llvm-readelf -W -d "$1" 2>/dev/null | awk '/\(NEEDED\)/ {print $5}' | sed -e 's/^lib//' -e 's/\.so$//' | tr '\n' ' '
+}
+
 relink_with() {
   local name="$1"; shift
   local extra="$1"; shift
@@ -217,7 +223,16 @@ auto_dep_rounds() {
       # exact-word self check: *$base* would false-positive on libvgui vs
       # libvgui_controls and wrongly skip the relink
       case " $extra " in *" $base "*) echo "[auto-dep] SKIP $base (self-reference)" | tee -a "$LOG"; continue;; esac
-      if relink_with "$name" "$extra"; then changed=1; fi
+      # UND entries stay in .dynsym even after the relink satisfied them via
+      # DT_NEEDED — without this check every round would needlessly relink
+      # the whole tree again (engine/client/server ~2 min each)
+      NEEDED=" $(needed_of "$so") "
+      MISSING=""
+      for d in $extra; do
+        case "$NEEDED" in *" ${d#lib} "*) ;; *) MISSING="$MISSING $d";; esac
+      done
+      [ -z "$MISSING" ] && continue
+      if relink_with "$name" "$MISSING"; then changed=1; fi
     done
     [ "$changed" -eq 0 ] && break
   done
