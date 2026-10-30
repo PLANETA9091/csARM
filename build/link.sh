@@ -466,8 +466,15 @@ link_so() {
   # Valve links interfaces.lib into every module — do the same (own copy of the
   # global interface pointers per .so, initialized by ConnectTier*Libraries).
   if [ -n "$INTERFACES_O" ] && [ -f "$INTERFACES_O" ]; then objs+=("$INTERFACES_O"); total=$((total+1)); fi
-  # factory entry per module (skip tier1: it links its own copy)
-  if [ "$name" != "libtier1.so" ] && [ -n "$IFACE_OBJ" ]; then objs+=("$IFACE_OBJ"); total=$((total+1)); fi
+  # factory entry per module — ONLY for libs the launcher appSystems table
+  # loads and queries via dlsym(Sys_GetFactory, 'CreateInterface').  A blanket
+  # tier1_interface.o add crashed libprotobuf's static init (TLS globals in
+  # tier1/interface.cpp; run 41120885075 SIGSEGV at dlopen).
+  case "$name" in
+    libfilesystem_stdio.so|libinputsystem.so|libmaterialsystem.so|libdatacache.so|\
+    libstudiorender.so|libsoundemittersystem.so|libvguimatsurface.so|libvgui.so)
+      [ -n "$IFACE_OBJ" ] && { objs+=("$IFACE_OBJ"); total=$((total+1)); } ;;
+  esac
   # Steamworks / platform glue only where the sources actually reference it
   case "$name" in
     libengine.so|libclient.so|libserver.so)
@@ -589,11 +596,11 @@ for GAMEDLL in client server; do
   [ "$GTOTAL" -eq 0 ] && continue
   echo "[link] lib$GAMEDLL.so (tags: $TAGS) objs=$GTOTAL" | tee -a "$LOG"
   $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS $RR_OBJS \
-     $INTERFACES_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O \
+     $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 -lbzip2 \
      -ldl -llog -lm -lc -lz 2>>"$LOG" \
      && { echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/lib$GAMEDLL.so" || true; } || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
-  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_OBJS $INTERFACES_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
+  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_OBJS $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
 done
 
 # resolve every cross-lib reference into a real DT_NEEDED, then gate
