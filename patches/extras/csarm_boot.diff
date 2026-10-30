@@ -288,3 +288,36 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	if ( CommandLine()->FindParm("-insecure") )
  	{
  		extern void Host_DisallowSecureServers();
+
+diff --git a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
+--- a/appframework/sdlmgr.cpp
++++ b/appframework/sdlmgr.cpp
+@@ -14,6 +14,8 @@
+ #include "togl/rendermechanism.h"
+ #include "tier0/fasttimer.h"
+ 
++
++#include "common/csarm_log.h"
+ 
+ // NOTE: This has to be the last file included! (turned off below, since this is included like a header)
+ #include "tier0/memdbgon.h"
+@@ -568,6 +570,11 @@
+ 
+ 	m_pixelFormatAttribCount = (attCursor - &m_pixelFormatAttribs[0]) / 2;
+ 
++	#ifdef __ANDROID__
++	// csARM: the hidden GL window needs a Java-side surface that SDL 2.0.2
++	// cannot wire up from this thread; the boot path does not present frames.
++	CSARM_LOGI( "SDLMgr: skip hidden game window (Android)" );
++	#else
+ 	// we need a GL context before we dig down further, since we're calling
+ 	//  GL entry points, but the game hasn't made a window yet. So it's time
+ 	//  to make a window! We make a 640x480 one here, and later, when asked
+@@ -577,6 +584,7 @@
+ 
+ 	if ( !m_bTextMode )
+ 		SDL_HideWindow( m_Window );
++	#endif
+ 
+ 	return INIT_OK;
+ }

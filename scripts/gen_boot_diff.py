@@ -247,6 +247,47 @@ orig = text
 text = apply(text, 'sys_dll2.cpp', pairs)
 out.append(unified(orig, text, 'engine/sys_dll2.cpp'))
 
+# ---------------------------------------------------------------- sdlmgr.cpp
+# CSDLMgr::Init creates a hidden 640x480 GL window; on Android SDL 2.0.2
+# cannot make that window's GL context from the SDLThread (no Java surface
+# wired) -> SDL_CreateWindow/SDL_GL path segfaults (run 41131384551,
+# CSDLMgr::CreateHiddenGameWindow+737, fault 0x3d8).  The boot path does not
+# present frames yet — skip the hidden window under __ANDROID__.
+text = open(os.path.join(tmp, 'sdlmgr.cpp')).read()
+pairs = []
+pairs.append((
+    '// NOTE: This has to be the last file included! (turned off below, since this is included like a header)\n#include "tier0/memdbgon.h"\n',
+    '#include "common/csarm_log.h"\n\n'
+    '// NOTE: This has to be the last file included! (turned off below, since this is included like a header)\n#include "tier0/memdbgon.h"\n'))
+pairs.append((
+    T + '// we need a GL context before we dig down further, since we\'re calling\n'
+    + T + '//  GL entry points, but the game hasn\'t made a window yet. So it\'s time\n'
+    + T + '//  to make a window! We make a 640x480 one here, and later, when asked\n'
+    + T + '//  to really actually make a window, we just resize the one we built here.\n'
+    + '    if ( !CreateHiddenGameWindow( "", true, 640, 480 ) )\n'
+    + T + T + 'Error( "CreateGameWindow failed" );\n'
+    + '\n'
+    + T + 'if ( !m_bTextMode )\n'
+    + T + T + 'SDL_HideWindow( m_Window );\n',
+    T + '#ifdef __ANDROID__\n'
+    + T + '// csARM: the hidden GL window needs a Java-side surface that SDL 2.0.2\n'
+    + T + '// cannot wire up from this thread; the boot path does not present frames.\n'
+    + T + 'CSARM_LOGI( "SDLMgr: skip hidden game window (Android)" );\n'
+    + T + '#else\n'
+    + T + '// we need a GL context before we dig down further, since we\'re calling\n'
+    + T + '//  GL entry points, but the game hasn\'t made a window yet. So it\'s time\n'
+    + T + '//  to make a window! We make a 640x480 one here, and later, when asked\n'
+    + T + '//  to really actually make a window, we just resize the one we built here.\n'
+    + '    if ( !CreateHiddenGameWindow( "", true, 640, 480 ) )\n'
+    + T + T + 'Error( "CreateGameWindow failed" );\n'
+    + '\n'
+    + T + 'if ( !m_bTextMode )\n'
+    + T + T + 'SDL_HideWindow( m_Window );\n'
+    + T + '#endif\n'))
+orig = text
+text = apply(text, 'sdlmgr.cpp', pairs)
+out.append(unified(orig, text, 'appframework/sdlmgr.cpp'))
+
 # ---------------------------------------------------------------- write
 NEW_FILE_HUNK = ('diff --git a/common/csarm_log.h b/common/csarm_log.h\n'
                  'new file mode 100644\n'
