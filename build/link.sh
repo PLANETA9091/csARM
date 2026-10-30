@@ -552,6 +552,7 @@ link_so libdmxloader.so "tier0 tier1" dmxloader || true
 link_so libbitmap.so "tier0 tier1 mathlib" bitmap || true
 link_so libvtf.so "tier0 tier1 mathlib bitmap" vtf || true
 link_so libscenefilecache.so "tier0 tier1 vstdlib" scenefilecache || true
+link_so liblocalize.so "tier0 tier1 vstdlib" localize || true
 link_so libbonesetup.so "tier0 tier1 mathlib vstdlib" bonesetup || true
 link_so libchoreo.so "tier0 tier1 vstdlib" choreo || true
 link_so libsoundsystem.so "tier0 tier1 mathlib vstdlib tier2" soundsystem || true

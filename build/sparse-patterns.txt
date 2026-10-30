@@ -41,6 +41,7 @@
 /vpklib/
 /bonesetup/
 /responserules/
+/localize/
 /vgui2/
 /vguimatsurface/
 /vgui_controls/

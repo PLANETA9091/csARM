@@ -152,7 +152,7 @@ static const char *kModules[] = {
     "inputsystem", "launcher", "filesystem_stdio", "engine", "client", "server",
     "bzip2", "tier3", "dmxloader", "bitmap", "vtf", "shaderlib", "scenefilecache",
     "soundsystem", "soundsystem_lowlevel", "matsys_controls", "videocfg", "vpklib",
-    "bonesetup", "choreo", "cryptopp", "quickhull", nullptr
+    "bonesetup", "choreo", "cryptopp", "quickhull", "localize", nullptr
 };
 
 static std::string nativeLibDir()

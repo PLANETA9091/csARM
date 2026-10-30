@@ -65,6 +65,10 @@ jobs:
             modules: "responserules/runtime/responserules_runtime.vpc"
             defs: ""
           - abi: arm64-v8a
+            tag: localize
+            modules: "localize/localize.vpc"
+            defs: ""
+          - abi: arm64-v8a
             tag: pb25
             modules: "lists/protobuf25.txt"
             defs: "HAVE_PTHREAD=1"
@@ -99,6 +103,10 @@ jobs:
           - abi: x86_64
             tag: rrules
             modules: "responserules/runtime/responserules_runtime.vpc"
+            defs: ""
+          - abi: x86_64
+            tag: localize
+            modules: "localize/localize.vpc"
             defs: ""
           - abi: x86_64
             tag: pb25
@@ -314,7 +322,7 @@ jobs:
           # invisible until the emulator boot died with
           # 'Unable to create system VEngineCvar007' (run 41107054404).
           FAILS=0
-          for so in out/libengine.so out/libvstdlib.so out/libtier1.so \
+          for so in out/libengine.so out/libvstdlib.so out/libtier1.so out/liblocalize.so \
                     out/libfilesystem_stdio.so out/libinputsystem.so \
                     out/libmaterialsystem.so out/libdatacache.so \
                     out/libstudiorender.so out/libsoundemittersystem.so \
