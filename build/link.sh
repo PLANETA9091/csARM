@@ -8,6 +8,9 @@ R=${R:-$(dirname "$SCRIPT_DIR")}
 cd "$R"
 export PATH="${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 CC=${CC:-aarch64-linux-android27-clang}
+# NDK triple for sysroot lib paths (build_sysmap/und_gate): strip the API
+# digits — e.g. aarch64-linux-android27-clang -> aarch64-linux-android
+TRIPLET=$(echo "$CC" | sed -E 's/[0-9]+-clang$//')
 OUTDIR="$R/out"; mkdir -p "$OUTDIR"
 PBLIB=""  # protobuf 2.5.0 is built from source as obj/protobuf25 and linked as libprotobuf.so
 SDL2LIB="${SDL2LIB:-$R/thirdparty/SDL2-lib/libSDL2.so}"
@@ -137,7 +140,11 @@ EXCLUDE_RE='tier0_mem_helpers\.cpp\.o$|game_shared_weapon_parse_default\.cpp\.o$
 # ---------------------------------------------------------------------------
 declare -A R_OBJS R_DEPS R_TAIL
 record_link() {
-  R_OBJS[$1]="$2"; R_DEPS[$1]="$3"; R_TAIL[$1]="$4"
+  # normalize NEWLINES to spaces: raw "ls" output (ENGINE_BASE_OBJS,
+  # GENPROTO_OBJS) is multiline, and relink_with reads this string with
+  # "read -r -a" which consumes ONLY THE FIRST LINE — the relink then linked
+  # 1 object instead of 314 and GUTTED libengine.so (run 41068282338)
+  R_OBJS[$1]="${2//$'\n'/ }"; R_DEPS[$1]="$3"; R_TAIL[$1]="$4"
 }
 
 # dsyms mode "def": STRONG or WEAK defined globals both count.
@@ -159,20 +166,70 @@ dsyms() {  # $1 = lib, $2 = "def"|"defstrong"|"und"
 
 build_symmap() {
   : > "$OUTDIR/.symmap"
-  : > "$OUTDIR/.symmap_strong"
+  : > "$OUTDIR/.pairs"
   local so base
   for so in "$OUTDIR"/lib*.so; do
     base=$(basename "$so" .so)
     dsyms "$so" def | awk -v b="$base" '{print $1, b}' >> "$OUTDIR/.symmap"
-    dsyms "$so" defstrong | awk -v b="$base" '{print $1, b}' >> "$OUTDIR/.symmap_strong"
+    dsyms "$so" defstrong | awk -v b="$base" -v r="$(lib_rank "$base.so")" '{print r, b, $1}' >> "$OUTDIR/.pairs"
   done
+  # provider selection for duplicated defs: the LOWEST layer wins (game DLLs
+  # re-define libc rand/srand and tier1 symbols with default visibility;
+  # without this tier0 gained DT_NEEDED libserver.so and every dlopen died:
+  # libmain -> libtier0 -> libserver -> UND rr_debugresponses, run 41068282338)
+  sort -k3,3 -k1,1n "$OUTDIR/.pairs" | awk '{ if (!seen[$3]++) print $3, $2 }' > "$OUTDIR/.symmap_strong"
   sort -u -o "$OUTDIR/.symmap" "$OUTDIR/.symmap"
-  sort -u -o "$OUTDIR/.symmap_strong" "$OUTDIR/.symmap_strong"
+  rm -f "$OUTDIR/.pairs"
+}
+
+# dependency-layer ranks (lower = more basic).  auto-dep may only add a dep
+# at the SAME or LOWER rank — an upward dep is a layering violation that
+# bionic punishes at dlopen time (tier0 -> libserver killed the boot).
+lib_rank() {
+  case "$1" in
+    libtier0.so|libbzip2.so|libcrypto++.so|libquickhull.so|libprotobuf.so|libSDL2.so) echo 0 ;;
+    libtier1.so)  echo 1 ;;
+    libvstdlib.so|libmathlib.so) echo 2 ;;
+    libtier2.so)  echo 3 ;;
+    libtier3.so)  echo 4 ;;
+    libappframework.so) echo 5 ;;
+    liblauncher.so) echo 6 ;;
+    libengine.so) echo 7 ;;
+    libclient.so|libserver.so) echo 8 ;;
+    *) echo 6 ;;
+  esac
+}
+
+# symbols the Android system libs provide — never satisfied through a port
+# lib (tier0 UND rand/srand must go to libc, not to libserver's redefinition)
+build_sysmap() {
+  local SYS lib
+  SYS="${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TRIPLET"
+  { for lib in $(sys_lib_list "$SYS"); do
+      case "$lib" in
+        *.a) llvm-readelf -W --syms "$lib" 2>/dev/null | awk '$5=="GLOBAL" && $7!="UND" {n=$8; sub(/@.*/,"",n); print n}' ;;
+        *)   dsyms "$lib" def ;;
+      esac
+    done; } | sort -u > "$OUTDIR/.sysmap"
+}
+
+sys_lib_list() {
+  local SYS="$1" lib
+  for lib in "$SYS"/*.so \
+             "$SYS"/*/libc.so "$SYS"/*/libm.so "$SYS"/*/libdl.so "$SYS"/*/libdl_android.so \
+             "$SYS"/*/liblog.so "$SYS"/*/libz.so "$SYS"/*/libstdc++.so \
+             "$SYS"/*/libandroid.so "$SYS"/*/libEGL.so "$SYS"/*/libGLESv2.so "$SYS"/*/libGLESv1_CM.so \
+             "$SYS"/*/libOpenSLES.so "$SYS"/*/libnativewindow.so "$SYS"/*/libmediandk.so \
+             "$SYS"/*/libaaudio.so "$SYS"/*/libunwind.so "$SYS"/*/libc++_shared.so; do
+    [ -e "$lib" ] && echo "$lib"
+  done
 }
 
 auto_extra_deps() {
   local base="$1"   # lib file name WITH .so, e.g. libengine.so
-  dsyms "$OUTDIR/$base" und | sort -u \
+  # 1) drop UND symbols the system already provides (libc rand/srand etc.)
+  # 2) map the rest to their lowest-layer port-lib provider
+  comm -23 <(dsyms "$OUTDIR/$base" und | sort -u) "$OUTDIR/.sysmap" \
     | awk -v B="${base%.so}" 'NR==FNR { defs[$1]=$2; next } $0 in defs && defs[$0] != B { print defs[$0] }' \
         "$OUTDIR/.symmap_strong" - | sort -u
 }
@@ -232,27 +289,32 @@ auto_dep_rounds() {
         case "$NEEDED" in *" ${d#lib} "*) ;; *) MISSING="$MISSING $d";; esac
       done
       [ -z "$MISSING" ] && continue
-      if relink_with "$name" "$MISSING"; then changed=1; fi
+      # layer guard: never introduce an UPWARD dependency (tier0 -> libserver
+      # made bionic fail every dlopen: libmain -> libtier0 -> libserver)
+      local TR ALLOWED=""
+      TR=$(lib_rank "$name")
+      for d in $MISSING; do
+        if [ "$(lib_rank "$d.so")" -gt "$TR" ]; then
+          echo "[auto-dep] DROP $name <- $d (upward dep, layer violation)" | tee -a "$LOG"
+        else
+          ALLOWED="$ALLOWED $d"
+        fi
+      done
+      [ -z "${ALLOWED# }" ] && continue
+      if relink_with "$name" "$ALLOWED"; then changed=1; fi
     done
     [ "$changed" -eq 0 ] && break
   done
+  rm -f "$OUTDIR"/*.relink
 }
 
 und_gate() {
   build_symmap
   # system libs that legitimately provide symbols at runtime (GLOBAL or WEAK defs)
-  local TRIP SYS
-  TRIP=$(echo "$CC" | sed -E 's/[0-9]+-clang$//')
-  SYS="${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TRIP"
+  local lib SYS
+  SYS="${NDKROOT%/}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TRIPLET"
   : > "$OUTDIR/.allowed"
-  local lib
-  for lib in "$SYS"/*.so \
-             "$SYS"/*/libc.so "$SYS"/*/libm.so "$SYS"/*/libdl.so "$SYS"/*/libdl_android.so \
-             "$SYS"/*/liblog.so "$SYS"/*/libz.so "$SYS"/*/libstdc++.so \
-             "$SYS"/*/libandroid.so "$SYS"/*/libEGL.so "$SYS"/*/libGLESv2.so "$SYS"/*/libGLESv1_CM.so \
-             "$SYS"/*/libOpenSLES.so "$SYS"/*/libnativewindow.so "$SYS"/*/libmediandk.so \
-             "$SYS"/*/libaaudio.so "$SYS"/*/libunwind.so "$SYS"/*/libc++_shared.so; do
-    [ -e "$lib" ] || continue
+  for lib in $(sys_lib_list "$SYS"); do
     case "$lib" in
       *.a) llvm-readelf -W --syms "$lib" 2>/dev/null | awk '$5=="GLOBAL" && $7!="UND" {n=$8; sub(/@.*/,"",n); print n}' ;;
       *)   dsyms "$lib" def ;;
@@ -269,6 +331,9 @@ und_gate() {
   local so base BAD TOTAL
   : > "$OUTDIR/.unresolved"
   : > "$OUTDIR/.unresolved_warn"
+  # build_sysmap ran before auto_dep_rounds; ensure it exists even if the
+  # rounds were skipped (empty out dir edge case)
+  [ -s "$OUTDIR/.sysmap" ] || build_sysmap
   for so in "$OUTDIR"/lib*.so; do
     base=$(basename "$so" .so)
     BAD=$(dsyms "$so" und | sort -u \
@@ -278,8 +343,10 @@ und_gate() {
       case "$base" in
         libclient|libserver)
           echo "[und-gate] WARN $base: $TOTAL unresolved (game DLL, content-path)" | tee -a "$LOG"
-          echo "$BAD" | head -10 | sed 's/^/    UND /' | tee -a "$LOG"
+          # full list goes to .unresolved_warn (uploaded as artifact); the
+          # job log keeps a generous sample for the next fix round
           echo "$BAD" | sed "s/^/$base /" >> "$OUTDIR/.unresolved_warn"
+          echo "$BAD" | head -60 | sed 's/^/    UND /' | tee -a "$LOG"
           ;;
         *)
           echo "[und-gate] $base: $TOTAL unresolved symbol(s)" | tee -a "$LOG"
@@ -421,6 +488,10 @@ fi
 link_so liblauncher.so "tier0 tier1 tier2 appframework SDL2" launcher || true
 
 # 4. Client / Server (game DLLs) — same EXCLUDE_RE filtering as link_so
+# responserules runtime (ResponseRules::*, SplitContext, rr_debugresponses)
+# is a neutral Valve lib used by BOTH game DLLs — compile once, link into both
+RR_OBJS=$(ls obj/responserules_runtime/*.o 2>/dev/null | tr '\n' ' ')
+[ -n "${RR_OBJS# }" ] && echo "[rr] responserules objs: $(ls obj/responserules_runtime/*.o 2>/dev/null | wc -l)" | tee -a "$LOG"
 for GAMEDLL in client server; do
   TAGS=$(ls -d obj/$GAMEDLL* 2>/dev/null | grep -v genproto | tr '\n' ' ')
   [ -z "$TAGS" ] && continue
@@ -433,15 +504,16 @@ for GAMEDLL in client server; do
   done
   [ "$GTOTAL" -eq 0 ] && continue
   echo "[link] lib$GAMEDLL.so (tags: $TAGS) objs=$GTOTAL" | tee -a "$LOG"
-  $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS \
+  $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS $RR_OBJS \
      $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 -lbzip2 \
      -ldl -llog -lm -lc -lz 2>>"$LOG" \
      && { echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/lib$GAMEDLL.so" || true; } || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
-  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
+  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_OBJS $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
 done
 
 # resolve every cross-lib reference into a real DT_NEEDED, then gate
+build_sysmap
 auto_dep_rounds || true
 und_gate || true
 
