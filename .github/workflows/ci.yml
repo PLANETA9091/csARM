@@ -23,6 +23,14 @@ on:
 env:
   MIRROR: https://github.com/perilouswithadollarsign/cstrike15_src.git
 
+# One pipeline per ref: a follow-up push cancels the in-flight run instead of
+# queueing behind it.  On 2026-10-31 two full runs started 6s apart
+# (41219942995 / 41219950401) and both burned ~50min of runners doing
+# identical work.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Job 1: build all module groups in parallel matrix
   build:
@@ -131,6 +139,21 @@ jobs:
           test -f c15/engine/engine.vpc || { echo "source incomplete"; exit 1; }
           echo "source files: $(find c15 -type f | wc -l)"
 
+      # Object cache: EXACT key over every build input (build scripts, Valve
+      # patches, module lists, opt flags).  No restore-keys on purpose — a
+      # stale obj/ half-matching the current patches must never be linked.
+      # On hit "Build modules" is skipped entirely: a commit that touches only
+      # ci.yml / android/ / docs drops ~10min of compiling to ~2min of setup;
+      # a patch commit changes the key and rebuilds everything (correct).
+      # actions/cache only saves on a green job, so a cached obj/ is always a
+      # state that passed "Build summary" (0 modules with errors, 0 empty).
+      - name: Cache compiled objects (exact key over build inputs)
+        id: cache-obj
+        uses: actions/cache@v4
+        with:
+          path: obj
+          key: obj-${{ matrix.abi }}-${{ matrix.tag }}-O${{ github.event.inputs.opt_level || '-O2' }}-lto${{ github.event.inputs.lto || '1' }}-${{ hashFiles('build/**', 'patches/**', 'lists/**') }}
+
       - name: Cache host protoc
         uses: actions/cache@v4
         with:
@@ -151,6 +174,7 @@ jobs:
           fi
 
       - name: Build modules
+        if: steps.cache-obj.outputs.cache-hit != 'true'
         run: |
           set -u
           export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
@@ -268,6 +292,19 @@ jobs:
       - name: Install pyelftools (reachability gate)
         run: python3 -m pip install --quiet --user pyelftools
 
+      # .so cache: same exact-key discipline as the obj cache, plus the
+      # launcher sources (libmain.so inputs).  Same objects + same link
+      # scripts + same flags = same deterministic .so set (no __DATE__ /
+      # timestamps in link.sh), so a hit skips the ~15min relink; the
+      # CreateInterface export gates below still run against the restored
+      # libs, so a bad cache state fails loudly instead of passing.
+      - name: Cache linked .so set (exact key over link inputs)
+        id: cache-so
+        uses: actions/cache@v4
+        with:
+          path: out
+          key: so-${{ matrix.abi }}-O${{ github.event.inputs.opt_level || '-O2' }}-lto${{ github.event.inputs.lto || '1' }}-${{ hashFiles('build/**', 'patches/**', 'lists/**', 'launcher_native/**') }}
+
       - name: Cache SDL2/FreeType/protoc builds (skip recompile when unchanged)
         uses: actions/cache@v4
         with:
@@ -294,6 +331,7 @@ jobs:
           bash build/setup_freetype.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
 
       - name: Link shared libraries
+        if: steps.cache-so.outputs.cache-hit != 'true'
         run: |
           export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           if [ "${{ matrix.abi }}" = "x86_64" ]; then export CC=x86_64-linux-android27-clang; else export CC=aarch64-linux-android27-clang; fi
@@ -389,8 +427,23 @@ jobs:
           - abi: arm64-v8a
             backend: LLVM
     steps:
+      # SwiftShader is pinned to 02a91c9c and its build takes 8-15min; cache
+      # the bundled libs on the pin so every run after the first skips the
+      # git fetch + cmake + ninja entirely (also removes a per-run network
+      # fetch — the same class of flake as the SDL tarball in build_apk.sh).
+      - name: Cache SwiftShader libs (pinned commit)
+        uses: actions/cache@v4
+        with:
+          path: bundle
+          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c
+
       - name: Clone SwiftShader at known-good Android-capable revision
         run: |
+          B=bundle/${{ matrix.abi }}
+          if [ -f "$B/libEGL.so" ] && [ -f "$B/libGLESv2.so" ]; then
+            echo "SwiftShader cache hit ($B) — skip clone+patch+build"
+            exit 0
+          fi
           # main() dropped standalone-CMake Android support (Vulkan block is
           # unconditional and matches no Android platform branch).  02a91c9c
           # (2021-08-20) still has SWIFTSHADER_BUILD_EGL/GLESv2 options, the
@@ -427,6 +480,10 @@ jobs:
 
       - name: Configure + build (ES/EGL only)
         run: |
+          if [ -f "bundle/${{ matrix.abi }}/libEGL.so" ] && [ -f "bundle/${{ matrix.abi }}/libGLESv2.so" ]; then
+            echo "SwiftShader cache hit — build skipped"
+            exit 0
+          fi
           sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
           cmake -S swiftshader -B out -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDKROOT/build/cmake/android.toolchain.cmake" \
@@ -682,6 +739,7 @@ jobs:
           "$ADB" -s emulator-5554 logcat -c || true
           "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
           LIMIT=600
+          LAUNCH_S=""
           while [ $SECONDS -lt $LIMIT ]; do
             "$ADB" -s emulator-5554 logcat -d > logcat_boot.txt 2>/dev/null || true
             grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_boot.txt && break
@@ -692,6 +750,21 @@ jobs:
             # instead of burning the full 600s window (runs 41215315729 /
             # 41219950401 wasted 2x10min exactly here).
             [ "$(grep -c CSARM_EXIT_HIT logcat_boot.txt 2>/dev/null || echo 0)" -ge 6 ] && { echo "crash-loop detected (6x CSARM_EXIT_HIT) — stopping wait early"; break; }
+            # stable-launcher early break: once LauncherMain is live, a process
+            # that stays alive 120s with no tick/fail/exit is a healthy engine
+            # idling on content it does not have yet — the old code burned the
+            # full 600s here anyway (run 41227279406: both stages waited
+            # 10min for markers that never come).  Contract unchanged:
+            # TICK/FAIL/EXIT still break instantly, so the asserts below see
+            # exactly the same logcat they always did — just 8min sooner.
+            if [ -z "$LAUNCH_S" ] && grep -q "CSARM_LAUNCHER_CALL" logcat_boot.txt; then
+              LAUNCH_S=$SECONDS
+              echo "LauncherMain called at t=${SECONDS}s — 120s stability window, then early break"
+            fi
+            if [ -n "$LAUNCH_S" ] && [ $((SECONDS - LAUNCH_S)) -ge 120 ]; then
+              echo "launcher alive 120s after call, no tick/fail/exit — proceeding to asserts"
+              break
+            fi
             kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died during engine test"; break; }
             sleep 5
           done
@@ -739,11 +812,21 @@ jobs:
           "$ADB" -s emulator-5554 logcat -c || true
           "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
           LIMIT=600
+          LAUNCH_S=""
           while [ $SECONDS -lt $LIMIT ]; do
             "$ADB" -s emulator-5554 logcat -d > logcat_sw.txt 2>/dev/null || true
             grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_sw.txt && break
             # crash-loop fast-fail — see the x86_64 boot loop above
             [ "$(grep -c CSARM_EXIT_HIT logcat_sw.txt 2>/dev/null || echo 0)" -ge 6 ] && { echo "crash-loop detected (6x CSARM_EXIT_HIT) — stopping wait early"; break; }
+            # stable-launcher early break — see the x86_64 boot loop above
+            if [ -z "$LAUNCH_S" ] && grep -q "CSARM_LAUNCHER_CALL" logcat_sw.txt; then
+              LAUNCH_S=$SECONDS
+              echo "LauncherMain called at t=${SECONDS}s — 120s stability window, then early break"
+            fi
+            if [ -n "$LAUNCH_S" ] && [ $((SECONDS - LAUNCH_S)) -ge 120 ]; then
+              echo "launcher alive 120s after call, no tick/fail/exit — proceeding to asserts"
+              break
+            fi
             kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died during sw test"; break; }
             sleep 5
           done
