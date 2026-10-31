@@ -15,7 +15,10 @@
         android:hasCode="true"
         android:extractNativeLibs="true"
         android:hardwareAccelerated="false"
+        android:debuggable="true"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+        <!-- debuggable: CI stages game content into filesDir via `adb run-as`
+             (draft release game-content -> /data/local/tmp -> files/cstrike) -->
         <!-- full engine launcher (SDL2 glue -> libmain -> LauncherMain) -->
         <activity android:name=".CSARMActivity"
                   android:exported="true"

@@ -586,6 +586,51 @@ jobs:
             [ -f android/libs-swiftshader/$a/libEGL.so ] || echo "::warning::no bundled libEGL.so for $a"
           done
 
+      # Game content comes from the DRAFT release 'game-content' (collaborator-
+      # visible, not publicly listed). No actions/cache for it on purpose: a
+      # 1-3GB cache entry would fight the obj/.so caches for the 10GB repo
+      # cache pool, while re-downloading from release assets on a runner is
+      # 20-60s. Empty draft -> CONTENT=none -> engine boots on the skeleton.
+      - name: Fetch game content (draft release game-content — optional)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          echo "CONTENT=none" >> "$GITHUB_ENV"
+          N=$(gh release view game-content --repo "$GITHUB_REPOSITORY" --json assets --jq '(.assets | length)' 2>/dev/null || echo 0)
+          [ "$N" -gt 0 ] 2>/dev/null || { echo "::notice::no content assets on draft release game-content — booting skeleton-only"; exit 0; }
+          echo "CONTENT=pack" >> "$GITHUB_ENV"
+          echo "content assets: $N"
+          gh release view game-content --repo "$GITHUB_REPOSITORY" \
+            --jq '.assets[] | "  \(.name)  \((.size / 1073741824 * 100 | round) / 100)GB"'
+          rm -rf "$HOME/csgo-dl" "$HOME/csgo-content" && mkdir -p "$HOME/csgo-dl" "$HOME/csgo-content"
+          T0=$SECONDS
+          gh release download game-content --repo "$GITHUB_REPOSITORY" --dir "$HOME/csgo-dl" --pattern '*' --clobber
+          echo "download: $((SECONDS - T0))s"
+          cd "$HOME/csgo-dl"
+          for f in *; do
+            case "$f" in
+              *.zip)                unzip -q -o "$f" -d "$HOME/csgo-content" ;;
+              *.tar.gz|*.tgz)       tar xzf "$f" -C "$HOME/csgo-content" ;;
+              *.tar)                tar xf  "$f" -C "$HOME/csgo-content" ;;
+              *.7z)                 (command -v 7z >/dev/null && 7z x -y -o"$HOME/csgo-content" "$f" >/dev/null) || { echo "::error::.7z asset but no 7z on runner — upload .zip instead"; exit 1; } ;;
+              *)                    echo "::warning::unknown asset type skipped: $f" ;;
+            esac
+          done
+          # normalize: accept either a zip of the csgo/ folder CONTENTS or a
+          # zip of the folder itself (single top-level csgo/ entry)
+          SRC=""
+          [ -d "$HOME/csgo-content/cstrike" ] && SRC="$HOME/csgo-content"
+          [ -z "$SRC" ] && [ -d "$HOME/csgo-content/csgo/cstrike" ] && SRC="$HOME/csgo-content/csgo"
+          if [ -z "$SRC" ]; then
+            echo "::error::no cstrike/ directory found in content archive"
+            find "$HOME/csgo-content" -maxdepth 2 | head -25
+            exit 1
+          fi
+          echo "SRC=$SRC" >> "$GITHUB_ENV"
+          echo "content root: $SRC ($(du -sh "$SRC" | cut -f1))"
+          ls "$SRC" | head -25
+
       - name: Build APKs (system EGL, both ABIs)
         run: |
           mkdir -p android/out
@@ -727,6 +772,24 @@ jobs:
           done
           [ "$OK" = "1" ] || { echo "::error::APK install failed"; "$ADB" -s emulator-5554 logcat -d > logcat_boot.txt || true; exit 1; }
           "$ADB" -s emulator-5554 shell settings put global window_animation_scale 0 || true
+          # --- part 0: stage game content into the app sandbox (once; the
+          # same filesDir serves the later native/arm64/swiftshader stages) ---
+          if [ "${CONTENT:-none}" = "pack" ]; then
+            [ -n "${SRC:-}" ] || { echo "::error::CONTENT=pack but SRC unset"; exit 1; }
+            T0=$SECONDS
+            "$ADB" -s emulator-5554 shell "rm -rf /data/local/tmp/csarm_a" || true
+            "$ADB" -s emulator-5554 push "$SRC" /data/local/tmp/csarm_a
+            "$ADB" -s emulator-5554 shell "run-as com.csarm.port sh -c 'mkdir -p files/cstrike && cp -r /data/local/tmp/csarm_a/. files/cstrike/'" \
+              || { echo "::error::run-as content copy failed (debuggable manifest?)"; exit 1; }
+            "$ADB" -s emulator-5554 shell "rm -rf /data/local/tmp/csarm_a" || true
+            echo "=== staged content: files/cstrike ==="
+            "$ADB" -s emulator-5554 shell "run-as com.csarm.port sh -c 'ls files/cstrike'" | head -25
+            echo "=== mod subtree: files/cstrike/cstrike ==="
+            "$ADB" -s emulator-5554 shell "run-as com.csarm.port sh -c 'ls files/cstrike/cstrike | head -20'" || true
+            echo "content staged in $((SECONDS - T0))s"
+          else
+            echo "CONTENT=none — engine boots on the asset skeleton only"
+          fi
           # --- part 1: dlopen smoke test (MainActivity) ---
           "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.MainActivity || true
           sleep 8
