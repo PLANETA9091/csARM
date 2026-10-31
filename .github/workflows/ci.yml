@@ -268,6 +268,13 @@ jobs:
       - name: Install pyelftools (reachability gate)
         run: python3 -m pip install --quiet --user pyelftools
 
+      - name: Cache SDL2/FreeType/protoc builds (skip recompile when unchanged)
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: link-toolchain-${{ matrix.abi }}-${{ hashFiles('build/setup_sdl2.sh', 'build/setup_freetype.sh') }}
+          restore-keys: link-toolchain-${{ matrix.abi }}-
+
       - name: Build SDL2 static lib
         run: |
           if [ "${{ matrix.abi }}" = "x86_64" ]; then
@@ -678,6 +685,13 @@ jobs:
           while [ $SECONDS -lt $LIMIT ]; do
             "$ADB" -s emulator-5554 logcat -d > logcat_boot.txt 2>/dev/null || true
             grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_boot.txt && break
+            # crash-loop fast-fail: the tier0 exit interposer tags every clean
+            # process exit with CSARM_EXIT_HIT; Android then restarts the
+            # activity (backtrace available in the log).  6+ hits without a
+            # progress marker means static-init is crash-looping — stop early
+            # instead of burning the full 600s window (runs 41215315729 /
+            # 41219950401 wasted 2x10min exactly here).
+            [ "$(grep -c CSARM_EXIT_HIT logcat_boot.txt 2>/dev/null || echo 0)" -ge 6 ] && { echo "crash-loop detected (6x CSARM_EXIT_HIT) — stopping wait early"; break; }
             kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died during engine test"; break; }
             sleep 5
           done
@@ -728,6 +742,8 @@ jobs:
           while [ $SECONDS -lt $LIMIT ]; do
             "$ADB" -s emulator-5554 logcat -d > logcat_sw.txt 2>/dev/null || true
             grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_sw.txt && break
+            # crash-loop fast-fail — see the x86_64 boot loop above
+            [ "$(grep -c CSARM_EXIT_HIT logcat_sw.txt 2>/dev/null || echo 0)" -ge 6 ] && { echo "crash-loop detected (6x CSARM_EXIT_HIT) — stopping wait early"; break; }
             kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died during sw test"; break; }
             sleep 5
           done
