@@ -147,3 +147,12 @@ int shm_unlink(const char *name) { (void)name; return -1; }
 #ifdef __cplusplus
 }
 #endif
+
+// ---------------------------------------------------------------------------
+// UTIL_IsDedicatedServer — the particles lib queries it once at init; the
+// real definition lives in the engine (layering violation to depend on it
+// from libparticles).  false = game client path.
+bool UTIL_IsDedicatedServer()
+{
+    return false;
+}
