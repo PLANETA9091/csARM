@@ -70,7 +70,15 @@ diff --git a/appframework/AppSystemGroup.cpp b/appframework/AppSystemGroup.cpp
  			Warning( "Unable to load interface %s from %s, requested from EXE.\n", pSystemList->m_pInterfaceName, pSystemList->m_pModuleName );
  			return false;
  		}
-@@ -810,33 +813,57 @@
+@@ -337,6 +340,7 @@
+ 		if (pInterface)
+ 			return pInterface;
+ 	}
++	CSARM_LOGI( "FindSystem MISS %s: systems=%d parent=%p", pSystemName, (int)m_Systems.Count(), (void*)m_pParentAppSystem );
+ 
+ 	int nExternalCount = m_NonAppSystemFactories.Count();
+ 	for ( i = 0; i < nExternalCount; ++i )
+@@ -810,33 +814,57 @@
  
  	// Call an installed application creation function
  	m_nCurrentStage = CREATION;
@@ -140,15 +148,21 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  #include "engine_launcher_api.h"
  #include "ifilesystem.h"
  #include "tier1/interface.h"
-@@ -710,6 +711,7 @@
+@@ -710,11 +711,13 @@
  bool CSourceAppSystemGroup::Create()
  {
  	COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );
-+	CSARM_LOGI( "CSourceAppSystemGroup::Create enter" );
++	CSARM_LOGI( "CSourceAppSystemGroup::Create enter (parent=%p)", (void*)m_pParentAppSystem );
  
  	double start, elapsed;
  	start = Plat_FloatTime();
-@@ -736,14 +738,25 @@
+ 
+ 	IFileSystem *pFileSystem = (IFileSystem*)FindSystem( FILESYSTEM_INTERFACE_VERSION );
++	CSARM_LOGI( "Create: FindSystem(fs)=%p", (void*)pFileSystem );
+ 	pFileSystem->InstallDirtyDiskReportFunc( ReportDirtyDiskNoMaterialSystem );
+ 
+ #ifdef WIN32
+@@ -736,14 +739,25 @@
  		{ LAUNCHER_APPSYSTEM( "filesystem_stdio" ),		XBOXINSTALLER_INTERFACE_VERSION },
  #endif
  		{ LAUNCHER_APPSYSTEM( "inputsystem" ),			INPUTSYSTEM_INTERFACE_VERSION },
@@ -174,7 +188,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  #ifdef WIN32
  		{ LAUNCHER_APPSYSTEM("soundsystem"),			SOUNDSYSTEM_INTERFACE_VERSION },
  #endif
-@@ -763,7 +776,11 @@
+@@ -763,7 +777,11 @@
  #endif
  		// NOTE: This has to occur before vgui2.dll so it replaces vgui2's surface implementation
  		{ LAUNCHER_APPSYSTEM( "vguimatsurface" ),		VGUI_SURFACE_INTERFACE_VERSION },
@@ -186,7 +200,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  		{ LAUNCHER_APPSYSTEM( "engine" ),				VENGINE_LAUNCHER_API_VERSION },
  
  		{ "", "" }					// Required to terminate the list
-@@ -776,7 +793,11 @@
+@@ -776,7 +794,11 @@
  #endif
  
  	if ( !AddSystems( appSystems ) ) 
@@ -198,7 +212,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  	// SF4 TODO
  	// Windows - See if we need to launch SF4 instead of SF3
-@@ -879,6 +900,7 @@
+@@ -879,6 +901,7 @@
  
  bool CSourceAppSystemGroup::PreInit()
  {
@@ -206,7 +220,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  	CreateInterfaceFn factory = GetFactory();
  	ConnectTier1Libraries( &factory, 1 );
  	ConVar_Register( );
-@@ -886,7 +908,10 @@
+@@ -886,7 +909,10 @@
  	ConnectTier3Libraries( &factory, 1 );
  
  	if ( !g_pFullFileSystem || !g_pMaterialSystem )
@@ -217,7 +231,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #ifdef _PS3
  	g_pVJobs = ( IVJobs* )factory( VJOBS_INTERFACE_VERSION, NULL );  // this is done only once; g_pVJobs doesn't change even after multiple reloads of VJobs.prx
-@@ -907,14 +932,20 @@
+@@ -907,14 +933,20 @@
  		}
  	}
  	if ( FileSystem_SetupSteamEnvironment( steamInfo ) != FS_OK )
@@ -238,7 +252,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #if defined( SUPPORT_VPK )
  	Msg( "start timing %f\n", Plat_FloatTime() );
-@@ -963,11 +994,13 @@
+@@ -963,11 +995,13 @@
  	info.m_pParentAppSystemGroup = this;
  	info.m_bTextMode = g_bTextMode;
  
@@ -252,7 +266,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  	return g_pEngineAPI->Run();
  }
  
-@@ -1879,6 +1912,7 @@
+@@ -1879,6 +1913,7 @@
  		int nRetval = ValveCocoaMain( &steamApplication ); 
  #else
  		int nRetval = steamApplication.Run();

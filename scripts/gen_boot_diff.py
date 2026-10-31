@@ -119,6 +119,20 @@ pairs.append((
     + T + '\treturn -1;\n'
     + T + '}\n'))
 
+# FindSystem diagnostics: log state whenever the dict+QueryInterface lookups
+# both miss (the parent-chain lookup follows).  Run 41145122796: materialsystem
+# Connect() saw a NULL filesystem through this path.
+pairs.append((
+    T + T + 'void *pInterface = m_Systems[i]->QueryInterface( pSystemName );\n'
+    + T + T + 'if (pInterface)\n'
+    + T + T + T + 'return pInterface;\n'
+    + T + '}\n',
+    T + T + 'void *pInterface = m_Systems[i]->QueryInterface( pSystemName );\n'
+    + T + T + 'if (pInterface)\n'
+    + T + T + T + 'return pInterface;\n'
+    + T + '}\n'
+    + T + 'CSARM_LOGI( "FindSystem MISS %s: systems=%d parent=%p", pSystemName, (int)m_Systems.Count(), (void*)m_pParentAppSystem );\n'))
+
 orig = text
 text = apply(text, 'appsys.cpp', pairs)
 out.append(unified(orig, text, 'appframework/AppSystemGroup.cpp'))
@@ -160,7 +174,14 @@ pairs.append((
 pairs.append((
     T + 'COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );\n',
     T + 'COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );\n'
-    + T + 'CSARM_LOGI( "CSourceAppSystemGroup::Create enter" );\n'))
+    + T + 'CSARM_LOGI( "CSourceAppSystemGroup::Create enter (parent=%p)", (void*)m_pParentAppSystem );\n'))
+
+pairs.append((
+    T + 'IFileSystem *pFileSystem = (IFileSystem*)FindSystem( FILESYSTEM_INTERFACE_VERSION );\n'
+    + T + 'pFileSystem->InstallDirtyDiskReportFunc( ReportDirtyDiskNoMaterialSystem );\n',
+    T + 'IFileSystem *pFileSystem = (IFileSystem*)FindSystem( FILESYSTEM_INTERFACE_VERSION );\n'
+    + T + 'CSARM_LOGI( "Create: FindSystem(fs)=%p", (void*)pFileSystem );\n'
+    + T + 'pFileSystem->InstallDirtyDiskReportFunc( ReportDirtyDiskNoMaterialSystem );\n'))
 
 pairs.append((
     T + 'if ( !AddSystems( appSystems ) ) \n'
