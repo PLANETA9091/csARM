@@ -360,6 +360,36 @@ orig = text
 text = apply(text, 'jobthread.cpp', pairs)
 out.append(unified(orig, text, 'vstdlib/jobthread.cpp'))
 
+# ---------------------------------------------------------------- descriptor.cc
+# protobuf 2.5.0 DescriptorPool::InternalAddGeneratedFile GOOGLE_CHECKs the
+# EncodedDescriptorDatabase::Add result.  Valve's build links protobuf
+# STATICALLY into every DLL — each DLL owns a private descriptor pool and the
+# same file registered twice never meets.  Our libprotobuf.so is SHARED, so
+# engine/client/server all register the same generated files into ONE pool
+# and the second registration trips the GOOGLE_CHECK -> LogMessage FATAL ->
+# Plat_ExitProcess(0) — the clean exit(0) that killed the boot at
+# System.loadLibrary("client") (run 41211027894: backtrace
+# protobuf_AddDesc_base_5fgcmessages -> InternalAddGeneratedFile ->
+# LogMessage::Finish -> Plat_ExitProcess).
+text = open(os.path.join(tmp, 'descriptor.cc')).read()
+pairs = []
+pairs.append((
+    '  InitGeneratedPoolOnce();\n'
+    '  GOOGLE_CHECK(generated_database_->Add(encoded_file_descriptor, size));\n'
+    '}\n',
+    '  InitGeneratedPoolOnce();\n'
+    '  // csARM: one shared libprotobuf.so serves every module; each module\'s\n'
+    '  // generated AddDescriptors() re-registers the same files.  Valve\'s\n'
+    '  // per-DLL static protobuf never saw this — re-registration is a no-op.\n'
+    '  if ( !generated_database_->Add( encoded_file_descriptor, size ) )\n'
+    '  {\n'
+    '    return;\n'
+    '  }\n'
+    '}\n'))
+orig = text
+text = apply(text, 'descriptor.cc', pairs)
+out.append(unified(orig, text, 'thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc'))
+
 # ---------------------------------------------------------------- write
 NEW_FILE_HUNK = ('diff --git a/common/csarm_log.h b/common/csarm_log.h\n'
                  'new file mode 100644\n'

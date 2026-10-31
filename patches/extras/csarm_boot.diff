@@ -373,3 +373,22 @@ diff --git a/vstdlib/jobthread.cpp b/vstdlib/jobthread.cpp
  
  #ifdef WIN32
  			Assert( !m_Threads[i]->GetThreadHandle() );
+
+diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc
+@@ -951,7 +951,13 @@
+   // any descriptor-based operations, since this might cause infinite recursion
+   // or deadlock.
+   InitGeneratedPoolOnce();
+-  GOOGLE_CHECK(generated_database_->Add(encoded_file_descriptor, size));
++  // csARM: one shared libprotobuf.so serves every module; each module's
++  // generated AddDescriptors() re-registers the same files.  Valve's
++  // per-DLL static protobuf never saw this — re-registration is a no-op.
++  if ( !generated_database_->Add( encoded_file_descriptor, size ) )
++  {
++    return;
++  }
+ }
+ 
+ 
