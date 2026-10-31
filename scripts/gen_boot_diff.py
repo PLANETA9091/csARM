@@ -174,7 +174,7 @@ pairs.append((
 pairs.append((
     T + 'COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );\n',
     T + 'COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );\n'
-    + T + 'CSARM_LOGI( "CSourceAppSystemGroup::Create enter );\n'))
+    + T + 'CSARM_LOGI( "CSourceAppSystemGroup::Create enter" );\n'))
 
 pairs.append((
     T + 'IFileSystem *pFileSystem = (IFileSystem*)FindSystem( FILESYSTEM_INTERFACE_VERSION );\n'
