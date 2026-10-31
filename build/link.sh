@@ -123,6 +123,10 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_soundsystem.cpp.o" "$SCRIPT_DI
 # BSP lump globals for raytrace/trace3.cpp tool-only paths (see glue_bsp.cpp)
 BSPGLUE_O=""
 $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_bsp.cpp.o" "$SCRIPT_DIR/glue_bsp.cpp" 2>>"$LOG" && BSPGLUE_O="$OUTDIR/glue_bsp.cpp.o"
+# particles glue: UTIL_IsDedicatedServer (engine-layered; the game DLLs carry
+# their own definitions — keep the stub OUT of the shared glue objects)
+PARTGLUE_O=""
+$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_particles.cpp.o" "$SCRIPT_DIR/glue_particles.cpp" 2>>"$LOG" && PARTGLUE_O="$OUTDIR/glue_particles.cpp.o"
 # GCSDK stub: public/gcsdk ships headers only (the .cpp implementations live in
 # the Steam SDK).  game DLLs reference GCSDK::CJob/CSharedObject/CProtoBufMsg*,
 # so provide no-op out-of-line definitions with EXACT signatures from the real
@@ -535,8 +539,9 @@ link_so() {
     libinputsystem.so|libvgui_controls.so)
       [ -n "$STEAM_O" ] && { objs+=("$STEAM_O"); total=$((total+1)); } ;;
     libparticles.so)
-      # particles.cpp calls UTIL_IsDedicatedServer (engine-layered — stubbed)
-      [ -n "$GLUE_O" ] && { objs+=("$GLUE_O"); total=$((total+1)); } ;;
+      # particles.cpp calls UTIL_IsDedicatedServer (engine-layered — stubbed;
+      # a particles-only glue because the game DLLs define it themselves)
+      [ -n "$PARTGLUE_O" ] && { objs+=("$PARTGLUE_O"); total=$((total+1)); } ;;
     libraytrace.so)
       # trace3.cpp references the bspfile lump globals (tool-only paths)
       [ -n "$BSPGLUE_O" ] && { objs+=("$BSPGLUE_O"); total=$((total+1)); } ;;
