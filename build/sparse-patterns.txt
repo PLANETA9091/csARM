@@ -54,3 +54,4 @@
 /utils/bzip2/
 /particles/
 /raytrace/
+/resourcefile/
