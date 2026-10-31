@@ -5,3 +5,4 @@ mathlib/femodel.cpp
 mathlib/femodeldesc.cpp
 mathlib/softbody.cpp
 mathlib/softbodyenvironment.cpp
+resourcefile/resourcestream.cpp

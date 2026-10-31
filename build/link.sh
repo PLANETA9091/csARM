@@ -125,9 +125,7 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_soundsystem.cpp.o" "$SCRIPT_DI
 # so provide no-op out-of-line definitions with EXACT signatures from the real
 # headers — sizes/vtables then match, and dlopen relocations resolve.
 GCS_O=""
-GCSINC="-I c15 -I c15/public -I c15/public/tier0 -I c15/public/tier1 -I c15/public/tier2 \
- -I c15/gcsdk -I c15/gcsdk/steamextra/tier1 -I c15/gcsdk/steamextra \
- -I c15/thirdparty/protobuf-2.5.0/src -I $R/thirdparty/pb25shim -I genproto -I c15/common"
+GCSINC="-I "$SCRIPT_DIR/glshim" -I "$SCRIPT_DIR/fontconfig_shim" -I c15/thirdparty/protobuf-2.5.0/src -I "$R/thirdparty/pb25shim" -I c15 -I c15/public -I c15/public/tier0 -I c15/public/tier1 -I c15/public/tier2 -I c15/common -I c15/tier0 -I c15/tier1 -I c15/tier2 -I c15/vstdlib -I c15/mathlib -I c15/thirdparty/telemetry/include -I c15/thirdparty -I c15/public/mathlib -I c15/external -I c15/public/steam -I c15/thirdparty/SDL2 -I c15/thirdparty/sse2neon -I genproto -I c15/gcsdk -I c15/gcsdk/steamextra/tier1 -I c15/gcsdk/steamextra -I c15/game/shared -I c15/game/shared/cstrike15 -I c15/game/shared/econ -I c15/game/server/cstrike15 -I c15/engine/audio/public -I c15/engine/audio -I c15/engine/audio/private -I c15/external/crypto++-5.61 -I c15/thirdparty/quickhull -I c15/engine -I c15/soundemittersystem -I c15/public/vgui_controls -I c15/game/client/cstrike15 -I c15/game/client/cstrike15/gameui -I c15/game/client/cstrike15/Scaleform -I c15/game/client/game_controls"
 GCSDEF="-DPOSIX=1 -D_LINUX=1 -DLINUX=1 -DGNUC=1 -D_POSIX=1 -D__ANDROID__=1 -DANDROID=1 \
  -DX64BITS -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1 -DUSE_SDL=1 -DENGINE_DLL=1 \
  -Dstricmp=strcasecmp -D_stricmp=strcasecmp -Dstrnicmp=strncasecmp -D_strnicmp=strncasecmp \

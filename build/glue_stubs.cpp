@@ -113,3 +113,37 @@ void CCSFatDemoRecorder::OnTickPre( int tickcount )
 {
     (void)tickcount;
 }
+
+// fatdemo.cpp cannot be compiled on this branch (its MatchLogic ML* classes
+// are absent from the mirror), but the client references the recorder's
+// global pointer as well as the OnTickPre member stubbed above.
+CCSFatDemoRecorder *g_pFatDemoRecorder = nullptr;
+
+// ---------------------------------------------------------------------------
+// libjpeg decompress half — the client decodes JPEG textures; the engine
+// side (screenshot compress) is stubbed in glue_engine.cpp.  No libjpeg on
+// Android: return failure so the texture system falls back to error mats.
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void jpeg_CreateDecompress(void *cinfo, int version, size_t structsize)
+{ (void)cinfo; (void)version; (void)structsize; }
+void jpeg_start_decompress(void *cinfo) { (void)cinfo; }
+void jpeg_finish_decompress(void *cinfo) { (void)cinfo; }
+void jpeg_destroy_decompress(void *cinfo) { (void)cinfo; }
+int  jpeg_read_header(void *cinfo, void *infile) { (void)cinfo; (void)infile; return 0; }
+void jpeg_read_scanlines(void *cinfo, unsigned char **scanlines, unsigned int max_lines)
+{ (void)cinfo; (void)scanlines; (void)max_lines; }
+void jpeg_stdio_src(void *cinfo, void *infile) { (void)cinfo; (void)infile; }
+
+// POSIX shared memory (engine mmap helpers) — report unsupported
+#include <sys/types.h>
+#include <fcntl.h>
+int shm_open(const char *name, int oflag, mode_t mode)
+{ (void)name; (void)oflag; (void)mode; return -1; }
+int shm_unlink(const char *name) { (void)name; return -1; }
+
+#ifdef __cplusplus
+}
+#endif
