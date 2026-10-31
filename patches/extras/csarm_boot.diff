@@ -152,7 +152,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  bool CSourceAppSystemGroup::Create()
  {
  	COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );
-+	CSARM_LOGI( "CSourceAppSystemGroup::Create enter (parent=%p)", (void*)m_pParentAppSystem );
++	CSARM_LOGI( "CSourceAppSystemGroup::Create enter (parent=%p)", (void*)GetParent() );
  
  	double start, elapsed;
  	start = Plat_FloatTime();
