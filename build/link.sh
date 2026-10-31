@@ -127,6 +127,9 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_bsp.cpp.o" "$SCRIPT_DIR/glue_b
 # their own definitions — keep the stub OUT of the shared glue objects)
 PARTGLUE_O=""
 $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_particles.cpp.o" "$SCRIPT_DIR/glue_particles.cpp" 2>>"$LOG" && PARTGLUE_O="$OUTDIR/glue_particles.cpp.o"
+# exit() interposer (boot diagnosis — see glue_exit.cpp)
+EXITGLUE_O=""
+$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_exit.cpp.o" "$SCRIPT_DIR/glue_exit.cpp" 2>>"$LOG" && EXITGLUE_O="$OUTDIR/glue_exit.cpp.o"
 # GCSDK stub: public/gcsdk ships headers only (the .cpp implementations live in
 # the Steam SDK).  game DLLs reference GCSDK::CJob/CSharedObject/CProtoBufMsg*,
 # so provide no-op out-of-line definitions with EXACT signatures from the real
@@ -548,7 +551,8 @@ link_so() {
     libmaterialsystem.so)
       [ -n "$GLUE_MS_O" ] && { objs+=("$GLUE_MS_O"); total=$((total+1)); } ;;
     libtier0.so|libtier1.so)
-      [ -n "$XSTAT_O" ] && { objs+=("$XSTAT_O"); total=$((total+1)); } ;;
+      [ -n "$XSTAT_O" ] && { objs+=("$XSTAT_O"); total=$((total+1)); }
+      [ "$name" = "libtier0.so" ] && [ -n "$EXITGLUE_O" ] && { objs+=("$EXITGLUE_O"); total=$((total+1)); } ;;
     libbzip2.so)
       [ -n "$BZGLUE_O" ] && { objs+=("$BZGLUE_O"); total=$((total+1)); } ;;
   esac
