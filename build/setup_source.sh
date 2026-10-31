@@ -98,7 +98,7 @@ fi
 # engine/sys_dll2.cpp overlaps, and the boot hunks there sit in regions
 # all_patches never modifies) to pristine, drop the generated header, and
 # apply the current revision cleanly.
-BOOT_PRISTINE="engine/sys_engine.cpp appframework/AppSystemGroup.cpp launcher/launcher.cpp engine/sys_dll2.cpp appframework/sdlmgr.cpp public/tier0/threadtools.inl vstdlib/jobthread.cpp thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc"
+BOOT_PRISTINE="engine/sys_engine.cpp appframework/AppSystemGroup.cpp launcher/launcher.cpp engine/sys_dll2.cpp appframework/sdlmgr.cpp public/tier0/threadtools.inl vstdlib/jobthread.cpp thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc"
 if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_boot.diff" 2>/dev/null; then
   echo "csarm_boot.diff already applied"
 else

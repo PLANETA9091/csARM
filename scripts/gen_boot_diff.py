@@ -9,6 +9,8 @@ Reads:  $TMP/appsys.cpp       (c15 appframework/AppSystemGroup.cpp)
         $TMP/sdlmgr.cpp       (c15 appframework/sdlmgr.cpp)
         $TMP/threadtools.inl  (c15 public/tier0/threadtools.inl)
         $TMP/jobthread.cpp    (c15 vstdlib/jobthread.cpp)
+        $TMP/descriptor.cc    (c15 thirdparty/protobuf-2.5.0 .../descriptor.cc)
+        $TMP/message.cc       (c15 thirdparty/protobuf-2.5.0 .../message.cc)
 Writes: $REPO/patches/extras/csarm_boot.diff  (sys_engine hunk is preserved)
 
 Valve sources are TAB-indented — every anchor below uses explicit \t escapes.
@@ -389,6 +391,62 @@ pairs.append((
 orig = text
 text = apply(text, 'descriptor.cc', pairs)
 out.append(unified(orig, text, 'thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc'))
+
+# ---------------------------------------------------------------- message.cc
+# protobuf 2.5.0 MessageFactory::InternalRegisterGeneratedFile ->
+# GeneratedMessageFactory::RegisterFile GOOGLE_LOG(FATAL)s on duplicate file
+# registration ("File is already registered"), and RegisterType DFATALs on
+# duplicate types.  With the SHARED libprotobuf.so the same generated pb.cc
+# is embedded in engine, client AND server — the first duplicate file kills
+# the process with a clean exit(0) via the tier0 exit interposer (run
+# 41215315729: protobuf_AddDesc_base_5fgcmessages ->
+# protobuf_AddDesc_steammessages -> InternalRegisterGeneratedFile ->
+# LogMessage::Finish -> exit(0), the boot never reached LauncherMain).
+# Valve's STATIC per-DLL protobuf never hit this.  Make both a no-op:
+# first module wins, identical generated types are reused.
+text = open(os.path.join(tmp, 'message.cc')).read()
+pairs = []
+pairs.append((
+    'void GeneratedMessageFactory::RegisterFile(\n'
+    '    const char* file, RegistrationFunc* registration_func) {\n'
+    '  if (!InsertIfNotPresent(&file_map_, file, registration_func)) {\n'
+    '    GOOGLE_LOG(FATAL) << "File is already registered: " << file;\n'
+    '  }\n'
+    '}\n',
+    'void GeneratedMessageFactory::RegisterFile(\n'
+    '    const char* file, RegistrationFunc* registration_func) {\n'
+    '  // csARM: one shared libprotobuf.so serves every module; engine, client\n'
+    '  // and server each embed the same generated pb.cc and register the same\n'
+    '  // files into the SINGLE factory singleton.  Valve links protobuf STATIC\n'
+    '  // per-DLL so every DLL owned a private factory and never met the\n'
+    '  // duplicate.  GOOGLE_LOG(FATAL) here killed the boot at\n'
+    '  // System.loadLibrary("client") with a clean exit(0) (run 41215315729:\n'
+    '  // protobuf_AddDesc_base_5fgcmessages -> protobuf_AddDesc_steammessages\n'
+    '  // -> InternalRegisterGeneratedFile -> LogMessage::Finish -> exit(0)).\n'
+    '  // First module wins; later registrations are a no-op.\n'
+    '  if (!InsertIfNotPresent(&file_map_, file, registration_func))\n'
+    '  {\n'
+    '    return;\n'
+    '  }\n'
+    '}\n'))
+pairs.append((
+    '  mutex_.AssertHeld();\n'
+    '  if (!InsertIfNotPresent(&type_map_, descriptor, prototype)) {\n'
+    '    GOOGLE_LOG(DFATAL) << "Type is already registered: " << descriptor->full_name();\n'
+    '  }\n'
+    '}\n',
+    '  mutex_.AssertHeld();\n'
+    '  // csARM: see RegisterFile above — duplicate type registration (shared\n'
+    '  // libprotobuf.so, NDEBUG not defined so DFATAL == FATAL) must not kill\n'
+    '  // the process; first module wins.\n'
+    '  if (!InsertIfNotPresent(&type_map_, descriptor, prototype))\n'
+    '  {\n'
+    '    return;\n'
+    '  }\n'
+    '}\n'))
+orig = text
+text = apply(text, 'message.cc', pairs)
+out.append(unified(orig, text, 'thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc'))
 
 # ---------------------------------------------------------------- write
 NEW_FILE_HUNK = ('diff --git a/common/csarm_log.h b/common/csarm_log.h\n'

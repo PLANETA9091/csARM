@@ -392,3 +392,42 @@ diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc b/third
  }
  
  
+diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc
+@@ -276,8 +276,18 @@
+ 
+ void GeneratedMessageFactory::RegisterFile(
+     const char* file, RegistrationFunc* registration_func) {
+-  if (!InsertIfNotPresent(&file_map_, file, registration_func)) {
+-    GOOGLE_LOG(FATAL) << "File is already registered: " << file;
++  // csARM: one shared libprotobuf.so serves every module; engine, client
++  // and server each embed the same generated pb.cc and register the same
++  // files into the SINGLE factory singleton.  Valve links protobuf STATIC
++  // per-DLL so every DLL owned a private factory and never met the
++  // duplicate.  GOOGLE_LOG(FATAL) here killed the boot at
++  // System.loadLibrary("client") with a clean exit(0) (run 41215315729:
++  // protobuf_AddDesc_base_5fgcmessages -> protobuf_AddDesc_steammessages
++  // -> InternalRegisterGeneratedFile -> LogMessage::Finish -> exit(0)).
++  // First module wins; later registrations are a no-op.
++  if (!InsertIfNotPresent(&file_map_, file, registration_func))
++  {
++    return;
+   }
+ }
+ 
+@@ -291,8 +301,12 @@
+   // function during GetPrototype(), in which case we already have locked
+   // the mutex.
+   mutex_.AssertHeld();
+-  if (!InsertIfNotPresent(&type_map_, descriptor, prototype)) {
+-    GOOGLE_LOG(DFATAL) << "Type is already registered: " << descriptor->full_name();
++  // csARM: see RegisterFile above — duplicate type registration (shared
++  // libprotobuf.so, NDEBUG not defined so DFATAL == FATAL) must not kill
++  // the process; first module wins.
++  if (!InsertIfNotPresent(&type_map_, descriptor, prototype))
++  {
++    return;
+   }
+ }
+ 
