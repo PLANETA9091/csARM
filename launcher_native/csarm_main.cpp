@@ -152,7 +152,8 @@ static const char *kModules[] = {
     "inputsystem", "launcher", "filesystem_stdio", "engine", "client", "server",
     "bzip2", "tier3", "dmxloader", "bitmap", "vtf", "shaderlib", "scenefilecache",
     "soundsystem", "soundsystem_lowlevel", "matsys_controls", "videocfg", "vpklib",
-    "bonesetup", "choreo", "cryptopp", "quickhull", "localize", nullptr
+    "bonesetup", "choreo", "cryptopp", "quickhull", "localize",
+    "particles", "raytrace", "shaderapiempty", nullptr
 };
 
 static std::string nativeLibDir()
@@ -213,13 +214,17 @@ extern "C" int SDL_main(int argc, char *argv[])
     readArgsFile((filesDir + "/csarm.args").c_str(), args);
     if (args.empty())
     {
-        // fast-boot defaults: no intro, windowed, multithreaded engine
+        // fast-boot defaults: no intro, windowed, multithreaded engine.
+        // -noshaderapi: the launcher then loads shaderapiempty.so (stubs the
+        // shader device interfaces) — no NULL shader-API factory crash in
+        // CMaterialSystem::Connect until the real ToGL renderer is ported.
         args.push_back("-novid");
         args.push_back("-windowed");
         args.push_back("-w");  args.push_back("1280");
         args.push_back("-h");  args.push_back("720");
         args.push_back("-nobreakpad");
         args.push_back("-nojoy");
+        args.push_back("-noshaderapi");
         args.push_back("-basedir");
         args.push_back(filesDir);
         args.push_back("-game");

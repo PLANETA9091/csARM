@@ -42,7 +42,7 @@ jobs:
             defs: ""
           - abi: arm64-v8a
             tag: render
-            modules: "materialsystem/materialsystem.vpc materialsystem/shaderlib/shaderlib.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
+            modules: "materialsystem/materialsystem.vpc materialsystem/shaderlib/shaderlib.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc particles/particles.vpc raytrace/raytrace.vpc"
             defs: ""
           - abi: arm64-v8a
             tag: vgui
@@ -50,11 +50,11 @@ jobs:
             defs: ""
           - abi: arm64-v8a
             tag: data
-            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt tier3/tier3.vpc dmxloader/dmxloader.vpc bitmap/bitmap.vpc vtf/vtf.vpc scenefilecache/scenefilecache.vpc interfaces/interfaces.vpc vpklib/vpklib.vpc bonesetup/bonesetup.vpc lists/choreo.txt lists/mathlib_extra.txt soundsystem/soundsystem.vpc soundsystem/lowlevel/soundsystem_lowlevel.vpc"
+            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt tier3/tier3.vpc dmxloader/dmxloader.vpc bitmap/bitmap.vpc vtf/vtf.vpc scenefilecache/scenefilecache.vpc interfaces/interfaces.vpc vpklib/vpklib.vpc bonesetup/bonesetup.vpc lists/choreo.txt lists/mathlib_extra.txt soundsystem/soundsystem.vpc soundsystem/lowlevel/soundsystem_lowlevel.vpc materialsystem/shaderapiempty/shaderapiempty.vpc"
             defs: ""
           - abi: arm64-v8a
             tag: client
-            modules: "game/client/client_cstrike15.vpc"
+            modules: "game/client/client_cstrike15.vpc lists/client_shared.txt"
             defs: "DCLIENT_DLL=1 DCSTRIKE_CLIENT_DLL=1 DCSTRIKE_DLL=1 DCSTRIKE15=1 DGAMEUI_EMBEDDED=1 DGAMEUI_EXPORTS=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DUSE_ECONOMY_FEATURES=1"
           - abi: arm64-v8a
             tag: server
@@ -82,7 +82,7 @@ jobs:
             defs: ""
           - abi: x86_64
             tag: render
-            modules: "materialsystem/materialsystem.vpc materialsystem/shaderlib/shaderlib.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc"
+            modules: "materialsystem/materialsystem.vpc materialsystem/shaderlib/shaderlib.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc particles/particles.vpc raytrace/raytrace.vpc"
             defs: ""
           - abi: x86_64
             tag: vgui
@@ -90,11 +90,11 @@ jobs:
             defs: ""
           - abi: x86_64
             tag: data
-            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt tier3/tier3.vpc dmxloader/dmxloader.vpc bitmap/bitmap.vpc vtf/vtf.vpc scenefilecache/scenefilecache.vpc interfaces/interfaces.vpc vpklib/vpklib.vpc bonesetup/bonesetup.vpc lists/choreo.txt lists/mathlib_extra.txt soundsystem/soundsystem.vpc soundsystem/lowlevel/soundsystem_lowlevel.vpc"
+            modules: "datacache/datacache.vpc soundemittersystem/soundemittersystem.vpc filesystem/filesystem_stdio.vpc inputsystem/inputsystem.vpc lists/launcher.txt tier3/tier3.vpc dmxloader/dmxloader.vpc bitmap/bitmap.vpc vtf/vtf.vpc scenefilecache/scenefilecache.vpc interfaces/interfaces.vpc vpklib/vpklib.vpc bonesetup/bonesetup.vpc lists/choreo.txt lists/mathlib_extra.txt soundsystem/soundsystem.vpc soundsystem/lowlevel/soundsystem_lowlevel.vpc materialsystem/shaderapiempty/shaderapiempty.vpc"
             defs: ""
           - abi: x86_64
             tag: client
-            modules: "game/client/client_cstrike15.vpc"
+            modules: "game/client/client_cstrike15.vpc lists/client_shared.txt"
             defs: "DCLIENT_DLL=1 DCSTRIKE_CLIENT_DLL=1 DCSTRIKE_DLL=1 DCSTRIKE15=1 DGAMEUI_EMBEDDED=1 DGAMEUI_EXPORTS=1 DVERSION_SAFE_STEAM_API_INTERFACES=1 DUSE_ECONOMY_FEATURES=1"
           - abi: x86_64
             tag: server
@@ -121,7 +121,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v5
+          key: cstrike15-src-v6
 
       - name: Fetch pristine source + apply patches (idempotent, always)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -231,7 +231,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v5
+          key: cstrike15-src-v6
 
       - name: Fetch source + patches (needed for genproto compile and SDL2 headers)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -326,7 +326,7 @@ jobs:
                     out/libfilesystem_stdio.so out/libinputsystem.so \
                     out/libmaterialsystem.so out/libdatacache.so \
                     out/libstudiorender.so out/libsoundemittersystem.so \
-                    out/libvguimatsurface.so out/libvgui.so; do
+                    out/libvguimatsurface.so out/libvgui.so out/libshaderapiempty.so; do
             [ -e "$so" ] || continue
             if ! $NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -W --dyn-syms "$so" \
                  | awk '$7!="UND" && $8=="CreateInterface" {found=1} END{exit !found}'; then
@@ -831,7 +831,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v5
+          key: cstrike15-src-v6
 
       - name: Fetch/refresh source (idempotent)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"

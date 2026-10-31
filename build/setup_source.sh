@@ -98,12 +98,16 @@ fi
 # engine/sys_dll2.cpp overlaps, and the boot hunks there sit in regions
 # all_patches never modifies) to pristine, drop the generated header, and
 # apply the current revision cleanly.
-BOOT_PRISTINE="engine/sys_engine.cpp appframework/AppSystemGroup.cpp launcher/launcher.cpp"
+BOOT_PRISTINE="engine/sys_engine.cpp appframework/AppSystemGroup.cpp launcher/launcher.cpp engine/sys_dll2.cpp appframework/sdlmgr.cpp public/tier0/threadtools.inl vstdlib/jobthread.cpp"
 if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_boot.diff" 2>/dev/null; then
   echo "csarm_boot.diff already applied"
 else
   echo "csarm_boot.diff revision change -> normalizing probe files"
   git checkout -f -- $BOOT_PRISTINE 2>/dev/null || git checkout -- $BOOT_PRISTINE || true
+  # engine/sys_dll2.cpp also carries all_patches hunks (the boot hunks sit in
+  # regions all_patches never modifies) — restore them after the reset so the
+  # boot diff applies on the same state as a fresh clone.
+  git apply --whitespace=nowarn --include=engine/sys_dll2.cpp "$REPO_DIR/patches/all_patches.diff" || { echo "sys_dll2 all_patches RE-APPLY FAILED"; exit 1; }
   rm -f "$SRC/common/csarm_log.h"
   git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_boot.diff" || { echo "csarm_boot.diff APPLY FAILED"; exit 1; }
 fi

@@ -1,2 +1,7 @@
 public/collisionutils.cpp
 public/interpolatortypes.cpp
+mathlib/dynamictree.cpp
+mathlib/femodel.cpp
+mathlib/femodeldesc.cpp
+mathlib/softbody.cpp
+mathlib/softbodyenvironment.cpp

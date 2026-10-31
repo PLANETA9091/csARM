@@ -3,9 +3,12 @@
 engine boot-path probes + the __ANDROID__ appSystems table adjustments.
 
 Usage: gen_boot_diff.py <tmpdir-with-fetched-sources> <repo-root>
-Reads:  $TMP/appsys.cpp   (c15 appframework/AppSystemGroup.cpp)
-        $TMP/launcher.cpp (c15 launcher/launcher.cpp)
-        $TMP/sys_dll2.cpp (c15 engine/sys_dll2.cpp)
+Reads:  $TMP/appsys.cpp       (c15 appframework/AppSystemGroup.cpp)
+        $TMP/launcher.cpp     (c15 launcher/launcher.cpp)
+        $TMP/sys_dll2.cpp     (c15 engine/sys_dll2.cpp)
+        $TMP/sdlmgr.cpp       (c15 appframework/sdlmgr.cpp)
+        $TMP/threadtools.inl  (c15 public/tier0/threadtools.inl)
+        $TMP/jobthread.cpp    (c15 vstdlib/jobthread.cpp)
 Writes: $REPO/patches/extras/csarm_boot.diff  (sys_engine hunk is preserved)
 
 Valve sources are TAB-indented — every anchor below uses explicit \t escapes.
@@ -308,6 +311,54 @@ pairs.append((
 orig = text
 text = apply(text, 'sdlmgr.cpp', pairs)
 out.append(unified(orig, text, 'appframework/sdlmgr.cpp'))
+
+# ---------------------------------------------------------------- threadtools.inl
+# CThread::Join (POSIX): pthread_join on an already-joined pthread_t ABORTS the
+# process on bionic ("invalid pthread_t passed to pthread_join", glibc only
+# returns ESRCH).  CThreadPool::Stop joins the raw zombie handle and the
+# CThread destructor then joins m_threadZombieId a second time.  Consume BOTH
+# handle slots before the join so no second join of the same thread is possible.
+text = open(os.path.join(tmp, 'threadtools.inl')).read()
+pairs = []
+pairs.append((
+    T + T + 'bool ret = ThreadJoin(  (ThreadHandle_t)(m_threadId ? m_threadId : m_threadZombieId), timeout );\n'
+    + T + T + 'm_threadZombieId = 0;\n'
+    + T + T + 'return ret;\n',
+    T + T + '// csARM (bionic): pthread_join of an already-joined handle aborts the\n'
+    + T + T + '// process. Consume both handle slots BEFORE joining so a second\n'
+    + T + T + '// Join()/destructor call can never re-join the same pthread.\n'
+    + T + T + 'ThreadHandle_t hJoin = (ThreadHandle_t)(m_threadId ? m_threadId : m_threadZombieId);\n'
+    + T + T + 'm_threadId = 0;\n'
+    + T + T + 'm_threadZombieId = 0;\n'
+    + T + T + 'if ( !hJoin )\n'
+    + T + T + T + 'return true;\n'
+    + T + T + 'bool ret = ThreadJoin( hJoin, timeout );\n'
+    + T + T + 'return ret;\n'))
+orig = text
+text = apply(text, 'threadtools.inl', pairs)
+out.append(unified(orig, text, 'public/tier0/threadtools.inl'))
+
+# ---------------------------------------------------------------- jobthread.cpp
+# CThreadPool::Stop: joins the raw pthread handle captured before the exit
+# handshake; the CThread destructor afterwards sees a stale m_threadZombieId
+# and joins the SAME handle again -> SIGABRT on bionic (run 41154407280,
+# CThread::~CThread <- CThreadPool::Stop <- CBaseFileSystem::Shutdown).
+text = open(os.path.join(tmp, 'jobthread.cpp')).read()
+pairs = []
+pairs.append((
+    T + T + 'if ( arrHandles[i] )\n'
+    + T + T + '{\n'
+    + T + T + T + 'ThreadJoin( arrHandles[i] );\n',
+    T + T + 'if ( arrHandles[i] )\n'
+    + T + T + '{\n'
+    + T + T + T + '// csARM (bionic): joining the raw handle leaves the CThread zombie\n'
+    + T + T + T + '// bookkeeping set; the destructor then joins the SAME pthread a\n'
+    + T + T + T + '// second time and bionic aborts ("invalid pthread_t"). The object\n'
+    + T + T + T + '// Join() consumes its handle slots, so the destructor is a no-op.\n'
+    + T + T + T + 'm_Threads[i]->Join();\n'))
+orig = text
+text = apply(text, 'jobthread.cpp', pairs)
+out.append(unified(orig, text, 'vstdlib/jobthread.cpp'))
 
 # ---------------------------------------------------------------- write
 NEW_FILE_HUNK = ('diff --git a/common/csarm_log.h b/common/csarm_log.h\n'

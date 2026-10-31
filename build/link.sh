@@ -120,6 +120,38 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_engine.cpp.o" "$SCRIPT_DIR/glu
 # soundsystem glue (windows-only device factories)
 GLUE_SND_O=""
 $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_soundsystem.cpp.o" "$SCRIPT_DIR/glue_soundsystem.cpp" 2>>"$LOG" && GLUE_SND_O="$OUTDIR/glue_soundsystem.cpp.o"
+# GCSDK stub: public/gcsdk ships headers only (the .cpp implementations live in
+# the Steam SDK).  game DLLs reference GCSDK::CJob/CSharedObject/CProtoBufMsg*,
+# so provide no-op out-of-line definitions with EXACT signatures from the real
+# headers — sizes/vtables then match, and dlopen relocations resolve.
+GCS_O=""
+GCSINC="-I c15 -I c15/public -I c15/public/tier0 -I c15/public/tier1 -I c15/public/tier2 \
+ -I c15/gcsdk -I c15/gcsdk/steamextra/tier1 -I c15/gcsdk/steamextra \
+ -I c15/thirdparty/protobuf-2.5.0/src -I $R/thirdparty/pb25shim -I genproto -I c15/common"
+GCSDEF="-DPOSIX=1 -D_LINUX=1 -DLINUX=1 -DGNUC=1 -D_POSIX=1 -D__ANDROID__=1 -DANDROID=1 \
+ -DX64BITS -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1 -DUSE_SDL=1 -DENGINE_DLL=1 \
+ -Dstricmp=strcasecmp -D_stricmp=strcasecmp -Dstrnicmp=strncasecmp -D_strnicmp=strncasecmp \
+ -Dpthread_yield=sched_yield -D_DLL_EXT=.so"
+[ -f "$SCRIPT_DIR/glue_gcsdk.cpp" ] && $CC -c -fPIC -O1 -w -std=gnu++17 -include "$SCRIPT_DIR/protocompat.h" $GCSINC $GCSDEF -o "$OUTDIR/glue_gcsdk.cpp.o" "$SCRIPT_DIR/glue_gcsdk.cpp" 2>>"$LOG" && GCS_O="$OUTDIR/glue_gcsdk.cpp.o"
+[ -n "$GCS_O" ] && echo "[glue] gcsdk.o: $GCS_O" | tee -a "$LOG" || echo "[glue] WARN: glue_gcsdk.o missing (game DLLs will miss GCSDK symbols)" | tee -a "$LOG"
+# Per-module tier-connect objects: Valve links tier1+tier2 STATICALLY into
+# every DLL, so ConnectTier1Libraries -> ConnectInterfaces fills THAT DLL's
+# private copy of the g_pFullFileSystem/g_pCVar/... pointers.  Our tier1/tier2
+# are SHARED libs — a module resolving ConnectTier1Libraries through them fills
+# libtier1's globals instead of its own, leaving its own NULL: run 41154407280
+# died with "The material system requires the filesystem to run!".  Hand every
+# module the tier1/tier2 connect translation units as objects (object defs win
+# over shared-lib defs at link time) so each .so fills its own globals.
+TIER1_CONN_O=""
+for cand in obj/tier1/tier1_tier1.cpp.o "$OUTDIR/tier1_tier1.cpp.o"; do
+  [ -f "$cand" ] && { TIER1_CONN_O="$cand"; break; }
+done
+TIER2_CONN_O=""
+for cand in obj/tier2/tier2_tier2.cpp.o "$OUTDIR/tier2_tier2.cpp.o"; do
+  [ -f "$cand" ] && { TIER2_CONN_O="$cand"; break; }
+done
+[ -n "$TIER1_CONN_O" ] && echo "[glue] tier1conn.o: $TIER1_CONN_O" | tee -a "$LOG" || echo "[glue] WARN: tier1_tier1.o missing (modules cannot fill their tier globals)" | tee -a "$LOG"
+[ -n "$TIER2_CONN_O" ] && echo "[glue] tier2conn.o: $TIER2_CONN_O" | tee -a "$LOG" || echo "[glue] WARN: tier2_tier2.o missing" | tee -a "$LOG"
 # FreeType static lib (vguimatsurface font stack)
 FREETYPE_A="$R/thirdparty/freetype-lib/libfreetype.a"
 [ -f "$FREETYPE_A" ] && echo "[glue] freetype: $FREETYPE_A" | tee -a "$LOG" || FREETYPE_A=""
@@ -213,6 +245,7 @@ lib_rank() {
     liblauncher.so) echo 6 ;;
     libengine.so) echo 7 ;;
     libclient.so|libserver.so) echo 8 ;;
+    libparticles.so|libraytrace.so|libshaderapiempty.so) echo 6 ;;
     *) echo 6 ;;
   esac
 }
@@ -466,6 +499,16 @@ link_so() {
   # Valve links interfaces.lib into every module — do the same (own copy of the
   # global interface pointers per .so, initialized by ConnectTier*Libraries).
   if [ -n "$INTERFACES_O" ] && [ -f "$INTERFACES_O" ]; then objs+=("$INTERFACES_O"); total=$((total+1)); fi
+  # ... and the tier1/tier2 CONNECT code that fills those pointers locally
+  # (see the TIER1_CONN_O/TIER2_CONN_O comment above).  tier1/tier2/protobuf/
+  # bzip2 keep their own static copies and must not duplicate symbols.
+  case "$name" in
+    libtier0.so|libtier1.so|libtier2.so|libprotobuf.so|libbzip2.so|libSDL2.so|\
+    libcrypto++.so|libquickhull.so) ;;
+    *)
+      [ -n "$TIER1_CONN_O" ] && [ -f "$TIER1_CONN_O" ] && { objs+=("$TIER1_CONN_O"); total=$((total+1)); }
+      [ -n "$TIER2_CONN_O" ] && [ -f "$TIER2_CONN_O" ] && { objs+=("$TIER2_CONN_O"); total=$((total+1)); } ;;
+  esac
   # factory entry per module — ONLY for libs the launcher appSystems table
   # loads and queries via dlsym(Sys_GetFactory, 'CreateInterface').  A blanket
   # tier1_interface.o add crashed libprotobuf's static init (TLS globals in
@@ -473,7 +516,7 @@ link_so() {
   case "$name" in
     libfilesystem_stdio.so|libinputsystem.so|libmaterialsystem.so|libdatacache.so|\
     libstudiorender.so|libsoundemittersystem.so|libvguimatsurface.so|libvgui.so|\
-    libvstdlib.so|liblocalize.so)
+    libvstdlib.so|liblocalize.so|libshaderapiempty.so)
       [ -n "$IFACE_OBJ" ] && { objs+=("$IFACE_OBJ"); total=$((total+1)); } ;;
   esac
   # Steamworks / platform glue only where the sources actually reference it
@@ -562,6 +605,15 @@ link_so libvideocfg.so "tier0 tier1 vstdlib" videocfg || true
 link_so libcrypto++.so "" cryptopp || true
 link_so libquickhull.so "" quickhull || true
 # (soundsystem glue is wired inside link_so via GLUE_SND_O)
+# particles: CParticleSystemMgr/CParticleCollection — the game DLLs reference
+# the whole particle stack (g_pParticleSystemMgr et al, run 41154407280 UND list)
+link_so libparticles.so "tier0 tier1 mathlib vstdlib tier2" particles || true
+# raytrace: RayTracingEnvironment (referenced by the client render path)
+link_so libraytrace.so "tier0 tier1 mathlib" raytrace || true
+# shaderapiempty: the launcher's "-noshaderapi" shader DLL — implements the
+# shader device mgr interfaces as stubs so materialsystem Connect() passes on
+# the boot path until the real ToGL renderer is ported
+link_so libshaderapiempty.so "tier0 tier1 mathlib vstdlib tier2" shaderapiempty || true
 
 # 3. Engine (+ protobuf messages + SDL2)
 GENPROTO_OBJS=$(ls obj/genproto/*.o 2>/dev/null)
@@ -570,11 +622,11 @@ if [ -n "$GENPROTO_OBJS" ] && [ -f "$OUTDIR/libmathlib.so" ]; then
   ENGINE_TAIL="-ldl -llog -lm -lc -lz -landroid -lEGL -lGLESv2 -lOpenSLES"
   ENGINE_BASE_OBJS=$(ls obj/engine/*.o 2>/dev/null)
   $CC $LFLAGS -Wl,-soname,"libengine.so" -o "$OUTDIR/libengine.so" obj/engine/*.o $GENPROTO_OBJS \
-     $INTERFACES_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O \
+     $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 -lbzip2 \
      $ENGINE_TAIL 2>>"$LOG" \
      && { echo "   OK: libengine.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/libengine.so" || true; } || echo "   LINK FAILED: libengine.so" | tee -a "$LOG"
-  record_link "libengine.so" "$ENGINE_BASE_OBJS $GENPROTO_OBJS $INTERFACES_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "$ENGINE_TAIL"
+  record_link "libengine.so" "$ENGINE_BASE_OBJS $GENPROTO_OBJS $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $IFACE_OBJ $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "$ENGINE_TAIL"
 fi
 
 # 3b. Launcher (Valve CSourceAppSystemGroup host; dlopen'ed by libmain)
@@ -598,11 +650,11 @@ for GAMEDLL in client server; do
   [ "$GTOTAL" -eq 0 ] && continue
   echo "[link] lib$GAMEDLL.so (tags: $TAGS) objs=$GTOTAL" | tee -a "$LOG"
   $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS $RR_OBJS \
-     $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O \
+     $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $STEAM_O $GLUE_O $GLUE_ENG_O $GCS_O \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 -lbzip2 \
      -ldl -llog -lm -lc -lz 2>>"$LOG" \
      && { echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/lib$GAMEDLL.so" || true; } || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
-  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_OBJS $INTERFACES_O $STEAM_O $GLUE_O $GLUE_ENG_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
+  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_OBJS $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $STEAM_O $GLUE_O $GLUE_ENG_O $GCS_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
 done
 
 # resolve every cross-lib reference into a real DT_NEEDED, then gate

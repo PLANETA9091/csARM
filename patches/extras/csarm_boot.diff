@@ -335,3 +335,41 @@ diff --git a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
  
  	return INIT_OK;
  }
+
+diff --git a/public/tier0/threadtools.inl b/public/tier0/threadtools.inl
+--- a/public/tier0/threadtools.inl
++++ b/public/tier0/threadtools.inl
+@@ -258,8 +258,15 @@
+ #ifdef _WIN32
+ 		return ThreadJoin( (ThreadHandle_t)m_hThread, timeout );
+ #elif defined(POSIX)
+-		bool ret = ThreadJoin(  (ThreadHandle_t)(m_threadId ? m_threadId : m_threadZombieId), timeout );
++		// csARM (bionic): pthread_join of an already-joined handle aborts the
++		// process. Consume both handle slots BEFORE joining so a second
++		// Join()/destructor call can never re-join the same pthread.
++		ThreadHandle_t hJoin = (ThreadHandle_t)(m_threadId ? m_threadId : m_threadZombieId);
++		m_threadId = 0;
+ 		m_threadZombieId = 0;
++		if ( !hJoin )
++			return true;
++		bool ret = ThreadJoin( hJoin, timeout );
+ 		return ret;
+ #endif
+ 	}
+
+diff --git a/vstdlib/jobthread.cpp b/vstdlib/jobthread.cpp
+--- a/vstdlib/jobthread.cpp
++++ b/vstdlib/jobthread.cpp
+@@ -1237,7 +1237,11 @@
+ 	{
+ 		if ( arrHandles[i] )
+ 		{
+-			ThreadJoin( arrHandles[i] );
++			// csARM (bionic): joining the raw handle leaves the CThread zombie
++			// bookkeeping set; the destructor then joins the SAME pthread a
++			// second time and bionic aborts ("invalid pthread_t"). The object
++			// Join() consumes its handle slots, so the destructor is a no-op.
++			m_Threads[i]->Join();
+ 
+ #ifdef WIN32
+ 			Assert( !m_Threads[i]->GetThreadHandle() );

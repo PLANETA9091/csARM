@@ -52,3 +52,5 @@
 !/utils/*/
 /utils/common/
 /utils/bzip2/
+/particles/
+/raytrace/
