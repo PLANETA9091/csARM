@@ -96,3 +96,20 @@ void ISteamDatagramTransportClient::ConnectionStatus::Print(char *pchOut, int cc
 {
     if (pchOut && cchOut > 0) pchOut[0] = '\0';
 }
+
+// ---------------------------------------------------------------------------
+// CCSFatDemoRecorder::OnTickPre — the client references this one out-of-line
+// member (run 41154407280 UND list), but fatdemo.cpp cannot be compiled on
+// this branch: it needs the MatchLogic (ML*) classes, which are absent from
+// the cstrike15_src mirror (upstream's client vpc does not list fatdemo.cpp
+// either — dead code).  Demo recording is a no-op on Android anyway.
+class CCSFatDemoRecorder
+{
+public:
+    void OnTickPre( int tickcount );
+};
+
+void CCSFatDemoRecorder::OnTickPre( int tickcount )
+{
+    (void)tickcount;
+}
