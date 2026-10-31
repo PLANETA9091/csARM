@@ -431,3 +431,30 @@ diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc b/thirdpar
    }
  }
  
+diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc
+@@ -80,11 +80,19 @@
+               int number, ExtensionInfo info) {
+   ::google::protobuf::GoogleOnceInit(&registry_init_, &InitRegistry);
+ 
++  // csARM: one shared libprotobuf.so serves every module; the same
++  // generated extension code embedded in engine, client and server
++  // registers identical (containing_type, number) pairs into the ONE
++  // global registry.  Valve links protobuf STATIC per-DLL so every DLL
++  // had a private registry and never met the duplicate.  GOOGLE_LOG(FATAL)
++  // here killed the boot at System.loadLibrary("client") with a clean
++  // exit(0) (run 41219950401: protobuf_AddDesc_steammessages ->
++  // ExtensionSet::RegisterExtension -> Register -> LogMessage::Finish ->
++  // exit(0)).  First module wins; later registrations are a no-op.
+   if (!InsertIfNotPresent(registry_, make_pair(containing_type, number),
+-                          info)) {
+-    GOOGLE_LOG(FATAL) << "Multiple extension registrations for type \""
+-               << containing_type->GetTypeName()
+-               << "\", field number " << number << ".";
++                          info))
++  {
++    return;
+   }
+ }
+ 

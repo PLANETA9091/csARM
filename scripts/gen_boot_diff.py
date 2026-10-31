@@ -11,6 +11,7 @@ Reads:  $TMP/appsys.cpp       (c15 appframework/AppSystemGroup.cpp)
         $TMP/jobthread.cpp    (c15 vstdlib/jobthread.cpp)
         $TMP/descriptor.cc    (c15 thirdparty/protobuf-2.5.0 .../descriptor.cc)
         $TMP/message.cc       (c15 thirdparty/protobuf-2.5.0 .../message.cc)
+        $TMP/extension_set.cc (c15 thirdparty/protobuf-2.5.0 .../extension_set.cc)
 Writes: $REPO/patches/extras/csarm_boot.diff  (sys_engine hunk is preserved)
 
 Valve sources are TAB-indented — every anchor below uses explicit \t escapes.
@@ -447,6 +448,52 @@ pairs.append((
 orig = text
 text = apply(text, 'message.cc', pairs)
 out.append(unified(orig, text, 'thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc'))
+
+# ------------------------------------------------------------ extension_set.cc
+# protobuf 2.5.0 ExtensionSet registration routes every generated extension
+# through a single static Register() that GOOGLE_LOG(FATAL)s on duplicate
+# (containing_type, number).  With the SHARED libprotobuf.so the same
+# generated pb.cc embedded in engine, client and server registers the same
+# pairs into the ONE global registry — the second registration killed the
+# boot with a clean exit(0) (run 41219950401:
+# protobuf_AddDesc_steammessages -> ExtensionSet::RegisterExtension ->
+# Register -> LogMessage::Finish -> exit(0)).  First module wins.
+text = open(os.path.join(tmp, 'extension_set.cc')).read()
+pairs = []
+pairs.append((
+    'void Register(const MessageLite* containing_type,\n'
+    '              int number, ExtensionInfo info) {\n'
+    '  ::google::protobuf::GoogleOnceInit(&registry_init_, &InitRegistry);\n'
+    '\n'
+    '  if (!InsertIfNotPresent(registry_, make_pair(containing_type, number),\n'
+    '                          info)) {\n'
+    '    GOOGLE_LOG(FATAL) << "Multiple extension registrations for type \\""\n'
+    '               << containing_type->GetTypeName()\n'
+    '               << "\\", field number " << number << ".";\n'
+    '  }\n'
+    '}\n',
+    'void Register(const MessageLite* containing_type,\n'
+    '              int number, ExtensionInfo info) {\n'
+    '  ::google::protobuf::GoogleOnceInit(&registry_init_, &InitRegistry);\n'
+    '\n'
+    '  // csARM: one shared libprotobuf.so serves every module; the same\n'
+    '  // generated extension code embedded in engine, client and server\n'
+    '  // registers identical (containing_type, number) pairs into the ONE\n'
+    '  // global registry.  Valve links protobuf STATIC per-DLL so every DLL\n'
+    '  // had a private registry and never met the duplicate.  GOOGLE_LOG(FATAL)\n'
+    '  // here killed the boot at System.loadLibrary("client") with a clean\n'
+    '  // exit(0) (run 41219950401: protobuf_AddDesc_steammessages ->\n'
+    '  // ExtensionSet::RegisterExtension -> Register -> LogMessage::Finish ->\n'
+    '  // exit(0)).  First module wins; later registrations are a no-op.\n'
+    '  if (!InsertIfNotPresent(registry_, make_pair(containing_type, number),\n'
+    '                          info))\n'
+    '  {\n'
+    '    return;\n'
+    '  }\n'
+    '}\n'))
+orig = text
+text = apply(text, 'extension_set.cc', pairs)
+out.append(unified(orig, text, 'thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc'))
 
 # ---------------------------------------------------------------- write
 NEW_FILE_HUNK = ('diff --git a/common/csarm_log.h b/common/csarm_log.h\n'
