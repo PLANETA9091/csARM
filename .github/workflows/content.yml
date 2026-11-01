@@ -5,28 +5,28 @@ name: csARM content
 # attaches it to the DRAFT release 'game-content', which ci.yml boot-test
 # consumes automatically (download -> unzip -> run-as -> filesDir).
 #
-# v4: 9 parallel shards + stall-proof download loop
-#   - The whole depot is split into 9 disjoint regex shards, downloaded by
-#     9 parallel runners (sound / materials / models / maps / panorama /
-#     misc dirs / everything-else + pak01 vpk split in two). Aggregate
-#     bandwidth ~= 9x a single runner; each runner pulls ~1-3 GB.
-#   - Observed failure mode of DD 2.7.4: some Steam CDN endpoints return
-#     garbage for certain chunks -> "End of Central Directory record could
-#     not be found" retry loop, progress frozen. Fix: the download step
-#     re-runs DD up to 6 times; DD RESUMES (finished files are skipped and
-#     re-verified, only missing chunks are re-fetched, and every restart
-#     re-picks CDN servers). A heartbeat kills an attempt that makes no
-#     progress for 80 s and restarts it.
-#   - DepotDownloader 3.4.0 (2.7.4 is outdated; -branch is the correct flag,
-#     there is no -max-servers option anymore).
-#   - Hardcoded app 730 / -branch csgo_legacy: verified anonymously reachable,
-#     manifest = 1.38.8.1 (steam.inf PatchVersion, Oct 12 2023).
-#   - Version gate: the rest-shard refuses to upload if steam.inf != 1.38.8.1.
-#   - Layout normalized per shard to a top-level cstrike/ dir for ci.yml
-#     (ci.yml unzips every release asset into one tree, so shard prefixes
-#     don't need special handling there).
+# v5: exact shards derived from the real depot 731 manifest
+#   (manifest 1224088799001669801, 10/12/2023, 2808 files, 30.5 GiB on disk /
+#   ~13.6 GiB compressed on the wire). Real layout of depot 731:
+#     csgo/pak01_000..203.vpk + csgo/pak01_dir.vpk   24.6 GiB  <- all game data
+#     csgo/maps/                                      5.1 GiB  (loose BSPs)
+#     platform/                                       0.95 GiB (incl platform_pak01_dir.vpk)
+#     csgo/panorama/ 0.5 GiB, csgo/resource/ 0.36 GiB, csgo misc 18 MiB,
+#     csgo/steam.inf, chrome.pak, root bin/ (0.4 MiB of cfg/lua)
+#   -> 8 disjoint shard jobs (5 pak01 + maps + platform + everything-else).
+#   - `-depot 731` is MANDATORY: without it DD also pulls CS2 depots
+#     2347770/71/74, which have no csgo_legacy branch and silently fall back
+#     to public (2026 manifests, wrong content).
+#   - DD 3.4.0, -branch csgo_legacy verified working (legacy manifest).
+#   - Stall-proof: DD re-runs up to 6x per shard; DD resumes (finished files
+#     skipped, CDN servers re-picked); heartbeat kills attempts frozen for
+#     ~80 s ("End of Central Directory" chunk error loop).
+#   - Version gate on the u1 shard: steam.inf must be PatchVersion=1.38.8.1.
+#   - Normalization: csgo/ -> cstrike/ per shard; platform/ stays a sibling,
+#     so the assembled release tree is cstrike/ + platform/ (ci.yml pushes the
+#     whole tree into files/cstrike).
 #
-# Assets: a1..a7-NN.zip / b1-NN.zip / b2-NN.zip, each <= 1.6 GiB.
+# Assets: b1..b5-NN.zip, m1-NN.zip, p1-NN.zip, u1-NN.zip, each <= 1.6 GiB.
 
 on:
   workflow_dispatch: {}
@@ -47,42 +47,38 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - prefix: a1
-            what: sound
-            filelist: 'regex:(^|/)sound(/|$)'
-            check_inf: false
-          - prefix: a2
-            what: materials
-            filelist: 'regex:(^|/)materials(/|$)'
-            check_inf: false
-          - prefix: a3
-            what: models
-            filelist: 'regex:(^|/)models(/|$)'
-            check_inf: false
-          - prefix: a4
-            what: maps
-            filelist: 'regex:(^|/)maps(/|$)'
-            check_inf: false
-          - prefix: a5
-            what: panorama
-            filelist: 'regex:(^|/)panorama(/|$)'
-            check_inf: false
-          - prefix: a6
-            what: misc dirs
-            filelist: 'regex:(^|/)(particles|resource|scripts|shaders|media|cfg|platform)(/|$)'
-            check_inf: false
-          - prefix: a7
-            what: everything else (root files, misc trees)
-            filelist: 'regex:^(?!.*pak01_)(?!.*(^|/)bin(/|$))(?!.*(^|/)sound(/|$))(?!.*(^|/)materials(/|$))(?!.*(^|/)models(/|$))(?!.*(^|/)maps(/|$))(?!.*(^|/)panorama(/|$))(?!.*(^|/)(particles|resource|scripts|shaders|media|cfg|platform)(/|$)).*'
-            check_inf: true
           - prefix: b1
-            what: pak01 vpk 000-019
-            filelist: 'regex:pak01_0[0-1][0-9]'
+            what: pak01 000-041
+            filelist: 'regex:^csgo/pak01_(0[0-3][0-9]|04[0-1])\.vpk$'
             check_inf: false
           - prefix: b2
-            what: pak01 vpk 020+ and pak01_dir
-            filelist: 'regex:pak01_(?!0[0-1][0-9])'
+            what: pak01 042-083
+            filelist: 'regex:^csgo/pak01_(04[2-9]|05[0-9]|06[0-9]|07[0-9]|08[0-3])\.vpk$'
             check_inf: false
+          - prefix: b3
+            what: pak01 084-125
+            filelist: 'regex:^csgo/pak01_(08[4-9]|09[0-9]|1[0-1][0-9]|12[0-5])\.vpk$'
+            check_inf: false
+          - prefix: b4
+            what: pak01 126-167
+            filelist: 'regex:^csgo/pak01_(12[6-9]|1[3-5][0-9]|16[0-7])\.vpk$'
+            check_inf: false
+          - prefix: b5
+            what: pak01 168-203 + dir
+            filelist: 'regex:^csgo/pak01_(16[8-9]|1[7-9][0-9]|20[0-3]|dir)\.vpk$'
+            check_inf: false
+          - prefix: m1
+            what: maps
+            filelist: 'regex:^csgo/maps/'
+            check_inf: false
+          - prefix: p1
+            what: platform
+            filelist: 'regex:^platform/'
+            check_inf: false
+          - prefix: u1
+            what: panorama+resource+misc+steam.inf
+            filelist: 'regex:^(?!^csgo/pak01_)(?!^csgo/maps/)(?!^platform/).*$'
+            check_inf: true
     env:
       PREFIX: ${{ matrix.prefix }}
       FILELIST: ${{ matrix.filelist }}
@@ -103,8 +99,8 @@ jobs:
           set -e
           printf '%s\n' "$FILELIST" > fl.txt
           rm -rf content && mkdir -p content
-          ARGS=(-app 730 -os windows -branch csgo_legacy -filelist fl.txt \
-                -dir content -max-downloads 32)
+          ARGS=(-app 730 -depot 731 -os windows -branch csgo_legacy \
+                -filelist fl.txt -dir content -max-downloads 32)
           echo "shard $PREFIX (${{ matrix.what }})"
           echo "DD args: ${ARGS[*]}"
           echo "LIVE progress: one heartbeat line every 20 s"
@@ -140,7 +136,7 @@ jobs:
           done
           if [ "$RC" != "0" ]; then
             echo "::error::shard download did not complete (rc=$RC)"
-            tail -c 8000 dd_a*.log | tr '\r' '\n' | tail -40 || true
+            tail -c 8000 dd_a*.log 2>/dev/null | tr '\r' '\n' | tail -40 || true
             exit 1
           fi
           echo "--- final: files=$(find content -type f | wc -l) size=$(du -sh content | cut -f1) ---"
@@ -151,7 +147,7 @@ jobs:
           set -e
           NF=$(find content -type f 2>/dev/null | wc -l)
           if [ "$NF" = "0" ]; then
-            echo "::notice::shard $PREFIX matched 0 files (harmless if this depot dir does not exist)"
+            echo "::notice::shard $PREFIX matched 0 files"
             exit 0
           fi
           inf=$(find content -name steam.inf | head -1)
@@ -163,20 +159,16 @@ jobs:
               echo "::notice::steam.inf confirms 1.38.8.1 (csgo_legacy)"
             fi
           elif [ "$CHECK_INF" = "true" ]; then
-            echo "::error::rest-shard missing steam.inf"; exit 1
+            echo "::error::u1 shard missing steam.inf"; exit 1
           fi
-          # normalize: every shard's payload ends up under content/cstrike/
-          if [ ! -d content/cstrike ]; then
-            if [ -d content/csgo/cstrike ]; then
-              mv content/csgo/cstrike content/cstrike
-              echo "normalized: content/csgo/cstrike -> content/cstrike"
-            elif [ -d content/csgo ]; then
-              mv content/csgo content/cstrike
-              echo "normalized: content/csgo -> content/cstrike"
-            fi
+          # normalize: game content ends up under content/cstrike/; platform/
+          # stays a sibling of cstrike/ (real install layout)
+          if [ ! -d content/cstrike ] && [ -d content/csgo ]; then
+            mv content/csgo content/cstrike
+            echo "normalized: content/csgo -> content/cstrike"
           fi
           inf=$(find content -name steam.inf | head -1)
-          if [ -n "$inf" ] && [ ! -f content/cstrike/steam.inf ]; then
+          if [ -n "$inf" ] && [ -d content/cstrike ] && [ ! -f content/cstrike/steam.inf ]; then
             cp "$inf" content/cstrike/steam.inf
           fi
           echo "--- layout ---"; find content -maxdepth 2 -type d | head -12
@@ -220,7 +212,7 @@ jobs:
             echo "no parts produced by shard $PREFIX — nothing to upload"
           fi
           echo "--- draft release assets now ---"
-          gh release view game-content --repo "$GITHUB_REPOSITORY" \
+          gh release view game-content --repo "$GITHUB_REPOSITORY" --json assets \
             --jq '.assets[] | .name + "  " + ((.size / 1073741824 * 100 | round) / 100 | tostring) + "GB"'
 
       - name: Summary

@@ -601,7 +601,7 @@ jobs:
           [ "$N" -gt 0 ] 2>/dev/null || { echo "::notice::no content assets on draft release game-content — booting skeleton-only"; exit 0; }
           echo "CONTENT=pack" >> "$GITHUB_ENV"
           echo "content assets: $N"
-          gh release view game-content --repo "$GITHUB_REPOSITORY" \
+          gh release view game-content --repo "$GITHUB_REPOSITORY" --json assets \
             --jq '.assets[] | "  \(.name)  \((.size / 1073741824 * 100 | round) / 100)GB"'
           rm -rf "$HOME/csgo-dl" "$HOME/csgo-content" && mkdir -p "$HOME/csgo-dl" "$HOME/csgo-content"
           T0=$SECONDS
@@ -616,6 +616,7 @@ jobs:
               *.7z)                 (command -v 7z >/dev/null && 7z x -y -o"$HOME/csgo-content" "$f" >/dev/null) || { echo "::error::.7z asset but no 7z on runner — upload .zip instead"; exit 1; } ;;
               *)                    echo "::warning::unknown asset type skipped: $f" ;;
             esac
+            rm -f "$f"   # free disk as we go (~30 GB of parts on a ~86 GB disk)
           done
           # normalize: accept either a zip of the csgo/ folder CONTENTS or a
           # zip of the folder itself (single top-level csgo/ entry)
