@@ -212,16 +212,19 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  	// SF4 TODO
  	// Windows - See if we need to launch SF4 instead of SF3
-@@ -879,6 +901,7 @@
+@@ -879,14 +901,21 @@
  
  bool CSourceAppSystemGroup::PreInit()
  {
 +	CSARM_LOGI( "PreInit enter" );
  	CreateInterfaceFn factory = GetFactory();
  	ConnectTier1Libraries( &factory, 1 );
++	CSARM_LOGI( "PreInit: tier1 -> g_pCVar=%p", (void*)g_pCVar );
  	ConVar_Register( );
-@@ -886,7 +909,10 @@
+ 	ConnectTier2Libraries( &factory, 1 );
++	CSARM_LOGI( "PreInit: tier2 -> g_pFullFileSystem=%p", (void*)g_pFullFileSystem );
  	ConnectTier3Libraries( &factory, 1 );
++	CSARM_LOGI( "PreInit: tier3 -> g_pMaterialSystem=%p", (void*)g_pMaterialSystem );
  
  	if ( !g_pFullFileSystem || !g_pMaterialSystem )
 +	{
@@ -231,7 +234,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #ifdef _PS3
  	g_pVJobs = ( IVJobs* )factory( VJOBS_INTERFACE_VERSION, NULL );  // this is done only once; g_pVJobs doesn't change even after multiple reloads of VJobs.prx
-@@ -907,14 +933,20 @@
+@@ -907,14 +936,20 @@
  		}
  	}
  	if ( FileSystem_SetupSteamEnvironment( steamInfo ) != FS_OK )
@@ -252,7 +255,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #if defined( SUPPORT_VPK )
  	Msg( "start timing %f\n", Plat_FloatTime() );
-@@ -963,11 +995,13 @@
+@@ -963,11 +998,13 @@
  	info.m_pParentAppSystemGroup = this;
  	info.m_bTextMode = g_bTextMode;
  
@@ -266,7 +269,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  	return g_pEngineAPI->Run();
  }
  
-@@ -1879,6 +1913,7 @@
+@@ -1879,6 +1916,7 @@
  		int nRetval = ValveCocoaMain( &steamApplication ); 
  #else
  		int nRetval = steamApplication.Run();

@@ -206,6 +206,23 @@ pairs.append((
     + T + 'CSARM_LOGI( "PreInit enter" );\n'
     + T + 'CreateInterfaceFn factory = GetFactory();\n'))
 
+# csARM run 41347795540: PreInit fails "no filesystem/materialsystem factory"
+# - one of the ConnectTierXLibraries calls leaves its global NULL.  Probe
+# each global right after the tier-connect that wires it.
+pairs.append((
+    T + 'ConnectTier1Libraries( &factory, 1 );\n'
+    + T + 'ConVar_Register( );\n',
+    T + 'ConnectTier1Libraries( &factory, 1 );\n'
+    + T + 'CSARM_LOGI( "PreInit: tier1 -> g_pCVar=%p", (void*)g_pCVar );\n'
+    + T + 'ConVar_Register( );\n'))
+pairs.append((
+    T + 'ConnectTier2Libraries( &factory, 1 );\n'
+    + T + 'ConnectTier3Libraries( &factory, 1 );\n',
+    T + 'ConnectTier2Libraries( &factory, 1 );\n'
+    + T + 'CSARM_LOGI( "PreInit: tier2 -> g_pFullFileSystem=%p", (void*)g_pFullFileSystem );\n'
+    + T + 'ConnectTier3Libraries( &factory, 1 );\n'
+    + T + 'CSARM_LOGI( "PreInit: tier3 -> g_pMaterialSystem=%p", (void*)g_pMaterialSystem );\n'))
+
 pairs.append((
     T + 'if ( !g_pFullFileSystem || !g_pMaterialSystem )\n'
     + T + '\treturn false;\n',
