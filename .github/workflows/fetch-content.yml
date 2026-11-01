@@ -1,0 +1,141 @@
+name: fetch-csgo-content
+
+# Downloads the CS:GO legacy (1.38.8.1) game content from Steam depots with
+# DepotDownloader (anonymous), filters out what the port does not need
+# (pak01_*.vpk data volumes, bin/ client binaries), packs it into <=1.8GB zip
+# parts and uploads them to the DRAFT release 'game-content'.  The normal CI
+# boot-test then picks the pack up automatically (ci.yml "Fetch game content").
+#
+# Manual trigger only — run it once; re-run replaces the assets (--clobber).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-content
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    name: depot-download → pack → release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Install DepotDownloader
+        run: |
+          curl -sfL --retry 3 -o dd.zip \
+            https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_2.7.4/DepotDownloader-linux-x64.zip
+          mkdir dd && unzip -q dd.zip -d dd && chmod +x dd/DepotDownloader
+          ./dd/DepotDownloader --help 2>&1 | head -5 || true
+
+      # Filter file: DepotDownloader filelist semantics — lines are regexes
+      # matched against depot paths; '!' prefix excludes from the set.
+      #   include everything, then drop pak01 vpk volumes (the multi-GB data
+      #   cubes) and the top-level bin/ (windows client binaries — the port
+      #   builds its own).  Both can be added later as a B-pack if the engine
+      #   logs demand them.
+      - name: Prepare filelist filter
+        run: |
+          cat > filter.txt <<'EOF'
+          .*
+          !.*pak01.*\.vpk
+          !^bin/
+          EOF
+          cat filter.txt
+
+      # Attempt chain, first match wins.  Verified by steam.inf PatchVersion:
+      #   1. app 730 depot 731 branch csgo_legacy  — legacy CLIENT content
+      #   2. app 4465480 (csgo legacy standalone app) — probed for its depot id
+      #   3. app 740 depot 740 — legacy dedicated-server content (anonymous
+      #      by design; same 1.38.8.1 content minus client-only extras)
+      - name: Depot-download content (attempt chain)
+        run: |
+          mkdir -p out logs
+          verify() {
+            SI=$(find out -name steam.inf | head -1)
+            [ -n "$SI" ] || return 1
+            PV=$(grep -oE 'PatchVersion=[0-9.]+' "$SI" | head -1 | cut -d= -f2)
+            echo "steam.inf: $SI  PatchVersion=$PV"
+            [ "$PV" = "1.38.8.1" ]
+          }
+          run_dd() {
+            local tag="$1"; shift
+            echo "=== attempt $tag: DepotDownloader $* ==="
+            timeout 900 ./dd/DepotDownloader -username anonymous -os windows \
+              -filelist filter.txt -dir out "$@" 2>&1 | tee "logs/$tag.log" | tail -8
+            verify
+          }
+          if run_dd a1-730-731-legacy -app 730 -depot 731 -branch csgo_legacy; then
+            echo "OK via 730/731 csgo_legacy"; exit 0
+          fi
+          rm -rf out && mkdir -p out
+          # probe 4465480 for its content depot id (tiny steam.inf-only pull)
+          echo "steam.inf" > fl_probe.txt
+          timeout 300 ./dd/DepotDownloader -username anonymous -os windows \
+            -filelist fl_probe.txt -dir probe -app 4465480 2>&1 | tee logs/a2-probe.log | tail -15
+          DD_DEPOT=$(grep -oE "[Dd]epot [0-9]+" logs/a2-probe.log | head -1 | grep -oE "[0-9]+")
+          echo "4465480 content depot id: ${DD_DEPOT:-unknown}"
+          rm -rf probe
+          if [ -n "$DD_DEPOT" ] && run_dd a2-4465480 -app 4465480 -depot "$DD_DEPOT"; then
+            echo "OK via app 4465480"; exit 0
+          fi
+          rm -rf out && mkdir -p out
+          if run_dd a3-740-server -app 740 -depot 740; then
+            echo "OK via app 740 (server content)"; exit 0
+          fi
+          echo "::error::all depot attempts failed — inspect logs/*.log"
+          exit 1
+
+      - name: Inspect content tree
+        run: |
+          SI=$(find out -name steam.inf | head -1)
+          echo "--- steam.inf ---"; cat "$SI" || true
+          echo "--- top level ---"; ls -A out | head -30
+          echo "--- sizes ---"; du -sm out/* 2>/dev/null | sort -nr | head -25
+          echo "--- cstrike sample ---"; ls out/cstrike 2>/dev/null | head -30
+
+      # Pack top-level entries into ~1.7GB zip parts (release asset cap = 2GB)
+      - name: Pack parts
+        run: |
+          cd out
+          mkdir -p parts
+          mapfile -t ENTRIES < <(ls -A)
+          i=1; CUR=(); CURSZ=0
+          for e in "${ENTRIES[@]}"; do
+            SZ=$(du -sm "$e" | cut -f1)
+            CUR+=("$e"); CURSZ=$((CURSZ+SZ))
+            if [ "$CURSZ" -ge 1700 ]; then
+              echo "part $i: ${CUR[*]} (${CURSZ}MB)"
+              zip -q -r -1 "parts/apack-$i.zip" "${CUR[@]}"
+              i=$((i+1)); CUR=(); CURSZ=0
+            fi
+          done
+          if [ "${#CUR[@]}" -gt 0 ]; then
+            echo "part $i: ${CUR[*]} (${CURSZ}MB)"
+            zip -q -r -1 "parts/apack-$i.zip" "${CUR[@]}"
+          fi
+          ls -la parts/
+
+      - name: Upload pack to draft release game-content
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view game-content --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || \
+            gh release create game-content --draft --title "game-content" \
+              --notes "CS:GO legacy 1.38.8.1 content (A-pack: no pak01_*.vpk, no bin/)" --repo "$GITHUB_REPOSITORY"
+          gh release upload game-content out/parts/*.zip --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view game-content --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[] | "  \(.name)  \((.size / 1048576 | round))MB"'
+
+      - name: Upload logs (diagnostics)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetch-content-logs
+          path: |
+            logs/
+            filter.txt
+          if-no-files-found: ignore
