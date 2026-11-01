@@ -891,6 +891,19 @@ jobs:
               LAUNCH_S=$SECONDS
               echo "LauncherMain called at t=${SECONDS}s — 120s stability window, then early break"
             fi
+            # dead-process break: a native SIGSEGV on SDLThread kills the whole
+            # process — no CSARM_* marker will EVER appear afterwards and the
+            # tombstone lands in the crash buffer.  Waiting the 120s stability
+            # window on a dead pid only hides the crash (run 41311004467:
+            # CBaseResourcePrecacher::RegisterAll SIGSEGV 121ms after
+            # CSARM_LAUNCHER_CALL; both boot stages burned 2x120s exactly here).
+            if [ -n "$LAUNCH_S" ]; then
+              APPUP=$("$ADB" -s emulator-5554 shell pidof com.csarm.port 2>/dev/null | tr -d '\r\n ')
+              if [ -z "$APPUP" ]; then
+                echo "engine process died after LauncherMain (no MAIN_FAIL/EXIT marker) — tombstone expected in crash buffer"
+                break
+              fi
+            fi
             if [ -n "$LAUNCH_S" ] && [ $((SECONDS - LAUNCH_S)) -ge 120 ]; then
               echo "launcher alive 120s after call, no tick/fail/exit — proceeding to asserts"
               break
@@ -907,7 +920,7 @@ jobs:
           echo "=== csARM boot chain ==="
           grep -E "CSARM_" logcat_boot.txt | head -80 || true
           echo "=== engine spew sample ==="
-          grep "CSARM_ENG" logcat_boot.txt | head -60 || true
+          grep "CSARM_ENG" logcat_boot.txt | head -200 || true
           echo "=== AndroidRuntime crashes ==="
           grep -B2 -A8 "AndroidRuntime" logcat_boot.txt | head -50 || true
 
@@ -955,6 +968,14 @@ jobs:
               LAUNCH_S=$SECONDS
               echo "LauncherMain called at t=${SECONDS}s — 120s stability window, then early break"
             fi
+            # dead-process break — see the x86_64 boot loop above
+            if [ -n "$LAUNCH_S" ]; then
+              APPUP=$("$ADB" -s emulator-5554 shell pidof com.csarm.port 2>/dev/null | tr -d '\r\n ')
+              if [ -z "$APPUP" ]; then
+                echo "engine process died after LauncherMain (no MAIN_FAIL/EXIT marker) — tombstone expected in crash_sw buffer"
+                break
+              fi
+            fi
             if [ -n "$LAUNCH_S" ] && [ $((SECONDS - LAUNCH_S)) -ge 120 ]; then
               echo "launcher alive 120s after call, no tick/fail/exit — proceeding to asserts"
               break
@@ -985,6 +1006,11 @@ jobs:
           if [ "$fail" = "1" ]; then echo "--- tail ---"; tail -80 $L; exit 1; fi
           if grep -qE "CSARM_ENGINE_TICK|CSARM_ENGINE_FIRST_FRAME" $L; then
             echo "SWIFTSHADER RENDERING CONFIRMED (bundled software GL, zero GPU)"
+          elif grep -q "Fatal signal" crash_sw.txt 2>/dev/null; then
+            echo "::error::engine process crashed before first tick (SwiftShader tombstone):"
+            grep -E "Fatal signal|>>> com.csarm.port" crash_sw.txt | head -3
+            grep -E "#0[0-6] pc " crash_sw.txt | head -7
+            exit 1
           else
             echo "::warning::no engine ticks under SwiftShader yet (inspect artifacts)"
           fi
@@ -1019,6 +1045,14 @@ jobs:
           fi
           if grep -qE "CSARM_ENGINE_TICK|CSARM_ENGINE_FIRST_FRAME" $L; then
             echo "ENGINE FRAME LOOP CONFIRMED (software rendering, no GPU)"
+          elif grep -q "Fatal signal" crash.txt 2>/dev/null; then
+            # a tombstone with no tick marker used to pass as "stable launcher"
+            # while the engine had been dead for minutes (run 41311004467) —
+            # hard-fail with the resolved frames instead
+            echo "::error::engine process died before first tick — tombstone frames:"
+            grep -E "Fatal signal|>>> com.csarm.port" crash.txt | head -3
+            grep -E "#0[0-6] pc " crash.txt | head -7
+            exit 1
           else
             echo "::warning::no engine ticks yet (engine may wait on content/UI; inspect artifacts)"
           fi

@@ -112,6 +112,16 @@ else
   git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_boot.diff" || { echo "csarm_boot.diff APPLY FAILED"; exit 1; }
 fi
 
+# csARM tier2 connect-path null guards (applies after all_patches; neither
+# file is touched by all_patches).  Idempotent like the boot diff.
+if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_tier2_connect.diff" 2>/dev/null; then
+  echo "csarm_tier2_connect.diff already applied"
+else
+  echo "csarm_tier2_connect.diff revision change -> normalizing tier2 files"
+  git checkout -f -- tier2/resourceprecacher.cpp tier2/schemaclassbinding.cpp 2>/dev/null || true
+  git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_tier2_connect.diff" || { echo "csarm_tier2_connect.diff APPLY FAILED"; exit 1; }
+fi
+
 echo "Copying extra files..."
 cp -v "$REPO_DIR/patches/extras/gameeventlistener.h" "$SRC/game/shared/gameeventlistener.h"
 cp -v "$REPO_DIR/patches/extras/IVGUI.h" "$SRC/public/vgui/IVGUI.h"

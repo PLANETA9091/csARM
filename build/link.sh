@@ -157,6 +157,28 @@ for cand in obj/tier2/tier2_tier2.cpp.o "$OUTDIR/tier2_tier2.cpp.o"; do
 done
 [ -n "$TIER1_CONN_O" ] && echo "[glue] tier1conn.o: $TIER1_CONN_O" | tee -a "$LOG" || echo "[glue] WARN: tier1_tier1.o missing (modules cannot fill their tier globals)" | tee -a "$LOG"
 [ -n "$TIER2_CONN_O" ] && echo "[glue] tier2conn.o: $TIER2_CONN_O" | tee -a "$LOG" || echo "[glue] WARN: tier2_tier2.o missing" | tee -a "$LOG"
+# tier2 connect-path closure: ConnectTier2Libraries also calls
+# CBaseResourcePrecacher::RegisterAll() and CSchemaClassBindingBase::Install().
+# Those live in tier2-only TUs; left exclusively in libtier2.so, a module's
+# inlined ConnectTier2Libraries resolves them through PLT to libtier2.so,
+# whose registry copies (g_pPrecacheSystem / g_pResourceSystem) are NEVER
+# filled — nothing runs ConnectInterfaces inside libtier2.so — so the virtual
+# call derefs NULL: run 41311004467 died at boot with
+#   #00 libtier2.so CBaseResourcePrecacher::RegisterAll()+27 (SEGV_MAPERR 0x0)
+#   #01 libfilesystem_stdio.so CTier2AppSystem<IQueuedLoader,0>::Connect()+52
+# Hand the two TUs out as objects too (local defs win) so every module
+# registers its OWN precachers/schema bindings with the one shared singleton —
+# exactly Valve's per-DLL model on Windows.
+TIER2_PREC_O=""
+for cand in obj/tier2/tier2_resourceprecacher.cpp.o "$OUTDIR/tier2_resourceprecacher.cpp.o"; do
+  [ -f "$cand" ] && { TIER2_PREC_O="$cand"; break; }
+done
+TIER2_SCHEMA_O=""
+for cand in obj/tier2/tier2_schemaclassbinding.cpp.o "$OUTDIR/tier2_schemaclassbinding.cpp.o"; do
+  [ -f "$cand" ] && { TIER2_SCHEMA_O="$cand"; break; }
+done
+[ -n "$TIER2_PREC_O" ] && echo "[glue] tier2prec.o: $TIER2_PREC_O" | tee -a "$LOG" || echo "[glue] WARN: tier2_resourceprecacher.o missing (modules SIGSEGV in RegisterAll)" | tee -a "$LOG"
+[ -n "$TIER2_SCHEMA_O" ] && echo "[glue] tier2schema.o: $TIER2_SCHEMA_O" | tee -a "$LOG" || echo "[glue] WARN: tier2_schemaclassbinding.o missing" | tee -a "$LOG"
 # FreeType static lib (vguimatsurface font stack)
 FREETYPE_A="$R/thirdparty/freetype-lib/libfreetype.a"
 [ -f "$FREETYPE_A" ] && echo "[glue] freetype: $FREETYPE_A" | tee -a "$LOG" || FREETYPE_A=""
@@ -512,7 +534,9 @@ link_so() {
     libcrypto++.so|libquickhull.so) ;;
     *)
       [ -n "$TIER1_CONN_O" ] && [ -f "$TIER1_CONN_O" ] && { objs+=("$TIER1_CONN_O"); total=$((total+1)); }
-      [ -n "$TIER2_CONN_O" ] && [ -f "$TIER2_CONN_O" ] && { objs+=("$TIER2_CONN_O"); total=$((total+1)); } ;;
+      [ -n "$TIER2_CONN_O" ] && [ -f "$TIER2_CONN_O" ] && { objs+=("$TIER2_CONN_O"); total=$((total+1)); }
+      [ -n "$TIER2_PREC_O" ] && [ -f "$TIER2_PREC_O" ] && { objs+=("$TIER2_PREC_O"); total=$((total+1)); }
+      [ -n "$TIER2_SCHEMA_O" ] && [ -f "$TIER2_SCHEMA_O" ] && { objs+=("$TIER2_SCHEMA_O"); total=$((total+1)); } ;;
   esac
   # factory entry per module — ONLY for libs the launcher appSystems table
   # loads and queries via dlsym(Sys_GetFactory, 'CreateInterface').  A blanket
