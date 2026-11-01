@@ -597,15 +597,31 @@ jobs:
         run: |
           set -e
           echo "CONTENT=none" >> "$GITHUB_ENV"
-          N=$(gh release view game-content --repo "$GITHUB_REPOSITORY" --json assets --jq '(.assets | length)' 2>/dev/null || echo 0)
+          # NB: 'game-content' is a DRAFT release, and its tag does not exist
+          # as a git ref yet, so /releases/tags/game-content returns 404 and
+          # 'gh release view' fails. Resolve the release through the release
+          # LIST api and use its id everywhere instead.
+          RELID=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.name=="game-content" or .tag_name=="game-content") | .id' | head -1 || true)
+          if [ -z "$RELID" ]; then
+            echo "::notice::draft release game-content not found — booting skeleton-only"
+            exit 0
+          fi
+          N=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELID" --jq '.assets | length')
           [ "$N" -gt 0 ] 2>/dev/null || { echo "::notice::no content assets on draft release game-content — booting skeleton-only"; exit 0; }
           echo "CONTENT=pack" >> "$GITHUB_ENV"
-          echo "content assets: $N"
-          gh release view game-content --repo "$GITHUB_REPOSITORY" --json assets \
+          echo "content assets: $N (release id $RELID)"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELID" \
             --jq '.assets[] | "  \(.name)  \((.size / 1073741824 * 100 | round) / 100)GB"'
           rm -rf "$HOME/csgo-dl" "$HOME/csgo-content" && mkdir -p "$HOME/csgo-dl" "$HOME/csgo-content"
           T0=$SECONDS
-          gh release download game-content --repo "$GITHUB_REPOSITORY" --dir "$HOME/csgo-dl" --pattern '*' --clobber
+          # draft assets are fetched via the api (Accept: octet-stream)
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELID/assets?per_page=100" \
+            --jq '.assets[] | "\(.id)\t\(.name)"' | while IFS=$'\t' read -r aid name; do
+              echo "downloading $name ..."
+              gh api "repos/$GITHUB_REPOSITORY/releases/assets/$aid" \
+                -H "Accept: application/octet-stream" > "$HOME/csgo-dl/$name"
+            done
           echo "download: $((SECONDS - T0))s"
           cd "$HOME/csgo-dl"
           for f in *; do
@@ -613,6 +629,7 @@ jobs:
               *.zip)                unzip -q -o "$f" -d "$HOME/csgo-content" ;;
               *.tar.gz|*.tgz)       tar xzf "$f" -C "$HOME/csgo-content" ;;
               *.tar)                tar xf  "$f" -C "$HOME/csgo-content" ;;
+              *.part[0-9]*)         echo "skipping multi-volume split part: $f" ;;
               *.7z)                 (command -v 7z >/dev/null && 7z x -y -o"$HOME/csgo-content" "$f" >/dev/null) || { echo "::error::.7z asset but no 7z on runner — upload .zip instead"; exit 1; } ;;
               *)                    echo "::warning::unknown asset type skipped: $f" ;;
             esac

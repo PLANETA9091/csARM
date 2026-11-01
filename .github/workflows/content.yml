@@ -197,8 +197,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
+          # 'game-content' is a DRAFT release: its tag ref does not exist yet,
+          # so /releases/tags/<tag> 404s and 'gh release view' fails. Resolve
+          # via the release LIST api by id instead.
+          RELID=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.name=="game-content" or .tag_name=="game-content") | .id' | head -1 || true)
+          if [ -z "$RELID" ]; then
+            echo "::error::draft release game-content missing — cannot upload"; exit 1
+          fi
           # drop stale parts of the SAME prefix only; --clobber refreshes the rest
-          gh release view game-content --repo "$GITHUB_REPOSITORY" --json assets \
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELID/assets?per_page=100" \
             --jq '.assets[].name' | grep -E "^${PREFIX}-" | while read -r a; do
               gh release delete-asset game-content "$a" --repo "$GITHUB_REPOSITORY" --yes || true
             done
@@ -212,7 +220,7 @@ jobs:
             echo "no parts produced by shard $PREFIX — nothing to upload"
           fi
           echo "--- draft release assets now ---"
-          gh release view game-content --repo "$GITHUB_REPOSITORY" --json assets \
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELID" \
             --jq '.assets[] | .name + "  " + ((.size / 1073741824 * 100 | round) / 100 | tostring) + "GB"'
 
       - name: Summary
