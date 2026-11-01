@@ -1,12 +1,20 @@
 name: fetch-csgo-content
 
 # Downloads the CS:GO legacy (1.38.8.1) game content from Steam depots with
-# DepotDownloader (anonymous), filters out what the port does not need
-# (pak01_*.vpk data volumes, bin/ client binaries), packs it into <=1.8GB zip
-# parts and uploads them to the DRAFT release 'game-content'.  The normal CI
-# boot-test then picks the pack up automatically (ci.yml "Fetch game content").
+# DepotDownloader (anonymous — omit -username entirely; passing
+# "-username anonymous" makes SteamKit throw LogOn ArgumentException),
+# filters out what the port does not need (pak01_*.vpk data volumes, top-level
+# bin/ client binaries), packs it into <=1.8GB zip parts and uploads them to
+# the DRAFT release 'game-content'.  The normal CI boot-test then picks the
+# pack up automatically (ci.yml "Fetch game content").
 #
-# Manual trigger only — run it once; re-run replaces the assets (--clobber).
+# DepotDownloader 2.7.x notes (learned the hard way, run 41296346328):
+#   * branch flag is -beta (a -branch arg is silently IGNORED)
+#   * anonymous = no -username at all
+#   * -filelist lines are literal paths or "regex:..." patterns; the old "!"
+#     exclusion syntax is GONE — exclusions are done with a negative lookahead
+#
+# Manual trigger only — re-runs replace the assets (--clobber).
 
 on:
   workflow_dispatch:
@@ -29,61 +37,62 @@ jobs:
           curl -sfL --retry 3 -o dd.zip \
             https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_2.7.4/DepotDownloader-linux-x64.zip
           mkdir dd && unzip -q dd.zip -d dd && chmod +x dd/DepotDownloader
-          ./dd/DepotDownloader --help 2>&1 | head -5 || true
 
-      # Filter file: DepotDownloader filelist semantics — lines are regexes
-      # matched against depot paths; '!' prefix excludes from the set.
-      #   include everything, then drop pak01 vpk volumes (the multi-GB data
-      #   cubes) and the top-level bin/ (windows client binaries — the port
-      #   builds its own).  Both can be added later as a B-pack if the engine
-      #   logs demand them.
+      # everything except top-level bin/ and any pak01*.vpk volume
       - name: Prepare filelist filter
         run: |
-          cat > filter.txt <<'EOF'
-          .*
-          !.*pak01.*\.vpk
-          !^bin/
-          EOF
+          printf 'regex:^(?!bin/)(?!.*pak01).*$\n' > filter.txt
           cat filter.txt
 
-      # Attempt chain, first match wins.  Verified by steam.inf PatchVersion:
-      #   1. app 730 depot 731 branch csgo_legacy  — legacy CLIENT content
-      #   2. app 4465480 (csgo legacy standalone app) — probed for its depot id
-      #   3. app 740 depot 740 — legacy dedicated-server content (anonymous
-      #      by design; same 1.38.8.1 content minus client-only extras)
+      # Attempt chain, first accessible depot wins.  Each candidate is probed
+      # with -manifest-only first (seconds, no content) and the manifest must
+      # look like legacy CS:GO (steam.inf + cstrike/ at the depot root).
+      #   a1: app 730 depot 731 branch csgo_legacy — legacy CLIENT content
+      #   a2: app 4465480 (standalone legacy client app) — all depots probed,
+      #       the one containing cstrike/ is selected
+      #   a3: app 740 depot 740 — legacy dedicated-server content (anonymous
+      #       by design; same 1.38.8.1 content minus client-only extras)
       - name: Depot-download content (attempt chain)
         run: |
           mkdir -p out logs
-          verify() {
+          probe() {
+            local tag="$1"; shift
+            echo "=== manifest probe $tag: $* ==="
+            timeout 240 ./dd/DepotDownloader -manifest-only -os windows \
+              -dir "probe-$tag" "$@" > "logs/$tag-probe.log" 2>&1
+            local rc=$?
+            tail -3 "logs/$tag-probe.log" || true
+            [ $rc -eq 0 ] || return 1
+            M=$(ls "probe-$tag"/*.txt 2>/dev/null | head -1)
+            [ -n "$M" ] || return 1
+            grep -q "^steam.inf" "$M" || return 1
+            grep -q "^cstrike/" "$M" || return 1
+            echo "probe $tag: legacy-layout manifest OK ($M)"
+          }
+          full() {
+            local tag="$1"; shift
+            echo "=== full download $tag: $* ==="
+            timeout 1200 ./dd/DepotDownloader -os windows \
+              -filelist filter.txt -dir out "$@" 2>&1 | tee "logs/$tag-full.log" | tail -6
             SI=$(find out -name steam.inf | head -1)
-            [ -n "$SI" ] || return 1
+            [ -n "$SI" ] || { echo "no steam.inf downloaded"; return 1; }
             PV=$(grep -oE 'PatchVersion=[0-9.]+' "$SI" | head -1 | cut -d= -f2)
-            echo "steam.inf: $SI  PatchVersion=$PV"
+            echo "steam.inf PatchVersion=$PV"
             [ "$PV" = "1.38.8.1" ]
           }
-          run_dd() {
-            local tag="$1"; shift
-            echo "=== attempt $tag: DepotDownloader $* ==="
-            timeout 900 ./dd/DepotDownloader -username anonymous -os windows \
-              -filelist filter.txt -dir out "$@" 2>&1 | tee "logs/$tag.log" | tail -8
-            verify
-          }
-          if run_dd a1-730-731-legacy -app 730 -depot 731 -branch csgo_legacy; then
-            echo "OK via 730/731 csgo_legacy"; exit 0
+
+          if probe a1 -app 730 -depot 731 -beta csgo_legacy && full a1 -app 730 -depot 731 -beta csgo_legacy; then
+            echo "OK via app 730 depot 731 csgo_legacy"; exit 0
+          fi
+          if probe a2 -app 4465480; then
+            DD_DEPOT=$(ls probe-a2/*.txt | head -1 | xargs basename | grep -oE "^[0-9]+")
+            echo "app 4465480 content depot id: $DD_DEPOT"
+            if [ -n "$DD_DEPOT" ] && full a2 -app 4465480 -depot "$DD_DEPOT"; then
+              echo "OK via app 4465480"; exit 0
+            fi
           fi
           rm -rf out && mkdir -p out
-          # probe 4465480 for its content depot id (tiny steam.inf-only pull)
-          echo "steam.inf" > fl_probe.txt
-          timeout 300 ./dd/DepotDownloader -username anonymous -os windows \
-            -filelist fl_probe.txt -dir probe -app 4465480 2>&1 | tee logs/a2-probe.log | tail -15
-          DD_DEPOT=$(grep -oE "[Dd]epot [0-9]+" logs/a2-probe.log | head -1 | grep -oE "[0-9]+")
-          echo "4465480 content depot id: ${DD_DEPOT:-unknown}"
-          rm -rf probe
-          if [ -n "$DD_DEPOT" ] && run_dd a2-4465480 -app 4465480 -depot "$DD_DEPOT"; then
-            echo "OK via app 4465480"; exit 0
-          fi
-          rm -rf out && mkdir -p out
-          if run_dd a3-740-server -app 740 -depot 740; then
+          if probe a3 -app 740 -depot 740 && full a3 -app 740 -depot 740; then
             echo "OK via app 740 (server content)"; exit 0
           fi
           echo "::error::all depot attempts failed — inspect logs/*.log"
