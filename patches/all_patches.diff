@@ -2071,3 +2071,24 @@ index b359e03..8d7f70f 100644
  
  	// PKCS8PrivateKey
  	void BERDecodePrivateKey(BufferedTransformation &bt, bool parametersPresent, size_t size);
+--- a/appframework/posixapp.cpp
++++ b/appframework/posixapp.cpp
+@@ -102,7 +102,18 @@
+ 		return false;
+ 
+ 	// Add in the cvar factory
++#ifdef __ANDROID__
++	// csARM: VStdLib_GetICVarFactory() returns Sys_GetFactoryThis() - the
++	// factory of the module that CALLS it.  posixapp.cpp is built into
++	// libappframework.so without a libvstdlib import, so the symbol stays
++	// local and the factory does not answer CVAR_INTERFACE_VERSION - the
++	// outer group silently loses its cvar system (run 41332570591:
++	// "FindSystem MISS VEngineCvar007" for BOTH groups).  Load the real
++	// module through the bin/ symlink instead.
++	AppModule_t cvarModule = LoadModule( "vstdlib" DLL_EXT_STRING );
++#else
+ 	AppModule_t cvarModule = LoadModule( VStdLib_GetICVarFactory() );
++#endif
+ 	AddSystem( cvarModule, CVAR_INTERFACE_VERSION );	
+ 
+ 	AppModule_t fileSystemModule = LoadModule( pFileSystemDLL );

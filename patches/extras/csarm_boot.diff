@@ -286,7 +286,23 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  #include "common.h"
  #include "iregistry.h"
  #include "keys.h"
-@@ -1199,6 +1200,7 @@
+@@ -581,7 +582,15 @@
+ 		return false;
+ #endif
+ 
++	CSARM_LOGI( "CEngineAPI::Connect: studio=%d datacache=%d physics=%d mdlcache=%d matssurface=%d input=%d soundemit=%d",
++		g_pStudioRender ? 1 : 0, g_pDataCache ? 1 : 0, g_pPhysics ? 1 : 0, g_pMDLCache ? 1 : 0,
++		g_pMatSystemSurface ? 1 : 0, g_pInputSystem ? 1 : 0, g_pSoundEmitterSystem ? 1 : 0 );
++#ifdef __ANDROID__
++	// csARM: no vphysics on Android (closed IVP core) - boot tolerates it
++	if ( !g_pStudioRender || !g_pDataCache || !g_pMDLCache || !g_pMatSystemSurface || !g_pInputSystem || !g_pSoundEmitterSystem)
++#else
+ 	if ( !g_pStudioRender || !g_pDataCache || !g_pPhysics || !g_pMDLCache || !g_pMatSystemSurface || !g_pInputSystem || !g_pSoundEmitterSystem)
++#endif
+ 	{
+ 		Warning( "Engine wasn't able to acquire required interfaces!\n" );
+ 		return false;
+@@ -1199,6 +1208,7 @@
  //-----------------------------------------------------------------------------
  bool CEngineAPI::OnStartup( void *pInstance, const char *pStartupModName )
  {
@@ -294,7 +310,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	// This fixes a bug on certain machines where the input will 
  	// stop coming in for about 1 second when someone hits a key.
  	// (true means to disable priority boost)
-@@ -1220,6 +1222,7 @@
+@@ -1220,6 +1230,7 @@
  	// for use by the code that creates the window
  	if ( !game->Init( pInstance ) )
  	{
@@ -302,7 +318,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  		goto onStartupError;
  	}
  
-@@ -1230,6 +1233,7 @@
+@@ -1230,6 +1241,7 @@
  	// This way mods can have different default video settings
  	if ( !videomode->Init( ) )
  	{
@@ -310,7 +326,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  		goto onStartupShutdownGame;
  	}
  
-@@ -1346,10 +1350,13 @@
+@@ -1346,10 +1358,13 @@
  	COM_TimestampedLog( "Host_ReadPreStartupConfiguration - Finish" );
  	// Create the game window now that we have a search path
  	// FIXME: Deal with initial window width + height better
@@ -324,7 +340,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  
  	return true;
  }
-@@ -1408,6 +1415,7 @@
+@@ -1408,6 +1423,7 @@
  //-----------------------------------------------------------------------------
  int CEngineAPI::RunListenServer()
  {
@@ -332,7 +348,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	//
  	// NOTE: Systems set up here should depend on the mod 
  	// Systems which are mod-independent should be set up in the launcher or Init()
-@@ -1417,7 +1425,9 @@
+@@ -1417,7 +1433,9 @@
  	int nRunResult = RUN_OK;
  
  	// Happens every time we start up and shut down a mod
@@ -343,7 +359,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	{
  		CModAppSystemGroup modAppSystemGroup( false, m_StartupInfo.m_pParentAppSystemGroup );
  
-@@ -1735,6 +1745,7 @@
+@@ -1735,6 +1753,7 @@
  //-----------------------------------------------------------------------------
  int CEngineAPI::Run()
  {
@@ -351,7 +367,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	if ( CommandLine()->FindParm("-insecure") )
  	{
  		extern void Host_DisallowSecureServers();
-@@ -2402,7 +2413,9 @@
+@@ -2402,7 +2421,9 @@
  		COM_TimestampedLog( "eng->Load" );
  
  		// Start up the game engine

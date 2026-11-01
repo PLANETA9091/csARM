@@ -271,6 +271,33 @@ pairs.append((
     'int CEngineAPI::RunListenServer()\n{\n'
     + T + 'CSARM_LOGI( "CEngineAPI::RunListenServer enter" );\n'))
 
+# csARM run 41332570591 (first boot with the real 1.38.8.1 content):
+# CEngineAPI::Connect hard-fails "Engine wasn't able to acquire required
+# interfaces!" because g_pPhysics is NULL - the launcher appSystems table
+# omits vphysics on Android (csarm_boot.diff) because the vphysics CORE
+# (IVP) is closed-source: every leak ships only ivp_physics.lib, the
+# wrapper (tf2_src/vphysics) links against it.  Boot does not exercise
+# physics, so on Android the hard requirement drops g_pPhysics.
+pairs.append((
+    T + 'if ( !g_pStudioRender || !g_pDataCache || !g_pPhysics || !g_pMDLCache || !g_pMatSystemSurface || !g_pInputSystem || !g_pSoundEmitterSystem)\n'
+    + T + '{\n'
+    + T + T + 'Warning( "Engine wasn\'t able to acquire required interfaces!\\n" );\n'
+    + T + T + 'return false;\n'
+    + T + '}\n',
+    T + 'CSARM_LOGI( "CEngineAPI::Connect: studio=%d datacache=%d physics=%d mdlcache=%d matssurface=%d input=%d soundemit=%d",\n'
+    + T + T + 'g_pStudioRender ? 1 : 0, g_pDataCache ? 1 : 0, g_pPhysics ? 1 : 0, g_pMDLCache ? 1 : 0,\n'
+    + T + T + 'g_pMatSystemSurface ? 1 : 0, g_pInputSystem ? 1 : 0, g_pSoundEmitterSystem ? 1 : 0 );\n'
+    + '#ifdef __ANDROID__\n'
+    + T + '// csARM: no vphysics on Android (closed IVP core) - boot tolerates it\n'
+    + T + 'if ( !g_pStudioRender || !g_pDataCache || !g_pMDLCache || !g_pMatSystemSurface || !g_pInputSystem || !g_pSoundEmitterSystem)\n'
+    + '#else\n'
+    + T + 'if ( !g_pStudioRender || !g_pDataCache || !g_pPhysics || !g_pMDLCache || !g_pMatSystemSurface || !g_pInputSystem || !g_pSoundEmitterSystem)\n'
+    + '#endif\n'
+    + T + '{\n'
+    + T + T + 'Warning( "Engine wasn\'t able to acquire required interfaces!\\n" );\n'
+    + T + T + 'return false;\n'
+    + T + '}\n'))
+
 # csARM silent-rc0 probes (run 41326912005: clean exit 467ms after launch,
 # zero engine spew after "SDL video target").  Three return-false-silently
 # paths funnel into RUN_OK: CEngineAPI::OnStartup sub-inits, ModInit's
