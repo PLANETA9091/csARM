@@ -2,45 +2,54 @@ name: csARM content
 
 # Fetches CS:GO legacy (1.38.8.1) game content straight from the Steam CDNs
 # with DepotDownloader (anonymous login) on the runner's fat pipe, then
-# attaches it to the DRAFT release 'game-content', which .github/workflows/
-# ci.yml boot-test consumes automatically (download -> run-as -> filesDir).
+# attaches it to the DRAFT release 'game-content', which ci.yml boot-test
+# consumes automatically (download -> run-as -> filesDir).
 #
-# Candidate sources, first anonymous success wins (probed via steam.inf):
-#   1. app 4465480        — CS:GO Legacy standalone client app
-#   2. app 730 csgo_legacy — legacy branch of the main app
-#   3. app 740            — dedicated server (client content minus UI extras)
+# v3: speed + visibility overhaul
+#   - TWO parallel runners (matrix): pack A = everything except pak01_/bin/,
+#     pack B = pak01_*.vpk only. Two runner IPs -> double Steam CDN bandwidth.
+#   - DepotDownloader -max-servers 64 -max-downloads 32 (defaults are 20/8).
+#   - LIVE logs: DD output goes to dd.log; a heartbeat prints every 20 s into
+#     this step's log (total MiB, file count, MiB/s, last real DD lines).
+#     Watch it live in the Actions tab while the job runs.
+#   - Hardcoded app 730 / -branch csgo_legacy: verified anonymously reachable,
+#     manifest = 1.38.8.1 (steam.inf PatchVersion, Oct 12 2023).
+#   - Version gate: refuses to upload if steam.inf is not 1.38.8.1.
+#   - Layout normalized to a top-level cstrike/ dir for ci.yml.
 #
-# Packs (per A/B convention):
-#   A-pack (default): everything EXCEPT pak01_*.vpk and any bin/ dir
-#                     -> files/cstrike/{cstrike,platform,panorama?,...}
-#   B-pack (input include_pak01=true): only pak01_*.vpk
-#                     -> files/cstrike/pak01_*.vpk (mounted by gameinfo)
-# DepotDownloader 2.7.4 filelists are inclusion-only, so the A-filter is a
-# single negative-lookahead regex instead of '.*' + '!exclusions'.
-#
-# Manual trigger only. Assets are named apart-NN.zip / bpart-NN.zip and are
-# capped at 1.6 GiB (GitHub asset hard limit is 2 GiB).
+# Assets: apart-NN.zip / bpart-NN.zip, each <= 1.6 GiB (GitHub limit is 2 GiB).
 
 on:
-  workflow_dispatch:
-    inputs:
-      include_pak01:
-        description: 'true = B-pack (pak01_*.vpk only)'
-        required: false
-        default: 'false'
+  workflow_dispatch: {}
 
 permissions:
   contents: write
 
 concurrency:
   group: content-fetch
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   fetch:
-    name: fetch/steam-legacy-depots
+    name: fetch/${{ matrix.prefix }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pack: A (all content except pak01_/bin/)
+            filelist: 'regex:^(?!.*pak01_.*)(?!.*(^|/)bin(/|$)).*'
+            prefix: apart
+            check_inf: true
+          - pack: B (pak01 vpk only)
+            filelist: 'regex:pak01_'
+            prefix: bpart
+            check_inf: false
+    env:
+      PREFIX: ${{ matrix.prefix }}
+      FILELIST: ${{ matrix.filelist }}
+      CHECK_INF: ${{ matrix.check_inf }}
     steps:
       - uses: actions/checkout@v4
 
@@ -52,67 +61,59 @@ jobs:
           ./DepotDownloader 2>&1 | head -3 || true
           echo "--- disk ---"; df -h /
 
-      # Anonymous access probe per candidate: fetch only steam.inf, print the
-      # version, stop at the first candidate that works. Access-denied fails
-      # within seconds, so a full sweep costs ~1-2 min.
-      - name: Probe anonymous access (steam.inf, verify 1.38.8.1)
-        id: probe
+      - name: Download pack (max concurrency, LIVE heartbeat)
         run: |
           set -e
-          printf 'regex:(^|/)steam\\.inf$\n' > fl_probe.txt
-          PICKED=""
-          try() {
-            local app="$1" br="$2" dir="probe_$1"
-            rm -rf "$dir" && mkdir -p "$dir"
-            local args=(-app "$app" -os windows -filelist fl_probe.txt -dir "$dir")
-            [ -n "$br" ] && args+=(-branch "$br")
-            echo "::group::probe app=$app branch=${br:-public}"
-            timeout 180 ./DepotDownloader "${args[@]}" > "probe_$1.log" 2>&1 || true
-            tail -12 "probe_$1.log"
-            local inf
-            inf=$(find "$dir" -name steam.inf | head -1)
-            if [ -n "$inf" ]; then
-              echo "--- steam.inf ($inf) ---"; cat "$inf"
-              if grep -q "PatchVersion=1.38.8.1" "$inf"; then
-                PICKED="$app|$br"
-                echo "PICKED=$PICKED" >> "$GITHUB_OUTPUT"
-                echo "::notice::candidate app=$app branch=${br:-public} accepted"
-              else
-                echo "::warning::app=$app version mismatch (not 1.38.8.1)"
-              fi
-            else
-              echo "::warning::app=$app branch=${br:-public}: no steam.inf fetched"
-            fi
-            echo "::endgroup::"
-          }
-          try 4465480 ""
-          [ -n "$PICKED" ] || try 730 "csgo_legacy"
-          [ -n "$PICKED" ] || try 740 ""
-          [ -n "$PICKED" ] || { echo "::error::all anonymous candidates failed"; exit 1; }
-
-      - name: Download pack (filtered by regex filelist)
-        env:
-          INCLUDE_PAK01: ${{ inputs.include_pak01 }}
-        run: |
-          set -e
-          IFS='|' read -r APP BR <<< "${{ steps.probe.outputs.PICKED }}"
-          if [ "$INCLUDE_PAK01" = "true" ]; then
-            printf 'regex:pak01_\n' > fl.txt
-            echo "PREFIX=bpart" >> "$GITHUB_ENV"
-          else
-            printf 'regex:^(?!.*pak01_.*)(?!.*(^|/)bin(/|$)).*\n' > fl.txt
-            echo "PREFIX=apart" >> "$GITHUB_ENV"
-          fi
+          printf '%s\n' "$FILELIST" > fl.txt
           rm -rf content && mkdir -p content
-          ARGS=(-app "$APP" -os windows -filelist fl.txt \
-                -dir content -max-downloads 16)
-          [ -n "$BR" ] && ARGS+=(-branch "$BR")
-          echo "downloading app=$APP branch=${BR:-public} pak01=${INCLUDE_PAK01}"
-          time ./DepotDownloader "${ARGS[@]}" 2>&1 | tee dl.log | tail -20
-          echo "--- disk after download ---"; df -h /
-          echo "--- depot root ---"; ls content | head -30
-          echo "--- counts ---"; echo "files: $(find content -type f | wc -l)  size: $(du -sh content | cut -f1)"
-          [ -d content/cstrike ] || [ -d content/csgo/cstrike ] || { echo "::error::unexpected depot layout (no cstrike/)"; find content -maxdepth 2 | head -30; exit 1; }
+          ARGS=(-app 730 -os windows -branch csgo_legacy -filelist fl.txt \
+                -dir content -max-servers 64 -max-downloads 32)
+          echo "DD args: ${ARGS[*]}"
+          echo "LIVE progress: one heartbeat line every 20 s"
+          ./DepotDownloader "${ARGS[@]}" > dd.log 2>&1 &
+          DD_PID=$!
+          T0=$(date +%s); LAST=0
+          while kill -0 "$DD_PID" 2>/dev/null; do
+            sleep 20
+            NOW=$(date +%s); DT=$((NOW - T0))
+            SZ=$(du -sm content 2>/dev/null | cut -f1); SZ=${SZ:-0}
+            NF=$(find content -type f 2>/dev/null | wc -l)
+            RATE=$(( (SZ - LAST) / 20 ))
+            echo "[hb $(date -u +%H:%M:%S)] total=${SZ}MiB files=${NF} rate=${RATE}MiB/s elapsed=${DT}s"
+            LAST=$SZ
+            tail -c 3000 dd.log | tr '\r' '\n' | grep -v '^[[:space:]]*$' | tail -3 | sed 's/^/  [dd] /'
+          done
+          set +e; wait "$DD_PID"; RC=$?; set -e
+          echo "=== DepotDownloader exit=$RC after $(( $(date +%s) - T0 ))s ==="
+          tail -c 12000 dd.log | tr '\r' '\n' | grep -v '^[[:space:]]*$' | tail -50 || true
+          [ "$RC" = "0" ] || { echo "::error::DepotDownloader failed rc=$RC"; exit "$RC"; }
+          echo "--- counts ---"
+          echo "files: $(find content -type f | wc -l)  size: $(du -sh content | cut -f1)"
+          df -h /
+
+      - name: Verify version + normalize layout
+        run: |
+          set -e
+          inf=$(find content -name steam.inf | head -1)
+          if [ -n "$inf" ]; then
+            echo "--- $inf ---"; cat "$inf"
+            grep -q 'PatchVersion=1.38.8.1' "$inf" \
+              || { echo "::error::content is NOT legacy 1.38.8.1 (wrong branch?)"; exit 1; }
+            echo "::notice::steam.inf confirms 1.38.8.1 (csgo_legacy)"
+          elif [ "$CHECK_INF" = "true" ]; then
+            echo "::error::pack A missing steam.inf"; exit 1
+          fi
+          if [ ! -d content/cstrike ]; then
+            if [ -d content/csgo/cstrike ]; then
+              mv content/csgo/cstrike content/cstrike
+              echo "normalized: content/csgo/cstrike -> content/cstrike"
+            elif [ -d content/csgo ]; then
+              mv content/csgo content/cstrike
+              echo "normalized: content/csgo -> content/cstrike"
+            fi
+          fi
+          echo "--- layout ---"; find content -maxdepth 2 -type d | head -20
+          ls content/cstrike | head -25 || true
 
       - name: Split into release-sized parts
         run: |
@@ -124,6 +125,7 @@ jobs:
             n=$((n+1))
             name="$PREFIX-$(printf '%02d' "$n")"
             (cd content && zip -q -X -1 "../parts/$name.zip" -@ < "$lst")
+            echo "zipped parts/$name.zip ($(du -m "parts/$name.zip" | cut -f1) MiB)"
           done
           echo "--- parts ---"; ls -la parts/
           df -h /
@@ -133,13 +135,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          # drop stale parts of the SAME prefix only (a B-pack run must not
-          # delete the A-pack and vice versa); --clobber refreshes the rest
+          # drop stale parts of the SAME prefix only (a bpart run must not
+          # delete apart parts and vice versa); --clobber refreshes the rest
           gh release view game-content --repo "$GITHUB_REPOSITORY" --json assets \
             --jq '.assets[].name' | grep -E "^${PREFIX}-" | while read -r a; do
               gh release delete-asset game-content "$a" --repo "$GITHUB_REPOSITORY" --yes || true
             done
-          gh release upload game-content parts/*.zip --repo "$GITHUB_REPOSITORY" --clobber
+          for z in parts/*.zip; do
+            echo "uploading $z ($(du -m "$z" | cut -f1) MiB) ..."
+            gh release upload game-content "$z" --repo "$GITHUB_REPOSITORY" --clobber
+            echo "  done: $z"
+          done
           echo "--- draft release assets now ---"
           gh release view game-content --repo "$GITHUB_REPOSITORY" \
             --jq '.assets[] | .name + "  " + ((.size / 1073741824 * 100 | round) / 100 | tostring) + "GB"'
@@ -147,6 +153,8 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "probe:    ${{ steps.probe.outputs.PICKED || 'none' }}"
+          echo "pack:     ${{ matrix.pack }}"
           echo "prefix:   ${PREFIX:-n/a}"
-          echo "dl.log tail:"; tail -20 dl.log 2>/dev/null || true
+          echo "files:    $(find content -type f 2>/dev/null | wc -l)"
+          echo "size:     $(du -sh content 2>/dev/null | cut -f1)"
+          echo "dl.log tail:"; tail -c 4000 dd.log 2>/dev/null | tr '\r' '\n' | tail -15 || true
