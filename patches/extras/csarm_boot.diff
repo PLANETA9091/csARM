@@ -286,7 +286,45 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  #include "common.h"
  #include "iregistry.h"
  #include "keys.h"
-@@ -1408,6 +1409,7 @@
+@@ -1199,6 +1200,7 @@
+ //-----------------------------------------------------------------------------
+ bool CEngineAPI::OnStartup( void *pInstance, const char *pStartupModName )
+ {
++	CSARM_LOGI( "CEngineAPI::OnStartup enter" );
+ 	// This fixes a bug on certain machines where the input will 
+ 	// stop coming in for about 1 second when someone hits a key.
+ 	// (true means to disable priority boost)
+@@ -1220,6 +1222,7 @@
+ 	// for use by the code that creates the window
+ 	if ( !game->Init( pInstance ) )
+ 	{
++		CSARM_LOGW( "CEngineAPI::OnStartup FAILED: game->Init" );
+ 		goto onStartupError;
+ 	}
+ 
+@@ -1230,6 +1233,7 @@
+ 	// This way mods can have different default video settings
+ 	if ( !videomode->Init( ) )
+ 	{
++		CSARM_LOGW( "CEngineAPI::OnStartup FAILED: videomode->Init" );
+ 		goto onStartupShutdownGame;
+ 	}
+ 
+@@ -1346,10 +1350,13 @@
+ 	COM_TimestampedLog( "Host_ReadPreStartupConfiguration - Finish" );
+ 	// Create the game window now that we have a search path
+ 	// FIXME: Deal with initial window width + height better
++	CSARM_LOGI( "ModInit: CreateGameWindow %dx%d", g_pMaterialSystemConfig->m_VideoMode.m_Width, g_pMaterialSystemConfig->m_VideoMode.m_Height );
+ 	if ( !videomode || !videomode->CreateGameWindow( g_pMaterialSystemConfig->m_VideoMode.m_Width, g_pMaterialSystemConfig->m_VideoMode.m_Height, g_pMaterialSystemConfig->Windowed(), g_pMaterialSystemConfig->NoWindowBorder() ) )
+ 	{
++		CSARM_LOGW( "ModInit FAILED: videomode=%p CreateGameWindow=false", (void*)videomode );
+ 		return false;
+ 	}
++	CSARM_LOGI( "ModInit: game window created" );
+ 
+ 	return true;
+ }
+@@ -1408,6 +1415,7 @@
  //-----------------------------------------------------------------------------
  int CEngineAPI::RunListenServer()
  {
@@ -294,7 +332,18 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	//
  	// NOTE: Systems set up here should depend on the mod 
  	// Systems which are mod-independent should be set up in the launcher or Init()
-@@ -1735,6 +1737,7 @@
+@@ -1417,7 +1425,9 @@
+ 	int nRunResult = RUN_OK;
+ 
+ 	// Happens every time we start up and shut down a mod
+-	if ( ModInit( m_StartupInfo.m_pInitialMod, m_StartupInfo.m_pInitialGame ) )
++	bool bModInit = ModInit( m_StartupInfo.m_pInitialMod, m_StartupInfo.m_pInitialGame );
++	CSARM_LOGI( "RunListenServer: ModInit=%d", bModInit ? 1 : 0 );
++	if ( bModInit )
+ 	{
+ 		CModAppSystemGroup modAppSystemGroup( false, m_StartupInfo.m_pParentAppSystemGroup );
+ 
+@@ -1735,6 +1745,7 @@
  //-----------------------------------------------------------------------------
  int CEngineAPI::Run()
  {
@@ -302,6 +351,17 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	if ( CommandLine()->FindParm("-insecure") )
  	{
  		extern void Host_DisallowSecureServers();
+@@ -2402,7 +2413,9 @@
+ 		COM_TimestampedLog( "eng->Load" );
+ 
+ 		// Start up the game engine
+-		if ( eng->Load( false, host_parms.basedir ) )					
++		bool bEngLoad = eng->Load( false, host_parms.basedir );
++		CSARM_LOGI( "CModAppSystemGroup::Main: eng->Load=%d", bEngLoad ? 1 : 0 );
++		if ( bEngLoad )					
+ 		{
+ #if !defined(DEDICATED)
+ 			toolframework->ServerInit( g_ServerFactory );
 
 diff --git a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
 --- a/appframework/sdlmgr.cpp
@@ -392,6 +452,7 @@ diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc b/third
  }
  
  
+
 diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc
 --- a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc
 +++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc
@@ -431,6 +492,7 @@ diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc b/thirdpar
    }
  }
  
+
 diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc
 --- a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc
 +++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc
@@ -457,4 +519,89 @@ diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc b/th
 +    return;
    }
  }
+ 
+
+diff --git a/engine/sys_getmodes.cpp b/engine/sys_getmodes.cpp
+--- a/engine/sys_getmodes.cpp
++++ b/engine/sys_getmodes.cpp
+@@ -29,6 +29,7 @@
+ #include "vmodes.h"
+ #include "modes.h"
+ #include "ivideomode.h"
++#include "common/csarm_log.h"
+ #include "igame.h"
+ #include "iengine.h"
+ #include "engine_launcher_api.h"
+@@ -540,7 +541,9 @@
+ 			return false;
+ 
+         // When running in stand-alone mode, create your own window 
+-        if ( !game->CreateGameWindow() )
++        bool bWindowOK = game->CreateGameWindow();
++        CSARM_LOGI( "CreateGameWindow: game->CreateGameWindow=%d", bWindowOK ? 1 : 0 );
++        if ( !bWindowOK )
+             return false;
+ 
+ 		COM_TimestampedLog( "CreateGameWindow - Finish" );
+@@ -554,7 +557,9 @@
+ 		COM_TimestampedLog( "SetMode - Start" );
+ 
+         // Set the mode and let the materialsystem take over
+-		if ( !SetMode( GetModeWidth(), GetModeHeight(), IsWindowedMode(), NoWindowBorder() ) )
++		bool bModeOK = SetMode( GetModeWidth(), GetModeHeight(), IsWindowedMode(), NoWindowBorder() );
++		CSARM_LOGI( "CreateGameWindow: SetMode=%d", bModeOK ? 1 : 0 );
++		if ( !bModeOK )
+             return false;
+ 
+ #if defined( USE_SDL ) && 0
+
+diff --git a/engine/sys_mainwind.cpp b/engine/sys_mainwind.cpp
+--- a/engine/sys_mainwind.cpp
++++ b/engine/sys_mainwind.cpp
+@@ -35,6 +35,7 @@
+ #include "appframework/ilaunchermgr.h"
+ 
+ #include "igame.h"
++#include "common/csarm_log.h"
+ #include "cl_main.h"
+ #include "host.h"
+ #include "quakedef.h"
+@@ -1273,7 +1274,9 @@
+ 	modinfo->deleteThis();
+ 	modinfo = NULL;
+ 
+-	if ( !g_pLauncherMgr->CreateGameWindow( windowName, true, 0, 0, true ) )
++	bool bWindowCreated = g_pLauncherMgr->CreateGameWindow( windowName, true, 0, 0, true );
++	CSARM_LOGI( "CGame::CreateGameWindow: ok=%d sdlerr=[%s]", bWindowCreated ? 1 : 0, SDL_GetError() ? SDL_GetError() : "" );
++	if ( !bWindowCreated )
+ 	{
+ 		Error( "Fatal Error:  Unable to create game window!" );
+ 		return false;
+
+diff --git a/engine/sys_engine.cpp b/engine/sys_engine.cpp
+--- a/engine/sys_engine.cpp
++++ b/engine/sys_engine.cpp
+@@ -8,6 +8,7 @@
+ #include <assert.h>
+ #include "engine_launcher_api.h"
+ #include "iengine.h"
++#include "common/csarm_log.h"
+ #include "ivideomode.h"
+ #include "igame.h"
+ #include "vmodes.h"
+@@ -242,11 +243,13 @@
+ 	// NOTE: We must bypass the 'next state' block here for initialization to work properly.
+ 	m_nDLLState = m_nNextDLLState = DLL_ACTIVE;
+ 
+-	if ( Sys_InitGame( 
++	bool bInitGame = Sys_InitGame( 
+ 		g_AppSystemFactory,
+ 		rootdir, 
+ 		game->GetMainWindowAddress(), 
+-		dedicated ) )
++		dedicated );
++	CSARM_LOGI( "CEngine::Load: Sys_InitGame=%d basedir=%s", bInitGame ? 1 : 0, rootdir ? rootdir : "null" );
++	if ( bInitGame )
+ 	{
+ 		success = true;
  

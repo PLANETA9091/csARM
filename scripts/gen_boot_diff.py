@@ -270,6 +270,59 @@ pairs.append((
     'int CEngineAPI::RunListenServer()\n{\n',
     'int CEngineAPI::RunListenServer()\n{\n'
     + T + 'CSARM_LOGI( "CEngineAPI::RunListenServer enter" );\n'))
+
+# csARM silent-rc0 probes (run 41326912005: clean exit 467ms after launch,
+# zero engine spew after "SDL video target").  Three return-false-silently
+# paths funnel into RUN_OK: CEngineAPI::OnStartup sub-inits, ModInit's
+# CreateGameWindow, and CModAppSystemGroup::Main's eng->Load.
+pairs.append((
+    'bool CEngineAPI::OnStartup( void *pInstance, const char *pStartupModName )\n{\n',
+    'bool CEngineAPI::OnStartup( void *pInstance, const char *pStartupModName )\n{\n'
+    + T + 'CSARM_LOGI( "CEngineAPI::OnStartup enter" );\n'))
+pairs.append((
+    T + 'if ( !game->Init( pInstance ) )\n'
+    + T + '{\n'
+    + T + T + 'goto onStartupError;\n'
+    + T + '}\n',
+    T + 'if ( !game->Init( pInstance ) )\n'
+    + T + '{\n'
+    + T + T + 'CSARM_LOGW( "CEngineAPI::OnStartup FAILED: game->Init" );\n'
+    + T + T + 'goto onStartupError;\n'
+    + T + '}\n'))
+pairs.append((
+    T + 'if ( !videomode->Init( ) )\n'
+    + T + '{\n'
+    + T + T + 'goto onStartupShutdownGame;\n'
+    + T + '}\n',
+    T + 'if ( !videomode->Init( ) )\n'
+    + T + '{\n'
+    + T + T + 'CSARM_LOGW( "CEngineAPI::OnStartup FAILED: videomode->Init" );\n'
+    + T + T + 'goto onStartupShutdownGame;\n'
+    + T + '}\n'))
+pairs.append((
+    T + 'if ( !videomode || !videomode->CreateGameWindow( g_pMaterialSystemConfig->m_VideoMode.m_Width, g_pMaterialSystemConfig->m_VideoMode.m_Height, g_pMaterialSystemConfig->Windowed(), g_pMaterialSystemConfig->NoWindowBorder() ) )\n'
+    + T + '{\n'
+    + T + T + 'return false;\n'
+    + T + '}\n',
+    T + 'CSARM_LOGI( "ModInit: CreateGameWindow %dx%d", g_pMaterialSystemConfig->m_VideoMode.m_Width, g_pMaterialSystemConfig->m_VideoMode.m_Height );\n'
+    + T + 'if ( !videomode || !videomode->CreateGameWindow( g_pMaterialSystemConfig->m_VideoMode.m_Width, g_pMaterialSystemConfig->m_VideoMode.m_Height, g_pMaterialSystemConfig->Windowed(), g_pMaterialSystemConfig->NoWindowBorder() ) )\n'
+    + T + '{\n'
+    + T + T + 'CSARM_LOGW( "ModInit FAILED: videomode=%p CreateGameWindow=false", (void*)videomode );\n'
+    + T + T + 'return false;\n'
+    + T + '}\n'
+    + T + 'CSARM_LOGI( "ModInit: game window created" );\n'))
+pairs.append((
+    T + 'if ( ModInit( m_StartupInfo.m_pInitialMod, m_StartupInfo.m_pInitialGame ) )\n'
+    + T + '{\n',
+    T + 'bool bModInit = ModInit( m_StartupInfo.m_pInitialMod, m_StartupInfo.m_pInitialGame );\n'
+    + T + 'CSARM_LOGI( "RunListenServer: ModInit=%d", bModInit ? 1 : 0 );\n'
+    + T + 'if ( bModInit )\n'
+    + T + '{\n'))
+pairs.append((
+    T + T + 'if ( eng->Load( false, host_parms.basedir ) )',
+    T + T + 'bool bEngLoad = eng->Load( false, host_parms.basedir );\n'
+    + T + T + 'CSARM_LOGI( "CModAppSystemGroup::Main: eng->Load=%d", bEngLoad ? 1 : 0 );\n'
+    + T + T + 'if ( bEngLoad )'))
 orig = text
 text = apply(text, 'sys_dll2.cpp', pairs)
 out.append(unified(orig, text, 'engine/sys_dll2.cpp'))
@@ -494,6 +547,89 @@ pairs.append((
 orig = text
 text = apply(text, 'extension_set.cc', pairs)
 out.append(unified(orig, text, 'thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc'))
+
+# ---------------------------------------------------------------- sys_getmodes.cpp
+# CVideoMode_Common::CreateGameWindow has TWO silent return-false paths that
+# RunListenServer's ModInit turns into a clean rc=0 exit:
+#   game->CreateGameWindow()  (CGame -> g_pLauncherMgr -> SDL_CreateWindow -
+#     on Android SDL 2.0.2 fails until the Java SDLSurface posts surfaceCreated)
+#   SetMode()                 (materials->SetMode)
+text = open(os.path.join(tmp, 'sys_getmodes.cpp')).read()
+pairs = []
+pairs.append((
+    '#include "ivideomode.h"\n',
+    '#include "ivideomode.h"\n#include "common/csarm_log.h"\n'))
+pairs.append((
+    '        if ( !game->CreateGameWindow() )\n'
+    + '            return false;\n',
+    '        bool bWindowOK = game->CreateGameWindow();\n'
+    + '        CSARM_LOGI( "CreateGameWindow: game->CreateGameWindow=%d", bWindowOK ? 1 : 0 );\n'
+    + '        if ( !bWindowOK )\n'
+    + '            return false;\n'))
+pairs.append((
+    '\t\tif ( !SetMode( GetModeWidth(), GetModeHeight(), IsWindowedMode(), NoWindowBorder() ) )\n'
+    + '            return false;\n',
+    '\t\tbool bModeOK = SetMode( GetModeWidth(), GetModeHeight(), IsWindowedMode(), NoWindowBorder() );\n'
+    + '\t\tCSARM_LOGI( "CreateGameWindow: SetMode=%d", bModeOK ? 1 : 0 );\n'
+    + '\t\tif ( !bModeOK )\n'
+    + '            return false;\n'))
+orig = text
+text = apply(text, 'sys_getmodes.cpp', pairs)
+out.append(unified(orig, text, 'engine/sys_getmodes.cpp'))
+
+# ---------------------------------------------------------------- sys_mainwind.cpp
+# CGame::CreateGameWindow: probe the SDL window result + SDL_GetError - this
+# is where the Android surface race shows up.
+text = open(os.path.join(tmp, 'sys_mainwind.cpp')).read()
+pairs = []
+pairs.append((
+    '#include "igame.h"\n',
+    '#include "igame.h"\n#include "common/csarm_log.h"\n'))
+pairs.append((
+    T + 'if ( !g_pLauncherMgr->CreateGameWindow( windowName, true, 0, 0, true ) )\n'
+    + T + '{\n'
+    + T + T + 'Error( "Fatal Error:  Unable to create game window!" );\n'
+    + T + T + 'return false;\n'
+    + T + '}\n',
+    T + 'bool bWindowCreated = g_pLauncherMgr->CreateGameWindow( windowName, true, 0, 0, true );\n'
+    + T + 'CSARM_LOGI( "CGame::CreateGameWindow: ok=%d sdlerr=[%s]", bWindowCreated ? 1 : 0, SDL_GetError() ? SDL_GetError() : "" );\n'
+    + T + 'if ( !bWindowCreated )\n'
+    + T + '{\n'
+    + T + T + 'Error( "Fatal Error:  Unable to create game window!" );\n'
+    + T + T + 'return false;\n'
+    + T + '}\n'))
+orig = text
+text = apply(text, 'sys_mainwind.cpp', pairs)
+out.append(unified(orig, text, 'engine/sys_mainwind.cpp'))
+
+# ---------------------------------------------------------------- sys_engine.cpp (Load probe)
+# CEngine::Load: Sys_InitGame returning 0 makes CModAppSystemGroup::Main
+# return RUN_OK with no message - the deepest silent-rc0 candidate.
+text = open(os.path.join(tmp, 'sys_engine.cpp')).read()
+pairs = []
+pairs.append((
+    '#include "iengine.h"\n',
+    '#include "iengine.h"\n#include "common/csarm_log.h"\n'))
+pairs.append((
+    T + 'if ( Sys_InitGame( \n'
+    + T + T + 'g_AppSystemFactory,\n'
+    + T + T + 'rootdir, \n'
+    + T + T + 'game->GetMainWindowAddress(), \n'
+    + T + T + 'dedicated ) )\n'
+    + T + '{\n'
+    + T + T + 'success = true;\n',
+    T + 'bool bInitGame = Sys_InitGame( \n'
+    + T + T + 'g_AppSystemFactory,\n'
+    + T + T + 'rootdir, \n'
+    + T + T + 'game->GetMainWindowAddress(), \n'
+    + T + T + 'dedicated );\n'
+    + T + 'CSARM_LOGI( "CEngine::Load: Sys_InitGame=%d basedir=%s", bInitGame ? 1 : 0, rootdir ? rootdir : "null" );\n'
+    + T + 'if ( bInitGame )\n'
+    + T + '{\n'
+    + T + T + 'success = true;\n'))
+orig = text
+text = apply(text, 'sys_engine.cpp', pairs)
+out.append(unified(orig, text, 'engine/sys_engine.cpp'))
 
 # ---------------------------------------------------------------- write
 NEW_FILE_HUNK = ('diff --git a/common/csarm_log.h b/common/csarm_log.h\n'
