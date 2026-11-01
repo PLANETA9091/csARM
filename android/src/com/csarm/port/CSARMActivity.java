@@ -96,6 +96,10 @@ public class CSARMActivity extends SDLActivity {
             sb.append("-windowed\n");
             sb.append("-w 1280\n-h 720\n");
             sb.append("-nobreakpad\n-nojoy\n");
+            // launcher loads shaderapiempty.so instead of the (unported)
+            // shaderapidx9 — without this CMaterialSystem dlopens shaderapidx9,
+            // fails, and the engine silently hangs before the first tick
+            sb.append("-noshaderapi\n");
             sb.append("-basedir ").append(files.getAbsolutePath()).append("\n");
             sb.append("-game cstrike\n");
             sb.append("+host_thread_mode 2\n");
