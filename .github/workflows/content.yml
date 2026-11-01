@@ -1,23 +1,32 @@
 name: csARM content
 
 # Fetches CS:GO legacy (1.38.8.1) game content straight from the Steam CDNs
-# with DepotDownloader (anonymous login) on the runner's fat pipe, then
+# with DepotDownloader (anonymous login) on the runners' fat pipes, then
 # attaches it to the DRAFT release 'game-content', which ci.yml boot-test
-# consumes automatically (download -> run-as -> filesDir).
+# consumes automatically (download -> unzip -> run-as -> filesDir).
 #
-# v3: speed + visibility overhaul
-#   - TWO parallel runners (matrix): pack A = everything except pak01_/bin/,
-#     pack B = pak01_*.vpk only. Two runner IPs -> double Steam CDN bandwidth.
-#   - DepotDownloader -max-servers 64 -max-downloads 32 (defaults are 20/8).
-#   - LIVE logs: DD output goes to dd.log; a heartbeat prints every 20 s into
-#     this step's log (total MiB, file count, MiB/s, last real DD lines).
-#     Watch it live in the Actions tab while the job runs.
+# v4: 9 parallel shards + stall-proof download loop
+#   - The whole depot is split into 9 disjoint regex shards, downloaded by
+#     9 parallel runners (sound / materials / models / maps / panorama /
+#     misc dirs / everything-else + pak01 vpk split in two). Aggregate
+#     bandwidth ~= 9x a single runner; each runner pulls ~1-3 GB.
+#   - Observed failure mode of DD 2.7.4: some Steam CDN endpoints return
+#     garbage for certain chunks -> "End of Central Directory record could
+#     not be found" retry loop, progress frozen. Fix: the download step
+#     re-runs DD up to 6 times; DD RESUMES (finished files are skipped and
+#     re-verified, only missing chunks are re-fetched, and every restart
+#     re-picks CDN servers). A heartbeat kills an attempt that makes no
+#     progress for 80 s and restarts it.
+#   - DepotDownloader 3.4.0 (2.7.4 is outdated; -branch is the correct flag,
+#     there is no -max-servers option anymore).
 #   - Hardcoded app 730 / -branch csgo_legacy: verified anonymously reachable,
 #     manifest = 1.38.8.1 (steam.inf PatchVersion, Oct 12 2023).
-#   - Version gate: refuses to upload if steam.inf is not 1.38.8.1.
-#   - Layout normalized to a top-level cstrike/ dir for ci.yml.
+#   - Version gate: the rest-shard refuses to upload if steam.inf != 1.38.8.1.
+#   - Layout normalized per shard to a top-level cstrike/ dir for ci.yml
+#     (ci.yml unzips every release asset into one tree, so shard prefixes
+#     don't need special handling there).
 #
-# Assets: apart-NN.zip / bpart-NN.zip, each <= 1.6 GiB (GitHub limit is 2 GiB).
+# Assets: a1..a7-NN.zip / b1-NN.zip / b2-NN.zip, each <= 1.6 GiB.
 
 on:
   workflow_dispatch: {}
@@ -33,18 +42,46 @@ jobs:
   fetch:
     name: fetch/${{ matrix.prefix }}
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         include:
-          - pack: A (all content except pak01_/bin/)
-            filelist: 'regex:^(?!.*pak01_.*)(?!.*(^|/)bin(/|$)).*'
-            prefix: apart
+          - prefix: a1
+            what: sound
+            filelist: 'regex:(^|/)sound(/|$)'
+            check_inf: false
+          - prefix: a2
+            what: materials
+            filelist: 'regex:(^|/)materials(/|$)'
+            check_inf: false
+          - prefix: a3
+            what: models
+            filelist: 'regex:(^|/)models(/|$)'
+            check_inf: false
+          - prefix: a4
+            what: maps
+            filelist: 'regex:(^|/)maps(/|$)'
+            check_inf: false
+          - prefix: a5
+            what: panorama
+            filelist: 'regex:(^|/)panorama(/|$)'
+            check_inf: false
+          - prefix: a6
+            what: misc dirs
+            filelist: 'regex:(^|/)(particles|resource|scripts|shaders|media|cfg|platform)(/|$)'
+            check_inf: false
+          - prefix: a7
+            what: everything else (root files, misc trees)
+            filelist: 'regex:^(?!.*pak01_)(?!.*(^|/)bin(/|$))(?!.*(^|/)sound(/|$))(?!.*(^|/)materials(/|$))(?!.*(^|/)models(/|$))(?!.*(^|/)maps(/|$))(?!.*(^|/)panorama(/|$))(?!.*(^|/)(particles|resource|scripts|shaders|media|cfg|platform)(/|$)).*'
             check_inf: true
-          - pack: B (pak01 vpk only)
-            filelist: 'regex:pak01_'
-            prefix: bpart
+          - prefix: b1
+            what: pak01 vpk 000-019
+            filelist: 'regex:pak01_0[0-1][0-9]'
+            check_inf: false
+          - prefix: b2
+            what: pak01 vpk 020+ and pak01_dir
+            filelist: 'regex:pak01_(?!0[0-1][0-9])'
             check_inf: false
     env:
       PREFIX: ${{ matrix.prefix }}
@@ -53,56 +90,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install DepotDownloader
+      - name: Install DepotDownloader 3.4.0
         run: |
           set -e
-          curl -sfL --retry 3 -o dd.zip https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_2.7.4/DepotDownloader-linux-x64.zip
+          curl -sfL --retry 3 -o dd.zip https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_3.4.0/DepotDownloader-linux-x64.zip
           unzip -q -o dd.zip && chmod +x DepotDownloader
           ./DepotDownloader 2>&1 | head -3 || true
           echo "--- disk ---"; df -h /
 
-      - name: Download pack (max concurrency, LIVE heartbeat)
+      - name: Download shard (resume loop + live heartbeat)
         run: |
           set -e
           printf '%s\n' "$FILELIST" > fl.txt
           rm -rf content && mkdir -p content
           ARGS=(-app 730 -os windows -branch csgo_legacy -filelist fl.txt \
-                -dir content -max-servers 64 -max-downloads 32)
+                -dir content -max-downloads 32)
+          echo "shard $PREFIX (${{ matrix.what }})"
           echo "DD args: ${ARGS[*]}"
           echo "LIVE progress: one heartbeat line every 20 s"
-          ./DepotDownloader "${ARGS[@]}" > dd.log 2>&1 &
-          DD_PID=$!
-          T0=$(date +%s); LAST=0
-          while kill -0 "$DD_PID" 2>/dev/null; do
-            sleep 20
-            NOW=$(date +%s); DT=$((NOW - T0))
-            SZ=$(du -sm content 2>/dev/null | cut -f1); SZ=${SZ:-0}
-            NF=$(find content -type f 2>/dev/null | wc -l)
-            RATE=$(( (SZ - LAST) / 20 ))
-            echo "[hb $(date -u +%H:%M:%S)] total=${SZ}MiB files=${NF} rate=${RATE}MiB/s elapsed=${DT}s"
-            LAST=$SZ
-            tail -c 3000 dd.log | tr '\r' '\n' | grep -v '^[[:space:]]*$' | tail -3 | sed 's/^/  [dd] /'
+          ATTEMPT=0; RC=1
+          while [ $ATTEMPT -lt 6 ]; do
+            ATTEMPT=$((ATTEMPT+1))
+            echo "::group::attempt $ATTEMPT (DD resumes: finished files are skipped, servers re-picked)"
+            ./DepotDownloader "${ARGS[@]}" > "dd_a$ATTEMPT.log" 2>&1 &
+            PID=$!
+            A0=$(date +%s); LAST=0; FLAT=0
+            while kill -0 "$PID" 2>/dev/null; do
+              sleep 20
+              SZ=$(du -sm content 2>/dev/null | cut -f1); SZ=${SZ:-0}
+              NF=$(find content -type f 2>/dev/null | wc -l)
+              echo "[hb a$ATTEMPT $(date -u +%H:%M:%S)] total=${SZ}MiB files=${NF} rate=$(( (SZ-LAST)/20 ))MiB/s elapsed=$(( $(date +%s)-A0 ))s"
+              if [ "$SZ" -le "$LAST" ]; then FLAT=$((FLAT+1)); else FLAT=0; fi
+              LAST=$SZ
+              tail -c 2500 "dd_a$ATTEMPT.log" | tr '\r' '\n' | grep -v '^[[:space:]]*$' | tail -3 | sed 's/^/  [dd] /'
+              if [ "$FLAT" -ge 4 ] && [ $(( $(date +%s)-A0 )) -gt 150 ]; then
+                echo "::warning::no progress for ~80 s -> killing attempt $ATTEMPT (loop will restart DD; resume keeps finished files)"
+                kill "$PID" 2>/dev/null || true; sleep 3; kill -9 "$PID" 2>/dev/null || true
+              fi
+            done
+            set +e; wait "$PID" 2>/dev/null; RC=$?; set -e
+            echo "::endgroup::"
+            echo "attempt $ATTEMPT exit=$RC after $(( $(date +%s)-A0 ))s; content: $(du -sm content 2>/dev/null | cut -f1) MiB"
+            [ "$RC" = "0" ] && break
+            SZ2=$(du -sm content 2>/dev/null | cut -f1); SZ2=${SZ2:-0}
+            if [ "$ATTEMPT" -gt 1 ] && [ "$SZ2" -le "$LAST" ]; then
+              echo "::warning::two consecutive attempts added no bytes -> giving up on this shard"
+              break
+            fi
           done
-          set +e; wait "$DD_PID"; RC=$?; set -e
-          echo "=== DepotDownloader exit=$RC after $(( $(date +%s) - T0 ))s ==="
-          tail -c 12000 dd.log | tr '\r' '\n' | grep -v '^[[:space:]]*$' | tail -50 || true
-          [ "$RC" = "0" ] || { echo "::error::DepotDownloader failed rc=$RC"; exit "$RC"; }
-          echo "--- counts ---"
-          echo "files: $(find content -type f | wc -l)  size: $(du -sh content | cut -f1)"
+          if [ "$RC" != "0" ]; then
+            echo "::error::shard download did not complete (rc=$RC)"
+            tail -c 8000 dd_a*.log | tr '\r' '\n' | tail -40 || true
+            exit 1
+          fi
+          echo "--- final: files=$(find content -type f | wc -l) size=$(du -sh content | cut -f1) ---"
           df -h /
 
       - name: Verify version + normalize layout
         run: |
           set -e
+          NF=$(find content -type f 2>/dev/null | wc -l)
+          if [ "$NF" = "0" ]; then
+            echo "::notice::shard $PREFIX matched 0 files (harmless if this depot dir does not exist)"
+            exit 0
+          fi
           inf=$(find content -name steam.inf | head -1)
           if [ -n "$inf" ]; then
             echo "--- $inf ---"; cat "$inf"
-            grep -q 'PatchVersion=1.38.8.1' "$inf" \
-              || { echo "::error::content is NOT legacy 1.38.8.1 (wrong branch?)"; exit 1; }
-            echo "::notice::steam.inf confirms 1.38.8.1 (csgo_legacy)"
+            if [ "$CHECK_INF" = "true" ]; then
+              grep -q 'PatchVersion=1.38.8.1' "$inf" \
+                || { echo "::error::content is NOT legacy 1.38.8.1 (wrong branch?)"; exit 1; }
+              echo "::notice::steam.inf confirms 1.38.8.1 (csgo_legacy)"
+            fi
           elif [ "$CHECK_INF" = "true" ]; then
-            echo "::error::pack A missing steam.inf"; exit 1
+            echo "::error::rest-shard missing steam.inf"; exit 1
           fi
+          # normalize: every shard's payload ends up under content/cstrike/
           if [ ! -d content/cstrike ]; then
             if [ -d content/csgo/cstrike ]; then
               mv content/csgo/cstrike content/cstrike
@@ -112,12 +175,19 @@ jobs:
               echo "normalized: content/csgo -> content/cstrike"
             fi
           fi
-          echo "--- layout ---"; find content -maxdepth 2 -type d | head -20
-          ls content/cstrike | head -25 || true
+          inf=$(find content -name steam.inf | head -1)
+          if [ -n "$inf" ] && [ ! -f content/cstrike/steam.inf ]; then
+            cp "$inf" content/cstrike/steam.inf
+          fi
+          echo "--- layout ---"; find content -maxdepth 2 -type d | head -12
+          ls content/cstrike 2>/dev/null | head -20 || true
 
       - name: Split into release-sized parts
+        if: success()
         run: |
           set -e
+          NF=$(find content -type f 2>/dev/null | wc -l)
+          [ "$NF" -gt 0 ] || { echo "::notice::empty shard, nothing to upload"; exit 0; }
           python3 scripts/split_parts.py content 1600000000 /tmp/chunks
           mkdir -p parts
           n=0
@@ -135,17 +205,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          # drop stale parts of the SAME prefix only (a bpart run must not
-          # delete apart parts and vice versa); --clobber refreshes the rest
+          # drop stale parts of the SAME prefix only; --clobber refreshes the rest
           gh release view game-content --repo "$GITHUB_REPOSITORY" --json assets \
             --jq '.assets[].name' | grep -E "^${PREFIX}-" | while read -r a; do
               gh release delete-asset game-content "$a" --repo "$GITHUB_REPOSITORY" --yes || true
             done
-          for z in parts/*.zip; do
-            echo "uploading $z ($(du -m "$z" | cut -f1) MiB) ..."
-            gh release upload game-content "$z" --repo "$GITHUB_REPOSITORY" --clobber
-            echo "  done: $z"
-          done
+          if compgen -G "parts/*.zip" >/dev/null; then
+            for z in parts/*.zip; do
+              echo "uploading $z ($(du -m "$z" | cut -f1) MiB) ..."
+              gh release upload game-content "$z" --repo "$GITHUB_REPOSITORY" --clobber
+              echo "  done: $z"
+            done
+          else
+            echo "no parts produced by shard $PREFIX — nothing to upload"
+          fi
           echo "--- draft release assets now ---"
           gh release view game-content --repo "$GITHUB_REPOSITORY" \
             --jq '.assets[] | .name + "  " + ((.size / 1073741824 * 100 | round) / 100 | tostring) + "GB"'
@@ -153,8 +226,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "pack:     ${{ matrix.pack }}"
-          echo "prefix:   ${PREFIX:-n/a}"
+          echo "shard:    $PREFIX (${{ matrix.what }})"
           echo "files:    $(find content -type f 2>/dev/null | wc -l)"
           echo "size:     $(du -sh content 2>/dev/null | cut -f1)"
-          echo "dl.log tail:"; tail -c 4000 dd.log 2>/dev/null | tr '\r' '\n' | tail -15 || true
+          echo "dd.log tail:"; tail -c 4000 dd_a*.log 2>/dev/null | tr '\r' '\n' | tail -15 || true
