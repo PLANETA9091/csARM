@@ -23,6 +23,12 @@ on:
 env:
   MIRROR: https://github.com/perilouswithadollarsign/cstrike15_src.git
 
+# The boot job reads the DRAFT release 'game-content'. Draft releases are
+# invisible to a read-only GITHUB_TOKEN — contents:write is required to list
+# and download them.
+permissions:
+  contents: write
+
 # One pipeline per ref: a follow-up push cancels the in-flight run instead of
 # queueing behind it.  On 2026-10-31 two full runs started 6s apart
 # (41219942995 / 41219950401) and both burned ~50min of runners doing
