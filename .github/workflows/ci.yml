@@ -733,7 +733,8 @@ jobs:
           ACCEL=on; [ "${KVMOK:-0}" != "1" ] && ACCEL=off
           nohup env ANDROID_AVD_HOME="$ANDROID_AVD_HOME" "$EMU_BIN" -avd test \
             -no-window -no-audio -no-boot-anim -no-snapshot \
-            -gpu swiftshader_indirect -accel $ACCEL -memory 4096 -cores 4 -port 5554 > emulator.log 2>&1 &
+            -gpu swiftshader_indirect -accel $ACCEL -memory 4096 -cores 4 -port 5554 \
+            -partition-size 40960 > emulator.log 2>&1 &
           echo $! > emu.pid
           sleep 5
           head -30 emulator.log || true
@@ -778,16 +779,43 @@ jobs:
           if [ "${CONTENT:-none}" = "pack" ]; then
             [ -n "${SRC:-}" ] || { echo "::error::CONTENT=pack but SRC unset"; exit 1; }
             T0=$SECONDS
-            "$ADB" -s emulator-5554 shell "rm -rf /data/local/tmp/csarm_a" || true
-            "$ADB" -s emulator-5554 push "$SRC" /data/local/tmp/csarm_a
-            "$ADB" -s emulator-5554 shell "run-as com.csarm.port sh -c 'mkdir -p files/cstrike && cp -r /data/local/tmp/csarm_a/. files/cstrike/'" \
-              || { echo "::error::run-as content copy failed (debuggable manifest?)"; exit 1; }
-            "$ADB" -s emulator-5554 shell "rm -rf /data/local/tmp/csarm_a" || true
+            # full legacy depot is ~30.5 GB — a push-to-tmp + run-as copy would
+            # need 2x that inside userdata. adb root (aosp_atd = userdebug)
+            # lets us push straight into the app sandbox: one copy only.
+            ROOTOK=0
+            "$ADB" root >/dev/null 2>&1 || true
+            sleep 3; "$ADB" wait-for-device
+            case "$($ADB shell id 2>/dev/null)" in
+              *uid=0*) ROOTOK=1 ;;
+            esac
+            if [ "$ROOTOK" = "1" ]; then
+              echo "adb root OK — direct push into app sandbox (single copy)"
+              "$ADB" shell "rm -rf /data/data/com.csarm.port/files/cstrike" || true
+              "$ADB" shell "mkdir -p /data/data/com.csarm.port/files" || true
+              "$ADB" push "$SRC/cstrike" /data/data/com.csarm.port/files/cstrike
+              if [ -d "$SRC/platform" ]; then
+                "$ADB" push "$SRC/platform" /data/data/com.csarm.port/files/cstrike/platform
+              fi
+              APPUID=$("$ADB" shell dumpsys package com.csarm.port | sed -n 's/.*userId=\([0-9]*\).*/\1/p' | head -1 | tr -d '\r')
+              if [ -n "$APPUID" ]; then
+                "$ADB" shell "chown -R ${APPUID}:${APPUID} /data/data/com.csarm.port/files/cstrike" || true
+              else
+                echo "::warning::could not resolve app uid — skipping chown"
+              fi
+              "$ADB" shell restorecon -R /data/data/com.csarm.port/files/cstrike >/dev/null 2>&1 || true
+            else
+              echo "adb root unavailable — legacy run-as staging (fits skeleton/small packs only)"
+              "$ADB" -s emulator-5554 shell "rm -rf /data/local/tmp/csarm_a" || true
+              "$ADB" -s emulator-5554 push "$SRC" /data/local/tmp/csarm_a
+              "$ADB" -s emulator-5554 shell "run-as com.csarm.port sh -c 'mkdir -p files/cstrike && cp -r /data/local/tmp/csarm_a/. files/cstrike/'" \
+                || { echo "::error::run-as content copy failed (debuggable manifest?)"; exit 1; }
+              "$ADB" -s emulator-5554 shell "rm -rf /data/local/tmp/csarm_a" || true
+            fi
             echo "=== staged content: files/cstrike ==="
-            "$ADB" -s emulator-5554 shell "run-as com.csarm.port sh -c 'ls files/cstrike'" | head -25
-            echo "=== mod subtree: files/cstrike/cstrike ==="
-            "$ADB" -s emulator-5554 shell "run-as com.csarm.port sh -c 'ls files/cstrike/cstrike | head -20'" || true
+            "$ADB" shell "ls /data/data/com.csarm.port/files/cstrike" 2>/dev/null | head -25 \
+              || "$ADB" -s emulator-5554 shell "run-as com.csarm.port sh -c 'ls files/cstrike'" | head -25
             echo "content staged in $((SECONDS - T0))s"
+            rm -rf "$HOME/csgo-content"   # ~30 GB freed on the runner once staged
           else
             echo "CONTENT=none — engine boots on the asset skeleton only"
           fi
