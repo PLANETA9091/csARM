@@ -64,7 +64,7 @@ jobs:
           try() {
             local app="$1" br="$2" dir="probe_$1"
             rm -rf "$dir" && mkdir -p "$dir"
-            local args=(-app "$app" -os windows -username anonymous -filelist fl_probe.txt -dir "$dir")
+            local args=(-app "$app" -os windows -filelist fl_probe.txt -dir "$dir")
             [ -n "$br" ] && args+=(-branch "$br")
             echo "::group::probe app=$app branch=${br:-public}"
             timeout 180 ./DepotDownloader "${args[@]}" > "probe_$1.log" 2>&1 || true
@@ -104,7 +104,7 @@ jobs:
             echo "PREFIX=apart" >> "$GITHUB_ENV"
           fi
           rm -rf content && mkdir -p content
-          ARGS=(-app "$APP" -os windows -username anonymous -filelist fl.txt \
+          ARGS=(-app "$APP" -os windows -filelist fl.txt \
                 -dir content -max-downloads 16)
           [ -n "$BR" ] && ARGS+=(-branch "$BR")
           echo "downloading app=$APP branch=${BR:-public} pak01=${INCLUDE_PAK01}"
