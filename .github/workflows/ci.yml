@@ -622,13 +622,26 @@ jobs:
           rm -rf "$HOME/csgo-dl" "$HOME/csgo-content" && mkdir -p "$HOME/csgo-dl" "$HOME/csgo-content"
           T0=$SECONDS
           # draft assets are fetched via the api (Accept: octet-stream);
-          # NB: the assets endpoint returns a BARE ARRAY, not {.assets: [...]}
+          # NB: the assets endpoint returns a BARE ARRAY, not {.assets: [...]};
+          # assets whose upload never finished have state=starter and 404 on
+          # download — skip them instead of failing the whole step.
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELID/assets?per_page=100" \
-            --jq '.[] | "\(.id)\t\(.name)"' | while IFS=$'\t' read -r aid name; do
+            --jq '.[] | "\(.id)\t\(.name)\t\(.state)"' | while IFS=$'\t' read -r aid name state; do
+              if [ "$state" != "uploaded" ]; then
+                echo "::warning::skipping asset '$name' — upload never completed (state=$state)"
+                continue
+              fi
               echo "downloading $name ..."
-              gh api "repos/$GITHUB_REPOSITORY/releases/assets/$aid" \
-                -H "Accept: application/octet-stream" > "$HOME/csgo-dl/$name"
+              if ! gh api "repos/$GITHUB_REPOSITORY/releases/assets/$aid" \
+                    -H "Accept: application/octet-stream" < /dev/null \
+                    > "$HOME/csgo-dl/$name"; then
+                echo "::warning::download failed: $name — continuing without it"
+                rm -f "$HOME/csgo-dl/$name"
+              fi
             done
+          NZ=$(ls "$HOME/csgo-dl" 2>/dev/null | grep -c '\.zip$' || true)
+          [ "$NZ" -gt 0 ] || { echo "::error::no usable zip assets downloaded"; exit 1; }
+          echo "downloaded $NZ usable zip assets"
           echo "download: $((SECONDS - T0))s"
           cd "$HOME/csgo-dl"
           for f in *; do
