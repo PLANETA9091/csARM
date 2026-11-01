@@ -866,6 +866,7 @@ jobs:
           grep -E "CSARM_LIB_OK|CSARM_LIB_FAIL|CSARM_LOAD_DONE" logcat.txt | sort -u || true
           # --- part 2: FULL ENGINE BOOT (CSARMActivity -> libmain -> LauncherMain) ---
           "$ADB" -s emulator-5554 logcat -c || true
+          "$ADB" -s emulator-5554 shell "rm -f /data/data/com.csarm.port/files/csarm.args" 2>/dev/null || true
           "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
           LIMIT=600
           LAUNCH_S=""
@@ -922,6 +923,7 @@ jobs:
           "$ADB" -s emulator-5554 logcat -d > logcat_arm64_load.txt || true
           grep -E "CSARM_LIB_OK|CSARM_LIB_FAIL|CSARM_LOAD_DONE" logcat_arm64_load.txt | sort -u || true
           "$ADB" -s emulator-5554 logcat -c || true
+          "$ADB" -s emulator-5554 shell "rm -f /data/data/com.csarm.port/files/csarm.args" 2>/dev/null || true
           "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
           LIMIT=240
           while [ $SECONDS -lt $LIMIT ]; do
@@ -939,6 +941,7 @@ jobs:
           ADB=$SDK/platform-tools/adb
           "$ADB" -s emulator-5554 install -r -t android/out/csARM-x86_64-sw.apk || { echo "::error::sw APK install failed"; exit 1; }
           "$ADB" -s emulator-5554 logcat -c || true
+          "$ADB" -s emulator-5554 shell "rm -f /data/data/com.csarm.port/files/csarm.args" 2>/dev/null || true
           "$ADB" -s emulator-5554 shell am start -n com.csarm.port/.CSARMActivity || true
           LIMIT=600
           LAUNCH_S=""
