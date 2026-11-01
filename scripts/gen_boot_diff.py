@@ -204,15 +204,75 @@ pairs.append((
     + T + 'CreateInterfaceFn factory = GetFactory();\n',
     'bool CSourceAppSystemGroup::PreInit()\n{\n'
     + T + 'CSARM_LOGI( "PreInit enter" );\n'
-    + T + 'CreateInterfaceFn factory = GetFactory();\n'))
+    + T + 'CreateInterfaceFn factory = GetFactory();\n'
+    + T + 'CSARM_LOGI( "PreInit: probe direct FindSystem fs=%p matsys=%p", FindSystem( FILESYSTEM_INTERFACE_VERSION ), FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION ) );\n'))
 
-# csARM run 41347795540: PreInit fails "no filesystem/materialsystem factory"
-# - one of the ConnectTierXLibraries calls leaves its global NULL.  Probe
-# each global right after the tier-connect that wires it.
+# csARM run 41351854560: ALL three tier globals are NULL after their
+# ConnectTierXLibraries calls (g_pCVar/g_pFullFileSystem/g_pMaterialSystem
+# probes), while Create's direct FindSystem(fs) hits in the SAME group.
+# Root cause: every .so carries a PRIVATE copy of the interfaces.cpp registry
+# (link.sh hands INTERFACES_O to every module) and a PRIVATE
+# ConnectTier1/2Libraries; PreInit hands ConnectInterfaces the factory from
+# GetFactory() - appframework's AppSystemCreateInterfaceFn thunk - whose
+# cross-module s_pCurrentAppSystem state does not reach the launcher's
+# private registry: every factory() call returns NULL even for interfaces
+# the parent group provably serves (no parent MISS in the logcat).
+# Fix: on Android hand ConnectInterfaces a LOCAL factory wrapper around
+# this->FindSystem (a static member: FindSystem is protected) so the
+# launcher's private registry fills from live group state.
+pairs.append((
+    'class CSourceAppSystemGroup : public CSteamAppSystemGroup\n'
+    '{\n'
+    'public:\n'
+    '\t// Methods of IApplication\n'
+    '\tvirtual bool Create();\n'
+    '\tvirtual bool PreInit();\n',
+    'class CSourceAppSystemGroup : public CSteamAppSystemGroup\n'
+    '{\n'
+    'public:\n'
+    '\t// Methods of IApplication\n'
+    '\tvirtual bool Create();\n'
+    '\tvirtual bool PreInit();\n'
+    '\t// csARM: local factory for the private interface registry (see\n'
+    '\t// CSourceAppSystemGroup::PreInit)\n'
+    '\tstatic void *csarm_LauncherFactory( const char *pName, int *pReturnCode );\n'))
+
+pairs.append((
+    'IVJobs * g_pVJobs = NULL;\n',
+    'IVJobs * g_pVJobs = NULL;\n'
+    '\n'
+    'static CSourceAppSystemGroup *s_pCsarmPreInitSelf = NULL;\n'
+    '\n'
+    '// csARM: ConnectInterfaces() fills THIS module\'s private copy of the\n'
+    '// interfaces.cpp registry through the factory pointer PreInit hands it.\n'
+    '// GetFactory() returns appframework\'s cross-module thunk, which sees a\n'
+    '// different s_pCurrentAppSystem copy and returned NULL for every\n'
+    '// interface in run 41351854560 even though the parent group provably\n'
+    '// serves them.  Route the calls through this->FindSystem instead.\n'
+    'void *CSourceAppSystemGroup::csarm_LauncherFactory( const char *pName, int *pReturnCode )\n'
+    '{\n'
+    '\tif ( !s_pCsarmPreInitSelf )\n'
+    '\t{\n'
+    '\t\tif ( pReturnCode )\n'
+    '\t\t\t*pReturnCode = IFACE_FAILED;\n'
+    '\t\treturn NULL;\n'
+    '\t}\n'
+    '\tvoid *pInterface = s_pCsarmPreInitSelf->FindSystem( pName );\n'
+    '\tif ( pReturnCode )\n'
+    '\t\t*pReturnCode = pInterface ? IFACE_OK : IFACE_FAILED;\n'
+    '\treturn pInterface;\n'
+    '}\n'))
+
 pairs.append((
     T + 'ConnectTier1Libraries( &factory, 1 );\n'
     + T + 'ConVar_Register( );\n',
-    T + 'ConnectTier1Libraries( &factory, 1 );\n'
+    T + 's_pCsarmPreInitSelf = this;\n'
+    + '#ifdef __ANDROID__\n'
+    + T + '// csARM: the cross-module GetFactory() thunk does not reach this\n'
+    + T + "// module's private interface registry - use the local wrapper\n"
+    + T + 'factory = &csarm_LauncherFactory;\n'
+    + '#endif\n'
+    + T + 'ConnectTier1Libraries( &factory, 1 );\n'
     + T + 'CSARM_LOGI( "PreInit: tier1 -> g_pCVar=%p", (void*)g_pCVar );\n'
     + T + 'ConVar_Register( );\n'))
 pairs.append((

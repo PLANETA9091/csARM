@@ -148,7 +148,46 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  #include "engine_launcher_api.h"
  #include "ifilesystem.h"
  #include "tier1/interface.h"
-@@ -710,11 +711,13 @@
+@@ -671,6 +672,9 @@
+ 	// Methods of IApplication
+ 	virtual bool Create();
+ 	virtual bool PreInit();
++	// csARM: local factory for the private interface registry (see
++	// CSourceAppSystemGroup::PreInit)
++	static void *csarm_LauncherFactory( const char *pName, int *pReturnCode );
+ 	virtual int Main();
+ 	virtual void PostShutdown();
+ 	virtual void Destroy();
+@@ -703,6 +707,28 @@
+ 
+ IVJobs * g_pVJobs = NULL;
+ 
++static CSourceAppSystemGroup *s_pCsarmPreInitSelf = NULL;
++
++// csARM: ConnectInterfaces() fills THIS module's private copy of the
++// interfaces.cpp registry through the factory pointer PreInit hands it.
++// GetFactory() returns appframework's cross-module thunk, which sees a
++// different s_pCurrentAppSystem copy and returned NULL for every
++// interface in run 41351854560 even though the parent group provably
++// serves them.  Route the calls through this->FindSystem instead.
++void *CSourceAppSystemGroup::csarm_LauncherFactory( const char *pName, int *pReturnCode )
++{
++	if ( !s_pCsarmPreInitSelf )
++	{
++		if ( pReturnCode )
++			*pReturnCode = IFACE_FAILED;
++		return NULL;
++	}
++	void *pInterface = s_pCsarmPreInitSelf->FindSystem( pName );
++	if ( pReturnCode )
++		*pReturnCode = pInterface ? IFACE_OK : IFACE_FAILED;
++	return pInterface;
++}
++
+ 
+ //-----------------------------------------------------------------------------
+ // Instantiate all main libraries
+@@ -710,11 +736,13 @@
  bool CSourceAppSystemGroup::Create()
  {
  	COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );
@@ -162,7 +201,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  	pFileSystem->InstallDirtyDiskReportFunc( ReportDirtyDiskNoMaterialSystem );
  
  #ifdef WIN32
-@@ -736,14 +739,25 @@
+@@ -736,14 +764,25 @@
  		{ LAUNCHER_APPSYSTEM( "filesystem_stdio" ),		XBOXINSTALLER_INTERFACE_VERSION },
  #endif
  		{ LAUNCHER_APPSYSTEM( "inputsystem" ),			INPUTSYSTEM_INTERFACE_VERSION },
@@ -188,7 +227,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  #ifdef WIN32
  		{ LAUNCHER_APPSYSTEM("soundsystem"),			SOUNDSYSTEM_INTERFACE_VERSION },
  #endif
-@@ -763,7 +777,11 @@
+@@ -763,7 +802,11 @@
  #endif
  		// NOTE: This has to occur before vgui2.dll so it replaces vgui2's surface implementation
  		{ LAUNCHER_APPSYSTEM( "vguimatsurface" ),		VGUI_SURFACE_INTERFACE_VERSION },
@@ -200,7 +239,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  		{ LAUNCHER_APPSYSTEM( "engine" ),				VENGINE_LAUNCHER_API_VERSION },
  
  		{ "", "" }					// Required to terminate the list
-@@ -776,7 +794,11 @@
+@@ -776,7 +819,11 @@
  #endif
  
  	if ( !AddSystems( appSystems ) ) 
@@ -212,12 +251,19 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  	// SF4 TODO
  	// Windows - See if we need to launch SF4 instead of SF3
-@@ -879,14 +901,21 @@
+@@ -879,14 +926,28 @@
  
  bool CSourceAppSystemGroup::PreInit()
  {
 +	CSARM_LOGI( "PreInit enter" );
  	CreateInterfaceFn factory = GetFactory();
++	CSARM_LOGI( "PreInit: probe direct FindSystem fs=%p matsys=%p", FindSystem( FILESYSTEM_INTERFACE_VERSION ), FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION ) );
++	s_pCsarmPreInitSelf = this;
++#ifdef __ANDROID__
++	// csARM: the cross-module GetFactory() thunk does not reach this
++	// module's private interface registry - use the local wrapper
++	factory = &csarm_LauncherFactory;
++#endif
  	ConnectTier1Libraries( &factory, 1 );
 +	CSARM_LOGI( "PreInit: tier1 -> g_pCVar=%p", (void*)g_pCVar );
  	ConVar_Register( );
@@ -234,7 +280,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #ifdef _PS3
  	g_pVJobs = ( IVJobs* )factory( VJOBS_INTERFACE_VERSION, NULL );  // this is done only once; g_pVJobs doesn't change even after multiple reloads of VJobs.prx
-@@ -907,14 +936,20 @@
+@@ -907,14 +968,20 @@
  		}
  	}
  	if ( FileSystem_SetupSteamEnvironment( steamInfo ) != FS_OK )
@@ -255,7 +301,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #if defined( SUPPORT_VPK )
  	Msg( "start timing %f\n", Plat_FloatTime() );
-@@ -963,11 +998,13 @@
+@@ -963,11 +1030,13 @@
  	info.m_pParentAppSystemGroup = this;
  	info.m_bTextMode = g_bTextMode;
  
@@ -269,7 +315,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  	return g_pEngineAPI->Run();
  }
  
-@@ -1879,6 +1916,7 @@
+@@ -1879,6 +1948,7 @@
  		int nRetval = ValveCocoaMain( &steamApplication ); 
  #else
  		int nRetval = steamApplication.Run();
