@@ -207,7 +207,7 @@ jobs:
           fi
           # drop stale parts of the SAME prefix only; --clobber refreshes the rest
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELID/assets?per_page=100" \
-            --jq '.assets[].name' | grep -E "^${PREFIX}-" | while read -r a; do
+            --jq '.[].name' | grep -E "^${PREFIX}-" | while read -r a; do
               gh release delete-asset game-content "$a" --repo "$GITHUB_REPOSITORY" --yes || true
             done
           if compgen -G "parts/*.zip" >/dev/null; then
