@@ -251,7 +251,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  	// SF4 TODO
  	// Windows - See if we need to launch SF4 instead of SF3
-@@ -879,14 +926,28 @@
+@@ -879,14 +926,44 @@
  
  bool CSourceAppSystemGroup::PreInit()
  {
@@ -271,6 +271,22 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
 +	CSARM_LOGI( "PreInit: tier2 -> g_pFullFileSystem=%p", (void*)g_pFullFileSystem );
  	ConnectTier3Libraries( &factory, 1 );
 +	CSARM_LOGI( "PreInit: tier3 -> g_pMaterialSystem=%p", (void*)g_pMaterialSystem );
++#ifdef __ANDROID__
++	// csARM run 41356519092: even with the local factory wrapper the
++	// private interfaces.cpp registry in liblauncher stays empty (the
++	// wrapper pointer reaches ConnectInterfaces via a GOT slot and the
++	// bionic symbol-interposition state between the per-.so registry
++	// copies eats the writes).  Fill the globals the launcher itself
++	// uses with direct assignments through this->FindSystem - the same
++	// live path Create already proved works - so the real interfaces,
++	// not stubs, land in this module\'s registry.
++	if ( !g_pCVar )
++		g_pCVar = (ICvar*)FindSystem( CVAR_INTERFACE_VERSION );
++	if ( !g_pFullFileSystem )
++		g_pFullFileSystem = (IFileSystem*)FindSystem( FILESYSTEM_INTERFACE_VERSION );
++	if ( !g_pMaterialSystem )
++		g_pMaterialSystem = (IMaterialSystem*)FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION );
++#endif
  
  	if ( !g_pFullFileSystem || !g_pMaterialSystem )
 +	{
@@ -280,7 +296,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #ifdef _PS3
  	g_pVJobs = ( IVJobs* )factory( VJOBS_INTERFACE_VERSION, NULL );  // this is done only once; g_pVJobs doesn't change even after multiple reloads of VJobs.prx
-@@ -907,14 +968,20 @@
+@@ -907,14 +984,20 @@
  		}
  	}
  	if ( FileSystem_SetupSteamEnvironment( steamInfo ) != FS_OK )
@@ -301,7 +317,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #if defined( SUPPORT_VPK )
  	Msg( "start timing %f\n", Plat_FloatTime() );
-@@ -963,11 +1030,13 @@
+@@ -963,11 +1046,13 @@
  	info.m_pParentAppSystemGroup = this;
  	info.m_bTextMode = g_bTextMode;
  
@@ -315,7 +331,7 @@ diff --git a/launcher/launcher.cpp b/launcher/launcher.cpp
  	return g_pEngineAPI->Run();
  }
  
-@@ -1879,6 +1948,7 @@
+@@ -1879,6 +1964,7 @@
  		int nRetval = ValveCocoaMain( &steamApplication ); 
  #else
  		int nRetval = steamApplication.Run();

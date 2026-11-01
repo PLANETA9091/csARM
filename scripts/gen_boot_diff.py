@@ -281,7 +281,23 @@ pairs.append((
     T + 'ConnectTier2Libraries( &factory, 1 );\n'
     + T + 'CSARM_LOGI( "PreInit: tier2 -> g_pFullFileSystem=%p", (void*)g_pFullFileSystem );\n'
     + T + 'ConnectTier3Libraries( &factory, 1 );\n'
-    + T + 'CSARM_LOGI( "PreInit: tier3 -> g_pMaterialSystem=%p", (void*)g_pMaterialSystem );\n'))
+    + T + 'CSARM_LOGI( "PreInit: tier3 -> g_pMaterialSystem=%p", (void*)g_pMaterialSystem );\n'
+    + '#ifdef __ANDROID__\n'
+    + T + '// csARM run 41356519092: even with the local factory wrapper the\n'
+    + T + '// private interfaces.cpp registry in liblauncher stays empty (the\n'
+    + T + '// wrapper pointer reaches ConnectInterfaces via a GOT slot and the\n'
+    + T + '// bionic symbol-interposition state between the per-.so registry\n'
+    + T + '// copies eats the writes).  Fill the globals the launcher itself\n'
+    + T + '// uses with direct assignments through this->FindSystem - the same\n'
+    + T + '// live path Create already proved works - so the real interfaces,\n'
+    + T + '// not stubs, land in this module\\\'s registry.\n'
+    + T + 'if ( !g_pCVar )\n'
+    + T + '\tg_pCVar = (ICvar*)FindSystem( CVAR_INTERFACE_VERSION );\n'
+    + T + 'if ( !g_pFullFileSystem )\n'
+    + T + '\tg_pFullFileSystem = (IFileSystem*)FindSystem( FILESYSTEM_INTERFACE_VERSION );\n'
+    + T + 'if ( !g_pMaterialSystem )\n'
+    + T + '\tg_pMaterialSystem = (IMaterialSystem*)FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION );\n'
+    + '#endif\n'))
 
 pairs.append((
     T + 'if ( !g_pFullFileSystem || !g_pMaterialSystem )\n'
