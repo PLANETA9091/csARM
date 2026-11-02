@@ -1451,8 +1451,8 @@ diff -ruN a/public/dt_recv.h b/public/dt_recv.h
  void RecvProxy_FloatToFloat  ( const CRecvProxyData *pData, void *pStruct, void *pOut );
 diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 --- a/public/external/v8/include/v8.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/public/external/v8/include/v8.h	2026-11-02 20:21:48.131651536 +0000
-@@ -0,0 +1,309 @@
++++ b/public/external/v8/include/v8.h	2026-11-02 20:32:32.602201133 +0000
+@@ -0,0 +1,312 @@
 +// csARM port stub: minimal v8 declarations.
 +//
 +// The 2019 partner tree integrated the Panorama UI into the client's public
@@ -1759,6 +1759,9 @@ diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 +	bool HasCaught() const { return false; }
 +};
 +
++inline Local<Primitive> Null(Isolate *isolate) { (void)isolate; return Local<Primitive>(); }
++inline Local<Primitive> Undefined(Isolate *isolate) { (void)isolate; return Local<Primitive>(); }
++
 +} // namespace v8
 +
 +#endif // CSARM_V8_STUB_H
@@ -1978,7 +1981,7 @@ diff -ruN a/public/mathlib/vector4d.h b/public/mathlib/vector4d.h
  #include "tier0/dbg.h"
 diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
 --- a/public/panorama/iuiengine.h	2026-08-10 03:28:37.000000000 +0000
-+++ b/public/panorama/iuiengine.h	2026-11-02 20:21:48.131651536 +0000
++++ b/public/panorama/iuiengine.h	2026-11-02 20:32:32.602201133 +0000
 @@ -33,7 +33,7 @@
  #include "steam/isteamhttp.h"
  #include "iuifilesystem.h"
@@ -1988,6 +1991,18 @@ diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
  #include "audio/iaudiointerface.h"
  #include <openvr.h>
  #endif
+@@ -285,7 +285,11 @@
+ #if !defined( SOURCE2_PANORAMA )
+ 	virtual IUIWindow *CreateNewWindow( const char *pchWindowTitle, uint32 width, uint32 height, ERenderTarget eRenderType, bool bFixedSurfaceSize, bool bEnforceWindowAspectRatio, bool bUseCustomMouseCursor, const char *pchMonitorName ) = 0;
+ 	virtual IUIWindow *CreateNewOverlayWindow( const char *pchWindowTitle, uint32 width, uint32 height, panorama::IUIEngine::ERenderTarget eTarget, bool bFixedSize, bool bDrawCustomMouseCursor ) = 0;
++	#if defined( CSARM_PORT )
++	virtual IUIWindow *CreateNewOpenVROverlayWindow( uint32 width, uint32 height, uint64 ulOverlayHandle, bool bKeepInputFocusOnGamepadFocusLost, bool bIgnoreGamepadFocus ) = 0;
++#else
+ 	virtual IUIWindow *CreateNewOpenVROverlayWindow( uint32 width, uint32 height, vr::VROverlayHandle_t ulOverlayHandle, bool bKeepInputFocusOnGamepadFocusLost, bool bIgnoreGamepadFocus ) = 0;
++#endif
+ #else
+ 	virtual IUIWindow *CreateNewUILayerWindow( uint32 xPos, uint32 yPos, uint32 width, uint32 height, bool bFixedSurfaceSize, bool bEnforceWindowAspectRatio, bool bUseCustomMouseCursor, bool bAcceptKBandMouse, const char *pName, InputContextHandle_t hInputContext ) = 0;
+ 	virtual IUIWindow *CreateNewOffscreenUIWindow( uint32 width, uint32 height, const char *pName, InputContextHandle_t hInputContext, bool bDrawToBackBuffer ) = 0;
 diff -ruN a/public/panorama/panoramatypes.h b/public/panorama/panoramatypes.h
 --- a/public/panorama/panoramatypes.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/panorama/panoramatypes.h	2026-11-02 20:21:48.131651536 +0000
@@ -2000,6 +2015,18 @@ diff -ruN a/public/panorama/panoramatypes.h b/public/panorama/panoramatypes.h
  template< class T, int A >
  class CUtlVectorFixedGrowable : public CUtlVector< T >
  {
+diff -ruN a/public/panorama/uievent.h b/public/panorama/uievent.h
+--- a/public/panorama/uievent.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/panorama/uievent.h	2026-11-02 20:32:32.602201133 +0000
+@@ -2388,7 +2388,7 @@
+ */
+ } // namespace panorama 
+ 
+-#if !defined( SOURCE2_PANORAMA ) && !defined( PANORAMA_PUBLIC_STEAM_SDK )
++#if !defined( SOURCE2_PANORAMA ) && !defined( PANORAMA_PUBLIC_STEAM_SDK ) && !defined( CSARM_PORT )
+ // Get additional template specializations for Steam
+ #include "../steamUI/tenfoot/tenfooteventhelpers.h"
+ #endif
 diff -ruN a/public/tier0/hardware_clock_fast.h b/public/tier0/hardware_clock_fast.h
 --- a/public/tier0/hardware_clock_fast.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/tier0/hardware_clock_fast.h	2026-11-02 19:22:40.765854264 +0000
