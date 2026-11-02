@@ -1451,8 +1451,8 @@ diff -ruN a/public/dt_recv.h b/public/dt_recv.h
  void RecvProxy_FloatToFloat  ( const CRecvProxyData *pData, void *pStruct, void *pOut );
 diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 --- a/public/external/v8/include/v8.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/public/external/v8/include/v8.h	2026-11-02 20:32:32.602201133 +0000
-@@ -0,0 +1,312 @@
++++ b/public/external/v8/include/v8.h	2026-11-02 20:44:44.922733116 +0000
+@@ -0,0 +1,316 @@
 +// csARM port stub: minimal v8 declarations.
 +//
 +// The 2019 partner tree integrated the Panorama UI into the client's public
@@ -1543,10 +1543,11 @@ diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 +public:
 +	Handle() : val_(0) {}
 +	Handle(T *val) : val_(val) {}
-+	template <class S> Handle(const Handle<S>& that) : val_(*that) {}
-+	template <class S> Handle(const Local<S>& that) : val_(*that) {}
-+	template <class S> Handle<T>& operator=(const Local<S>& that) { val_ = *that; return *this; }
-+	template <class S> Handle<T>& operator=(const Handle<S>& that) { val_ = *that; return *this; }
++	template <class S> Handle(const Handle<S>&) : val_(0) {}
++	template <class S> Handle(const Local<S>&) : val_(0) {}
++	template <class S> Handle<T>& operator=(const Local<S>&) { val_ = 0; return *this; }
++	template <class S> Handle<T>& operator=(const Handle<S>&) { val_ = 0; return *this; }
++	template <class S> static Handle<T> Cast(const Handle<S>& that) { (void)that; return Handle<T>(); }
 +	T* operator*() const { return val_; }
 +	T* operator->() const { return val_; }
 +	bool IsEmpty() const { return val_ == 0; }
@@ -1560,11 +1561,11 @@ diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 +public:
 +	Local() {}
 +	Local(T *val) : Handle<T>(val) {}
-+	template <class S> Local(const Local<S>& that) : Handle<T>(*that) {}
-+	template <class S> Local(const Handle<S>& that) : Handle<T>(*that) {}
-+	template <class S> Local<T>& operator=(const Local<S>& that) { this->val_ = *that; return *this; }
-+	template <class S> static Local<T> Cast(const Local<S>& that) { Local<T> r(*that); return r; }
-+	template <class S> static Local<T> Cast(const Handle<S>& that) { Local<T> r(*that); return r; }
++	template <class S> Local(const Local<S>&) {}
++	template <class S> Local(const Handle<S>&) {}
++	template <class S> Local<T>& operator=(const Local<S>&) { this->val_ = 0; return *this; }
++	template <class S> static Local<T> Cast(const Local<S>& that) { (void)that; return Local<T>(); }
++	template <class S> static Local<T> Cast(const Handle<S>& that) { (void)that; return Local<T>(); }
 +};
 +
 +template <class T>
@@ -1663,11 +1664,13 @@ diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 +{
 +public:
 +	Local<String> GetName() const { return Local<String>(); }
++	Local<Value> Call(Handle<Value> recv, int argc, Handle<Value> argv[]) { (void)recv; (void)argc; (void)argv; return Local<Value>(); }
 +};
 +class Context
 +{
 +public:
 +	Isolate* GetIsolate() { return 0; }
++	Local<Object> Global() { return Local<Object>(); }
 +};
 +
 +class Isolate
@@ -1679,6 +1682,7 @@ diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 +		explicit Scope(Isolate *isolate) { (void)isolate; }
 +	};
 +	Local<Value> ThrowException(Handle<Value> exception) { (void)exception; return Local<Value>(); }
++	Local<Context> GetCurrentContext() { return Local<Context>(); }
 +};
 +
 +class HandleScope
@@ -1979,6 +1983,43 @@ diff -ruN a/public/mathlib/vector4d.h b/public/mathlib/vector4d.h
  #endif
  #include "tier0/basetypes.h"	// For vec_t, put this somewhere else?
  #include "tier0/dbg.h"
+diff -ruN a/public/panorama/amount.h b/public/panorama/amount.h
+--- a/public/panorama/amount.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/amount.h	2026-11-02 20:44:29.220742340 +0000
+@@ -0,0 +1,15 @@
++// [port] Steam localization header excluded from the 2019 leak; minimal stub
++// for CAmount / CCurrencyAmount used by value in ilocalize.h.
++#ifndef CSARM_STUB_AMOUNT_H
++#define CSARM_STUB_AMOUNT_H
++class CAmount
++{
++public:
++	CAmount() {}
++};
++class CCurrencyAmount : public CAmount
++{
++public:
++	CCurrencyAmount() {}
++};
++#endif
+diff -ruN a/public/panorama/constants.h b/public/panorama/constants.h
+--- a/public/panorama/constants.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/constants.h	2026-11-02 20:44:29.220742340 +0000
+@@ -0,0 +1,4 @@
++// [port] Steam header excluded from the 2019 leak; empty stub.
++#ifndef CSARM_STUB_CONSTANTS_H
++#define CSARM_STUB_CONSTANTS_H
++#endif
+diff -ruN a/public/panorama/globals.h b/public/panorama/globals.h
+--- a/public/panorama/globals.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/globals.h	2026-11-02 20:44:29.220742340 +0000
+@@ -0,0 +1,6 @@
++// [port] Steam header excluded from the 2019 leak; forward declarations the
++// panorama localization interface references.
++#ifndef CSARM_STUB_GLOBALS_H
++#define CSARM_STUB_GLOBALS_H
++class CValidator;
++#endif
 diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
 --- a/public/panorama/iuiengine.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/panorama/iuiengine.h	2026-11-02 20:32:32.602201133 +0000
@@ -2003,6 +2044,101 @@ diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
  #else
  	virtual IUIWindow *CreateNewUILayerWindow( uint32 xPos, uint32 yPos, uint32 width, uint32 height, bool bFixedSurfaceSize, bool bEnforceWindowAspectRatio, bool bUseCustomMouseCursor, bool bAcceptKBandMouse, const char *pName, InputContextHandle_t hInputContext ) = 0;
  	virtual IUIWindow *CreateNewOffscreenUIWindow( uint32 width, uint32 height, const char *pName, InputContextHandle_t hInputContext, bool bDrawToBackBuffer ) = 0;
+diff -ruN a/public/panorama/language.h b/public/panorama/language.h
+--- a/public/panorama/language.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/language.h	2026-11-02 20:44:29.220742340 +0000
+@@ -0,0 +1,6 @@
++// [port] Steam header excluded from the 2019 leak; opaque enum matching
++// public/localize/ilocalize.h.
++#ifndef CSARM_STUB_LANGUAGE_H
++#define CSARM_STUB_LANGUAGE_H
++enum ELanguage : int32;
++#endif
+diff -ruN a/public/panorama/localization/amount.h b/public/panorama/localization/amount.h
+--- a/public/panorama/localization/amount.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/localization/amount.h	2026-11-02 20:43:53.321757345 +0000
+@@ -0,0 +1,15 @@
++// [port] Steam localization header excluded from the 2019 leak; minimal stub
++// for CAmount / CCurrencyAmount used by value in ilocalize.h.
++#ifndef CSARM_STUB_AMOUNT_H
++#define CSARM_STUB_AMOUNT_H
++class CAmount
++{
++public:
++	CAmount() {}
++};
++class CCurrencyAmount : public CAmount
++{
++public:
++	CCurrencyAmount() {}
++};
++#endif
+diff -ruN a/public/panorama/localization/constants.h b/public/panorama/localization/constants.h
+--- a/public/panorama/localization/constants.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/localization/constants.h	2026-11-02 20:43:53.322757344 +0000
+@@ -0,0 +1,4 @@
++// [port] Steam header excluded from the 2019 leak; empty stub.
++#ifndef CSARM_STUB_CONSTANTS_H
++#define CSARM_STUB_CONSTANTS_H
++#endif
+diff -ruN a/public/panorama/localization/globals.h b/public/panorama/localization/globals.h
+--- a/public/panorama/localization/globals.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/localization/globals.h	2026-11-02 20:43:53.323757344 +0000
+@@ -0,0 +1,6 @@
++// [port] Steam header excluded from the 2019 leak; forward declarations the
++// panorama localization interface references.
++#ifndef CSARM_STUB_GLOBALS_H
++#define CSARM_STUB_GLOBALS_H
++class CValidator;
++#endif
+diff -ruN a/public/panorama/localization/language.h b/public/panorama/localization/language.h
+--- a/public/panorama/localization/language.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/localization/language.h	2026-11-02 20:43:53.324757343 +0000
+@@ -0,0 +1,6 @@
++// [port] Steam header excluded from the 2019 leak; opaque enum matching
++// public/localize/ilocalize.h.
++#ifndef CSARM_STUB_LANGUAGE_H
++#define CSARM_STUB_LANGUAGE_H
++enum ELanguage : int32;
++#endif
+diff -ruN a/public/panorama/localization/reliabletimer.h b/public/panorama/localization/reliabletimer.h
+--- a/public/panorama/localization/reliabletimer.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/localization/reliabletimer.h	2026-11-02 20:43:53.324757343 +0000
+@@ -0,0 +1,4 @@
++// [port] Steam header excluded from the 2019 leak; empty stub.
++#ifndef CSARM_STUB_RELIABLETIMER_H
++#define CSARM_STUB_RELIABLETIMER_H
++#endif
+diff -ruN a/public/panorama/localization/rtime.h b/public/panorama/localization/rtime.h
+--- a/public/panorama/localization/rtime.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/localization/rtime.h	2026-11-02 20:46:19.354668403 +0000
+@@ -0,0 +1,18 @@
++// [port] Steam localization header excluded from the 2019 leak; minimal stub
++// for the panorama public headers that reference CRTime by value.
++#ifndef CSARM_STUB_RTIME_H
++#define CSARM_STUB_RTIME_H
++class CRTime
++{
++public:
++	CRTime() {}
++	explicit CRTime( unsigned int t ) { (void)t; }
++};
++
++class CRTimeDuration
++{
++public:
++	CRTimeDuration() {}
++	explicit CRTimeDuration( unsigned int secs ) { (void)secs; }
++};
++#endif
+diff -ruN a/public/panorama/localization/stime.h b/public/panorama/localization/stime.h
+--- a/public/panorama/localization/stime.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/localization/stime.h	2026-11-02 20:43:53.322757344 +0000
+@@ -0,0 +1,4 @@
++// [port] Steam header excluded from the 2019 leak; empty stub.
++#ifndef CSARM_STUB_STIME_H
++#define CSARM_STUB_STIME_H
++#endif
 diff -ruN a/public/panorama/panoramatypes.h b/public/panorama/panoramatypes.h
 --- a/public/panorama/panoramatypes.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/panorama/panoramatypes.h	2026-11-02 20:21:48.131651536 +0000
@@ -2015,6 +2151,44 @@ diff -ruN a/public/panorama/panoramatypes.h b/public/panorama/panoramatypes.h
  template< class T, int A >
  class CUtlVectorFixedGrowable : public CUtlVector< T >
  {
+diff -ruN a/public/panorama/reliabletimer.h b/public/panorama/reliabletimer.h
+--- a/public/panorama/reliabletimer.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/reliabletimer.h	2026-11-02 20:44:29.220742340 +0000
+@@ -0,0 +1,4 @@
++// [port] Steam header excluded from the 2019 leak; empty stub.
++#ifndef CSARM_STUB_RELIABLETIMER_H
++#define CSARM_STUB_RELIABLETIMER_H
++#endif
+diff -ruN a/public/panorama/rtime.h b/public/panorama/rtime.h
+--- a/public/panorama/rtime.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/rtime.h	2026-11-02 20:46:19.342668410 +0000
+@@ -0,0 +1,18 @@
++// [port] Steam localization header excluded from the 2019 leak; minimal stub
++// for the panorama public headers that reference CRTime by value.
++#ifndef CSARM_STUB_RTIME_H
++#define CSARM_STUB_RTIME_H
++class CRTime
++{
++public:
++	CRTime() {}
++	explicit CRTime( unsigned int t ) { (void)t; }
++};
++
++class CRTimeDuration
++{
++public:
++	CRTimeDuration() {}
++	explicit CRTimeDuration( unsigned int secs ) { (void)secs; }
++};
++#endif
+diff -ruN a/public/panorama/stime.h b/public/panorama/stime.h
+--- a/public/panorama/stime.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/stime.h	2026-11-02 20:44:29.220742340 +0000
+@@ -0,0 +1,4 @@
++// [port] Steam header excluded from the 2019 leak; empty stub.
++#ifndef CSARM_STUB_STIME_H
++#define CSARM_STUB_STIME_H
++#endif
 diff -ruN a/public/panorama/uievent.h b/public/panorama/uievent.h
 --- a/public/panorama/uievent.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/panorama/uievent.h	2026-11-02 20:32:32.602201133 +0000
