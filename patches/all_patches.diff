@@ -2125,7 +2125,7 @@ diff -ruN a/public/panorama/globals.h b/public/panorama/globals.h
 +#endif
 diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
 --- a/public/panorama/iuiengine.h	2026-08-10 03:28:37.000000000 +0000
-+++ b/public/panorama/iuiengine.h	2026-11-02 20:32:32.602201133 +0000
++++ b/public/panorama/iuiengine.h	2026-11-02 22:05:54.098730536 +0000
 @@ -33,7 +33,7 @@
  #include "steam/isteamhttp.h"
  #include "iuifilesystem.h"
@@ -2135,7 +2135,7 @@ diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
  #include "audio/iaudiointerface.h"
  #include <openvr.h>
  #endif
-@@ -285,7 +285,11 @@
+@@ -285,7 +285,16 @@
  #if !defined( SOURCE2_PANORAMA )
  	virtual IUIWindow *CreateNewWindow( const char *pchWindowTitle, uint32 width, uint32 height, ERenderTarget eRenderType, bool bFixedSurfaceSize, bool bEnforceWindowAspectRatio, bool bUseCustomMouseCursor, const char *pchMonitorName ) = 0;
  	virtual IUIWindow *CreateNewOverlayWindow( const char *pchWindowTitle, uint32 width, uint32 height, panorama::IUIEngine::ERenderTarget eTarget, bool bFixedSize, bool bDrawCustomMouseCursor ) = 0;
@@ -2144,6 +2144,11 @@ diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
 +#else
  	virtual IUIWindow *CreateNewOpenVROverlayWindow( uint32 width, uint32 height, vr::VROverlayHandle_t ulOverlayHandle, bool bKeepInputFocusOnGamepadFocusLost, bool bIgnoreGamepadFocus ) = 0;
 +#endif
++	// [port] 2019's gameui_interface.cpp (S1 branch) calls these three
++	// methods, but the leak's iuiengine.h declares them only in the
++	// SOURCE2_PANORAMA branch - duplicate the declarations here.
++	virtual IUIWindow *CreateNewUILayerWindow( uint32 xPos, uint32 yPos, uint32 width, uint32 height, bool bFixedSurfaceSize, bool bEnforceWindowAspectRatio, bool bUseCustomMouseCursor, bool bAcceptKBandMouse, const char *pName, InputContextHandle_t hInputContext ) = 0;
++	virtual bool DestroyWindow( IUIWindow *pWindow ) = 0;
  #else
  	virtual IUIWindow *CreateNewUILayerWindow( uint32 xPos, uint32 yPos, uint32 width, uint32 height, bool bFixedSurfaceSize, bool bEnforceWindowAspectRatio, bool bUseCustomMouseCursor, bool bAcceptKBandMouse, const char *pName, InputContextHandle_t hInputContext ) = 0;
  	virtual IUIWindow *CreateNewOffscreenUIWindow( uint32 width, uint32 height, const char *pName, InputContextHandle_t hInputContext, bool bDrawToBackBuffer ) = 0;
@@ -2218,6 +2223,21 @@ diff -ruN a/public/panorama/localization/globals.h b/public/panorama/localizatio
 +#define CSARM_STUB_GLOBALS_H
 +class CValidator;
 +#endif
+diff -ruN a/public/panorama/localization/ilocalize.h b/public/panorama/localization/ilocalize.h
+--- a/public/panorama/localization/ilocalize.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/panorama/localization/ilocalize.h	2026-11-02 22:05:54.098730536 +0000
+@@ -230,7 +230,10 @@
+ public:
+ 	// change the language used by the loc system
+ 	virtual bool SetLanguage( const char *pchLanguage ) = 0;
+-#if defined( SOURCE2_PANORAMA )
++	// [port] 2019's gameui_interface.cpp calls BLoadLocalizationFile in the
++	// S1 branch; upstream declares it only under SOURCE2_PANORAMA - enable
++	// it for the port too.
++#if defined( SOURCE2_PANORAMA ) || defined( CSARM_PORT )
+ 	// add a loc file to the system, in the form of <prefix>_<language>.txt , i.e dota_french.txt, the files will be loaded from the panorama/localization folder of your mod
+ 	virtual bool BLoadLocalizationFile( const char *pchFilePrefix ) = 0;
+ 	virtual int GetLocalizationFileCount( void ) = 0;
 diff -ruN a/public/panorama/localization/language.h b/public/panorama/localization/language.h
 --- a/public/panorama/localization/language.h	1970-01-01 00:00:00.000000000 +0000
 +++ b/public/panorama/localization/language.h	2026-11-02 20:43:53.324757343 +0000
