@@ -249,6 +249,12 @@ extern "C" int SDL_main(int argc, char *argv[])
     setenv("TMPDIR", (filesDir + "/tmp").c_str(), 1);
     setenv("PWD", filesDir.c_str(), 1);
     setenv("STEAMAPPID", "730", 0);
+    // CEngineAPI::SetStartupInfo mounts the USRLOCAL search path from
+    // getenv("USRLOCAL" DLLExtTokenPaste2(VPCGAMECAPS)) on Android (the
+    // Steam-profile branch is platform-gated away): without it the engine
+    // has no writable USRLOCAL dir for configs/saves.
+    setenv("USRLOCAL", filesDir.c_str(), 1);
+    setenv("USRLOCALCSGO", filesDir.c_str(), 1);
 
     makeModuleLinks(filesDir, nativeLibDir());
 

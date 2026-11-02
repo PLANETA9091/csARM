@@ -424,6 +424,72 @@ pairs.append((
     + T + '}\n'
     + '#endif\n'))
 
+# csARM run 41369767472: with the identity gate skipped on Android the
+# execution continues into the USRLOCAL block, whose Steam-profile branch
+# dereferences Steam3Client().SteamUser() - NULL with the steam_api stub:
+#   Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0
+#     CEngineAPI::SetStartupInfo(StartupInfo_t&)+967  <- SteamUser() deref
+#     CSourceAppSystemGroup::PreInit()+1035
+# On the desktop path the identity gate guarantees SteamUser() is valid
+# before this line; on Android it never is.  Platform-gate the block to
+# the env-override branch only (loader sets USRLOCALCSGO -> app files dir).
+pairs.append((
+    T + 'if ( g_pFileSystem )\n'
+    + T + '{\n'
+    + T + T + 'char chUserLocalDataFolder[ MAX_PATH ] = {};\n'
+    + T + T + 'if ( char const * pszLocalOverride = getenv( "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ) ) )\n'
+    + T + T + '{\n'
+    + T + T + T + 'Msg( "USRLOCAL path using environment setting \'%s\':\\n%s\\n", "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ), pszLocalOverride );\n'
+    + T + T + T + 'g_pFileSystem->AddSearchPath( pszLocalOverride, "USRLOCAL" );\n'
+    + T + T + '}\n'
+    + T + T + 'else if ( Steam3Client().SteamUser()->GetUserDataFolder( chUserLocalDataFolder, sizeof( chUserLocalDataFolder ) ) )\n'
+    + T + T + '{\n'
+    + T + T + T + 'Msg( "USRLOCAL path using Steam profile data folder:\\n%s\\n", chUserLocalDataFolder );\n'
+    + T + T + T + 'g_pFileSystem->AddSearchPath( chUserLocalDataFolder, "USRLOCAL" );\n'
+    + T + T + '}\n'
+    + T + T + 'else\n'
+    + T + T + '{\n'
+    + T + T + T + 'Warning( "USRLOCAL path not found!\\n" );\n'
+    + T + T + '}\n'
+    + T + '}\n',
+    T + 'if ( g_pFileSystem )\n'
+    + T + '{\n'
+    + T + T + 'char chUserLocalDataFolder[ MAX_PATH ] = {};\n'
+    + '#ifdef __ANDROID__\n'
+    + T + T + '// csARM: SteamUser() is NULL with the steam_api stub (no Steam client\n'
+    + T + T + '// process on Android) and the Steam-profile branch below dereferenced\n'
+    + T + T + '// it -> SEGV in SetStartupInfo (run 41369767472).  The identity gate\n'
+    + T + T + '// above used to return false before reaching this line on Android.\n'
+    + T + T + '// USRLOCAL comes from the env override the JNI loader sets.\n'
+    + T + T + 'CSARM_LOGI( "SetStartupInfo: USRLOCAL via env override (no Steam on Android)" );\n'
+    + T + T + 'if ( char const * pszLocalOverride = getenv( "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ) ) )\n'
+    + T + T + '{\n'
+    + T + T + T + 'Msg( "USRLOCAL path using environment setting \'%s\':\\n%s\\n", "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ), pszLocalOverride );\n'
+    + T + T + T + 'g_pFileSystem->AddSearchPath( pszLocalOverride, "USRLOCAL" );\n'
+    + T + T + T + 'CSARM_LOGI( "SetStartupInfo: USRLOCAL=%s", pszLocalOverride );\n'
+    + T + T + '}\n'
+    + T + T + 'else\n'
+    + T + T + '{\n'
+    + T + T + T + 'Warning( "USRLOCAL path not found!\\n" );\n'
+    + T + T + '}\n'
+    + '#else\n'
+    + T + T + 'if ( char const * pszLocalOverride = getenv( "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ) ) )\n'
+    + T + T + '{\n'
+    + T + T + T + 'Msg( "USRLOCAL path using environment setting \'%s\':\\n%s\\n", "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ), pszLocalOverride );\n'
+    + T + T + T + 'g_pFileSystem->AddSearchPath( pszLocalOverride, "USRLOCAL" );\n'
+    + T + T + '}\n'
+    + T + T + 'else if ( Steam3Client().SteamUser()->GetUserDataFolder( chUserLocalDataFolder, sizeof( chUserLocalDataFolder ) ) )\n'
+    + T + T + '{\n'
+    + T + T + T + 'Msg( "USRLOCAL path using Steam profile data folder:\\n%s\\n", chUserLocalDataFolder );\n'
+    + T + T + T + 'g_pFileSystem->AddSearchPath( chUserLocalDataFolder, "USRLOCAL" );\n'
+    + T + T + '}\n'
+    + T + T + 'else\n'
+    + T + T + '{\n'
+    + T + T + T + 'Warning( "USRLOCAL path not found!\\n" );\n'
+    + T + T + '}\n'
+    + '#endif\n'
+    + T + '}\n'))
+
 # csARM silent-rc0 probes (run 41326912005: clean exit 467ms after launch,
 # zero engine spew after "SDL video target").  Three return-false-silently
 # paths funnel into RUN_OK: CEngineAPI::OnStartup sub-inits, ModInit's

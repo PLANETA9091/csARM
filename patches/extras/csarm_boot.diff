@@ -388,7 +388,44 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  
  	//
  	// Setup a search path for USRLOCAL data (configs / save games / etc.) that isn't intended to be shared across multiple accounts
-@@ -1199,6 +1216,7 @@
+@@ -810,10 +827,28 @@
+ 	if ( g_pFileSystem )
+ 	{
+ 		char chUserLocalDataFolder[ MAX_PATH ] = {};
++#ifdef __ANDROID__
++		// csARM: SteamUser() is NULL with the steam_api stub (no Steam client
++		// process on Android) and the Steam-profile branch below dereferenced
++		// it -> SEGV in SetStartupInfo (run 41369767472).  The identity gate
++		// above used to return false before reaching this line on Android.
++		// USRLOCAL comes from the env override the JNI loader sets.
++		CSARM_LOGI( "SetStartupInfo: USRLOCAL via env override (no Steam on Android)" );
+ 		if ( char const * pszLocalOverride = getenv( "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ) ) )
+ 		{
+ 			Msg( "USRLOCAL path using environment setting '%s':\n%s\n", "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ), pszLocalOverride );
+ 			g_pFileSystem->AddSearchPath( pszLocalOverride, "USRLOCAL" );
++			CSARM_LOGI( "SetStartupInfo: USRLOCAL=%s", pszLocalOverride );
++		}
++		else
++		{
++			Warning( "USRLOCAL path not found!\n" );
++		}
++#else
++		if ( char const * pszLocalOverride = getenv( "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ) ) )
++		{
++			Msg( "USRLOCAL path using environment setting '%s':\n%s\n", "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ), pszLocalOverride );
++			g_pFileSystem->AddSearchPath( pszLocalOverride, "USRLOCAL" );
+ 		}
+ 		else if ( Steam3Client().SteamUser()->GetUserDataFolder( chUserLocalDataFolder, sizeof( chUserLocalDataFolder ) ) )
+ 		{
+@@ -824,6 +859,7 @@
+ 		{
+ 			Warning( "USRLOCAL path not found!\n" );
+ 		}
++#endif
+ 	}
+ #endif
+ 
+@@ -1199,6 +1235,7 @@
  //-----------------------------------------------------------------------------
  bool CEngineAPI::OnStartup( void *pInstance, const char *pStartupModName )
  {
@@ -396,7 +433,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	// This fixes a bug on certain machines where the input will 
  	// stop coming in for about 1 second when someone hits a key.
  	// (true means to disable priority boost)
-@@ -1220,6 +1238,7 @@
+@@ -1220,6 +1257,7 @@
  	// for use by the code that creates the window
  	if ( !game->Init( pInstance ) )
  	{
@@ -404,7 +441,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  		goto onStartupError;
  	}
  
-@@ -1230,6 +1249,7 @@
+@@ -1230,6 +1268,7 @@
  	// This way mods can have different default video settings
  	if ( !videomode->Init( ) )
  	{
@@ -412,7 +449,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  		goto onStartupShutdownGame;
  	}
  
-@@ -1346,10 +1366,13 @@
+@@ -1346,10 +1385,13 @@
  	COM_TimestampedLog( "Host_ReadPreStartupConfiguration - Finish" );
  	// Create the game window now that we have a search path
  	// FIXME: Deal with initial window width + height better
@@ -426,7 +463,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  
  	return true;
  }
-@@ -1408,6 +1431,7 @@
+@@ -1408,6 +1450,7 @@
  //-----------------------------------------------------------------------------
  int CEngineAPI::RunListenServer()
  {
@@ -434,7 +471,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	//
  	// NOTE: Systems set up here should depend on the mod 
  	// Systems which are mod-independent should be set up in the launcher or Init()
-@@ -1417,7 +1441,9 @@
+@@ -1417,7 +1460,9 @@
  	int nRunResult = RUN_OK;
  
  	// Happens every time we start up and shut down a mod
@@ -445,7 +482,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	{
  		CModAppSystemGroup modAppSystemGroup( false, m_StartupInfo.m_pParentAppSystemGroup );
  
-@@ -1735,6 +1761,7 @@
+@@ -1735,6 +1780,7 @@
  //-----------------------------------------------------------------------------
  int CEngineAPI::Run()
  {
@@ -453,7 +490,7 @@ diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  	if ( CommandLine()->FindParm("-insecure") )
  	{
  		extern void Host_DisallowSecureServers();
-@@ -2402,7 +2429,9 @@
+@@ -2402,7 +2448,9 @@
  		COM_TimestampedLog( "eng->Load" );
  
  		// Start up the game engine
