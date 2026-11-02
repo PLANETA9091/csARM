@@ -8,3 +8,4 @@
 /thirdparty/zlib-1.2.5/
 /thirdparty/quickhull/
 /thirdparty/telemetry/
+/thirdparty/JSON_parser/

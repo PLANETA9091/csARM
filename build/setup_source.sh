@@ -24,7 +24,7 @@ SRC="$R/c15"
 TPCACHE="$R/.cache/c15-thirdparty"
 PATTERNS="$REPO_DIR/build/sparse-patterns.txt"
 TP_PATTERNS="$REPO_DIR/build/thirdparty-patterns.txt"
-TP_DIRS="SDL2 libpng-1.5.2 protobuf-2.5.0 zlib-1.2.5 quickhull telemetry"
+TP_DIRS="SDL2 libpng-1.5.2 protobuf-2.5.0 zlib-1.2.5 quickhull telemetry JSON_parser"
 
 # Completeness gate: every directory the module build compiles/links from must
 # exist and be non-empty.  Guards against a STALE actions/cache (a cache saved

@@ -1119,7 +1119,7 @@ diff -ruN a/interfaces/interfaces.cpp b/interfaces/interfaces.cpp
  	Assert( s_nRegistrationCount < ARRAYSIZE(s_pConnectionRegistration) );
 diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
 --- a/launcher/launcher.cpp	2026-08-10 03:28:37.000000000 +0000
-+++ b/launcher/launcher.cpp	2026-11-02 19:26:33.394688349 +0000
++++ b/launcher/launcher.cpp	2026-11-02 19:49:15.405842137 +0000
 @@ -28,6 +28,7 @@
  #include "appframework/ilaunchermgr.h"
  #include <stdio.h>
@@ -1128,7 +1128,23 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  #include "engine_launcher_api.h"
  #include "ifilesystem.h"
  #include "tier1/interface.h"
-@@ -671,6 +672,9 @@
+@@ -41,6 +42,15 @@
+ #include "tier0/memalloc.h"
+ #include "datacache/iresourceaccesscontrol.h"
+ #include "filesystem.h"
++// [port] 2019 wraps SCALEFORMUI_INTERFACE_VERSION in #if defined(
++// INCLUDE_SCALEFORM ) (interfaces.h / scaleformui.h) because the partner
++// build ships Scaleform; the scaleform appsystem table below references the
++// macro unconditionally.  The Android build has no Scaleform - keep the
++// macro so the table compiles; the loader skips modules whose .so is
++// absent, exactly like the 2018 port did.
++#if !defined( INCLUDE_SCALEFORM )
++#define SCALEFORMUI_INTERFACE_VERSION "ScaleformUI002"
++#endif
+ #include "tier1/utlrbtree.h"
+ #include "materialsystem/imaterialsystem.h"
+ #include "istudiorender.h"
+@@ -671,6 +681,9 @@
  	// Methods of IApplication
  	virtual bool Create();
  	virtual bool PreInit();
@@ -1138,7 +1154,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  	virtual int Main();
  	virtual void PostShutdown();
  	virtual void Destroy();
-@@ -703,6 +707,28 @@
+@@ -703,6 +716,28 @@
  
  IVJobs * g_pVJobs = NULL;
  
@@ -1167,7 +1183,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  //-----------------------------------------------------------------------------
  // Instantiate all main libraries
-@@ -710,11 +736,13 @@
+@@ -710,11 +745,13 @@
  bool CSourceAppSystemGroup::Create()
  {
  	COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );
@@ -1181,7 +1197,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  	pFileSystem->InstallDirtyDiskReportFunc( ReportDirtyDiskNoMaterialSystem );
  
  #ifdef WIN32
-@@ -736,14 +764,25 @@
+@@ -736,14 +773,25 @@
  		{ LAUNCHER_APPSYSTEM( "filesystem_stdio" ),		XBOXINSTALLER_INTERFACE_VERSION },
  #endif
  		{ LAUNCHER_APPSYSTEM( "inputsystem" ),			INPUTSYSTEM_INTERFACE_VERSION },
@@ -1207,7 +1223,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  #ifdef WIN32
  		{ LAUNCHER_APPSYSTEM("soundsystem"),			SOUNDSYSTEM_INTERFACE_VERSION },
  #endif
-@@ -763,7 +802,11 @@
+@@ -763,7 +811,11 @@
  #endif
  		// NOTE: This has to occur before vgui2.dll so it replaces vgui2's surface implementation
  		{ LAUNCHER_APPSYSTEM( "vguimatsurface" ),		VGUI_SURFACE_INTERFACE_VERSION },
@@ -1219,7 +1235,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  		{ LAUNCHER_APPSYSTEM( "engine" ),				VENGINE_LAUNCHER_API_VERSION },
  
  		{ "", "" }					// Required to terminate the list
-@@ -776,7 +819,11 @@
+@@ -776,7 +828,11 @@
  #endif
  
  	if ( !AddSystems( appSystems ) ) 
@@ -1231,7 +1247,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  	// See if we're running panorama
  	bool bPanorama = false;
-@@ -941,14 +988,44 @@
+@@ -941,14 +997,44 @@
  
  bool CSourceAppSystemGroup::PreInit()
  {
@@ -1276,7 +1292,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #ifdef _PS3
  	g_pVJobs = ( IVJobs* )factory( VJOBS_INTERFACE_VERSION, NULL );  // this is done only once; g_pVJobs doesn't change even after multiple reloads of VJobs.prx
-@@ -969,14 +1046,20 @@
+@@ -969,14 +1055,20 @@
  		}
  	}
  	if ( FileSystem_SetupSteamEnvironment( steamInfo ) != FS_OK )
@@ -1297,7 +1313,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #if defined( SUPPORT_VPK )
  	Msg( "start timing %f\n", Plat_FloatTime() );
-@@ -1025,11 +1108,13 @@
+@@ -1025,11 +1117,13 @@
  	info.m_pParentAppSystemGroup = this;
  	info.m_bTextMode = g_bTextMode;
  
@@ -1311,7 +1327,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  	return g_pEngineAPI->Run();
  }
  
-@@ -1955,6 +2040,7 @@
+@@ -1955,6 +2049,7 @@
  		int nRetval = ValveCocoaMain( &steamApplication ); 
  #else
  		int nRetval = steamApplication.Run();
@@ -1853,7 +1869,7 @@ diff -ruN a/public/tier1/tokenset.h b/public/tier1/tokenset.h
  // 
  // This class is a handy way to match a series of values to stings and vice
 diff -ruN a/thirdparty/SDL2/SDL_opengl.h b/thirdparty/SDL2/SDL_opengl.h
---- a/thirdparty/SDL2/SDL_opengl.h	2026-11-02 19:30:41.374514794 +0000
+--- a/thirdparty/SDL2/SDL_opengl.h	2026-11-02 19:47:38.657900853 +0000
 +++ b/thirdparty/SDL2/SDL_opengl.h	2026-11-02 19:22:40.765854264 +0000
 @@ -25,7 +25,7 @@
   *  This is a simple file to encapsulate the OpenGL API headers.
@@ -1865,7 +1881,7 @@ diff -ruN a/thirdparty/SDL2/SDL_opengl.h b/thirdparty/SDL2/SDL_opengl.h
  
  #include "SDL_config.h"
 diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc
---- a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc	2026-11-02 19:30:41.409514772 +0000
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc	2026-11-02 19:47:38.714900815 +0000
 +++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc	2026-11-02 19:26:33.395688348 +0000
 @@ -951,7 +951,13 @@
    // any descriptor-based operations, since this might cause infinite recursion
@@ -1883,7 +1899,7 @@ diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc b/thirdp
  
  
 diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc
---- a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc	2026-11-02 19:30:41.410514772 +0000
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc	2026-11-02 19:47:38.715900815 +0000
 +++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc	2026-11-02 19:26:33.395688348 +0000
 @@ -80,11 +80,19 @@
                int number, ExtensionInfo info) {
@@ -1910,7 +1926,7 @@ diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc b/thi
  }
  
 diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc
---- a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc	2026-11-02 19:30:41.411514771 +0000
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc	2026-11-02 19:47:38.716900814 +0000
 +++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc	2026-11-02 19:26:33.394688349 +0000
 @@ -276,8 +276,18 @@
  
@@ -1949,7 +1965,7 @@ diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc b/thirdpart
  }
  
 diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h
---- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h	2026-11-02 19:30:41.412514770 +0000
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h	2026-11-02 19:47:38.717900813 +0000
 +++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h	2026-11-02 19:22:40.766854263 +0000
 @@ -176,6 +176,9 @@
  #elif defined(__GNUC__)
@@ -1962,7 +1978,7 @@ diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h b/th
  #include <google/protobuf/stubs/atomicops_internals_arm_gcc.h>
  #elif defined(GOOGLE_PROTOBUF_ARCH_ARM_QNX)
 diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h
---- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h	2026-11-02 19:30:41.413514770 +0000
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h	2026-11-02 19:47:38.717900813 +0000
 +++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h	2026-11-02 19:22:40.766854263 +0000
 @@ -49,6 +49,10 @@
  #elif defined(__ARMEL__)
@@ -1976,7 +1992,7 @@ diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.
  #define GOOGLE_PROTOBUF_ARCH_MIPS 1
  #define GOOGLE_PROTOBUF_ARCH_32_BIT 1
 diff -ruN a/thirdparty/telemetry/include/radtypes.h b/thirdparty/telemetry/include/radtypes.h
---- a/thirdparty/telemetry/include/radtypes.h	2026-11-02 19:30:41.430514759 +0000
+--- a/thirdparty/telemetry/include/radtypes.h	2026-11-02 19:47:38.769900779 +0000
 +++ b/thirdparty/telemetry/include/radtypes.h	2026-11-02 19:22:40.766854263 +0000
 @@ -171,7 +171,7 @@
  
