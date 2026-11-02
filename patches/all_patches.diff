@@ -2023,6 +2023,25 @@ diff -ruN a/public/panorama/constants.h b/public/panorama/constants.h
 +#ifndef CSARM_STUB_CONSTANTS_H
 +#define CSARM_STUB_CONSTANTS_H
 +#endif
+diff -ruN a/public/panorama/controls/amount.h b/public/panorama/controls/amount.h
+--- a/public/panorama/controls/amount.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/panorama/controls/amount.h	2026-11-02 21:08:46.646870739 +0000
+@@ -0,0 +1,15 @@
++// [port] Steam localization header excluded from the 2019 leak; minimal stub
++// for CAmount / CCurrencyAmount used by value in ilocalize.h.
++#ifndef CSARM_STUB_AMOUNT_H
++#define CSARM_STUB_AMOUNT_H
++class CAmount
++{
++public:
++	CAmount() {}
++};
++class CCurrencyAmount : public CAmount
++{
++public:
++	CCurrencyAmount() {}
++};
++#endif
 diff -ruN a/public/panorama/globals.h b/public/panorama/globals.h
 --- a/public/panorama/globals.h	1970-01-01 00:00:00.000000000 +0000
 +++ b/public/panorama/globals.h	2026-11-02 20:44:29.220742340 +0000
