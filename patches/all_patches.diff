@@ -742,6 +742,18 @@ diff -ruN a/game/client/c_baselesson.cpp b/game/client/c_baselesson.cpp
  		varType = FIELD_STRING; \
  	}
  
+diff -ruN a/game/client/client_cstrike15_inc.vpc b/game/client/client_cstrike15_inc.vpc
+--- a/game/client/client_cstrike15_inc.vpc	2026-08-10 03:28:37.000000000 +0000
++++ b/game/client/client_cstrike15_inc.vpc	2026-11-02 20:09:07.829126063 +0000
+@@ -909,7 +909,7 @@
+ 				}
+ 			}
+ 
+-			$Folder "UIcomponents" 
++			$Folder "UIcomponents"	[$PANORAMA_ENABLE]
+ 			{
+ 				$File	"cstrike15/uicomponents/uicomponent_common.h" 
+ 				$File	"cstrike15/uicomponents/uicomponent_common.cpp" 
 diff -ruN a/game/client/clientmode_shared.cpp b/game/client/clientmode_shared.cpp
 --- a/game/client/clientmode_shared.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/client/clientmode_shared.cpp	2026-11-02 19:22:40.764854264 +0000
@@ -1437,6 +1449,317 @@ diff -ruN a/public/dt_recv.h b/public/dt_recv.h
  
  
  void RecvProxy_FloatToFloat  ( const CRecvProxyData *pData, void *pStruct, void *pOut );
+diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
+--- a/public/external/v8/include/v8.h	1970-01-01 00:00:00.000000000 +0000
++++ b/public/external/v8/include/v8.h	2026-11-02 20:09:03.869129123 +0000
+@@ -0,0 +1,307 @@
++// csARM port stub: minimal v8 declarations.
++//
++// The 2019 partner tree integrated the Panorama UI into the client's public
++// headers (c_baseplayer.h now includes panorama/uievent.h, etc.).  The real
++// v8 library (external/v8) is excluded from the leak and Panorama itself is
++// not built on Android - every panorama *call site* in the client is compiled
++// out behind PANORAMA_ENABLE.  But the unguarded #includes still need the
++// panorama headers to PARSE, and their inline function/template bodies need
++// enough v8 declarations for semantic checking.
++//
++// This stub provides exactly that surface: the types and static factories
++// referenced by the reachable panorama headers (uievent.h, uijsregistration.h,
++// panel2d.h, iuiengine.h, panoramatypes.h, delayloadpanel.h).  Nothing here
++// is ever called at runtime: all returned handles are empty and the runtime
++// panorama paths never compile into client.so.
++//
++// Shapes follow the v8 4.x-era API the 2019 headers were written against.
++#ifndef CSARM_V8_STUB_H
++#define CSARM_V8_STUB_H
++
++#include <stddef.h>
++#include <stdint.h>
++
++namespace v8 {
++
++enum PropertyAttribute
++{
++	None = 0,
++	ReadOnly = 1,
++	DontDelete = 2,
++	DontEnum = 8
++};
++
++enum AccessControl
++{
++	DEFAULT = 0,
++	ALL_CAN_READ = 1,
++	ALL_CAN_WRITE = 2,
++	PROHIBITS_OVERWRITING = 4
++};
++
++class Value;
++class Primitive;
++class Boolean;
++class String;
++class Number;
++class Object;
++class Array;
++class External;
++class Function;
++class Context;
++class Isolate;
++class Data;
++class FunctionTemplate;
++class ObjectTemplate;
++class Signature;
++class AccessorSignature;
++class TryCatch;
++template <class T> class FunctionCallbackInfo;
++template <class T> class PropertyCallbackInfo;
++
++typedef void (*FunctionCallback)(const FunctionCallbackInfo<Value>& info);
++typedef void (*AccessorGetterCallback)(Local<String> property, const PropertyCallbackInfo<Value>& info);
++typedef void (*AccessorSetterCallback)(Local<String> property, Local<Value> value, const PropertyCallbackInfo<void>& info);
++
++template <typename T>
++class ReturnValue
++{
++public:
++	ReturnValue() {}
++	template <typename S> void Set(const Handle<S>& that) { (void)that; }
++	void Set(bool b) { (void)b; }
++	void Set(double d) { (void)d; }
++	void Set(int32_t i) { (void)i; }
++	void Set(uint32_t u) { (void)u; }
++	void SetNull() {}
++	void SetUndefined() {}
++	void SetEmptyString() {}
++};
++
++// Handle: non-owning view.  Deliberately simplified (T* storage, no
++// handle-scope cell indirection) - nothing here runs for real.
++template <class T>
++class Handle
++{
++public:
++	Handle() : val_(0) {}
++	Handle(T *val) : val_(val) {}
++	template <class S> Handle(const Handle<S>& that) : val_(*that) {}
++	template <class S> Handle(const Local<S>& that) : val_(*that) {}
++	template <class S> Handle<T>& operator=(const Local<S>& that) { val_ = *that; return *this; }
++	template <class S> Handle<T>& operator=(const Handle<S>& that) { val_ = *that; return *this; }
++	T* operator*() const { return val_; }
++	T* operator->() const { return val_; }
++	bool IsEmpty() const { return val_ == 0; }
++	void Clear() { val_ = 0; }
++	T* val_;
++};
++
++template <class T>
++class Local : public Handle<T>
++{
++public:
++	Local() {}
++	Local(T *val) : Handle<T>(val) {}
++	template <class S> Local(const Local<S>& that) : Handle<T>(*that) {}
++	template <class S> Local(const Handle<S>& that) : Handle<T>(*that) {}
++	template <class S> Local<T>& operator=(const Local<S>& that) { this->val_ = *that; return *this; }
++	template <class S> static Local<T> Cast(const Local<S>& that) { Local<T> r(*that); return r; }
++	template <class S> static Local<T> Cast(const Handle<S>& that) { Local<T> r(*that); return r; }
++};
++
++template <class T>
++class Persistent
++{
++public:
++	Persistent() {}
++	T* operator*() const { return 0; }
++	T* operator->() const { return 0; }
++	bool IsEmpty() const { return true; }
++	void Reset() {}
++};
++
++class Value
++{
++public:
++	Local<String> ToString() const { return Local<String>(); }
++	Local<Number> ToNumber() const { return Local<Number>(); }
++	Local<Value> ToObject() const { return Local<Value>(); }
++	Local<Boolean> ToBoolean() const { return Local<Boolean>(); }
++	bool BooleanValue() const { return false; }
++	double NumberValue() const { return 0; }
++	int32_t Int32Value() const { return 0; }
++	uint32_t Uint32Value() const { return 0; }
++	bool IsNull() const { return true; }
++	bool IsUndefined() const { return true; }
++	bool IsEmpty() const { return true; }
++	bool IsString() const { return false; }
++	bool IsObject() const { return false; }
++	bool IsBoolean() const { return false; }
++	bool IsNumber() const { return false; }
++	bool IsFunction() const { return false; }
++	bool IsArray() const { return false; }
++	bool IsExternal() const { return false; }
++	bool IsInt32() const { return false; }
++	bool SameValue(Handle<Value> that) const { (void)that; return true; }
++protected:
++	Value() {}
++};
++
++class Primitive : public Value {};
++class Boolean : public Primitive
++{
++public:
++	static Local<Boolean> New(Isolate *isolate, bool value) { (void)isolate; (void)value; return Local<Boolean>(); }
++	bool Value() const { return false; }
++};
++class String : public Primitive
++{
++public:
++	static Local<String> NewFromUtf8(Isolate *isolate, const char *data, int a = 0, int b = -1) { (void)isolate; (void)data; (void)a; (void)b; return Local<String>(); }
++	int Length() const { return 0; }
++	int Utf8Length() const { return 0; }
++	class Utf8Value
++	{
++	public:
++		template <class S> explicit Utf8Value(const Handle<S>& that) { (void)that; }
++		~Utf8Value() {}
++		char* operator*() const { return 0; }
++		int length() const { return 0; }
++	};
++};
++class Number : public Primitive
++{
++public:
++	double Value() const { return 0; }
++	static Local<Number> New(Isolate *isolate, double value) { (void)isolate; (void)value; return Local<Number>(); }
++};
++class Object : public Value
++{
++public:
++	static Local<Object> New(Isolate *isolate) { (void)isolate; return Local<Object>(); }
++	bool Set(Handle<Value> key, Handle<Value> value, PropertyAttribute attrs = None) { (void)key; (void)value; (void)attrs; return true; }
++	bool Set(Local<String> key, Handle<Value> value, PropertyAttribute attrs = None) { (void)key; (void)value; (void)attrs; return true; }
++	bool Has(Handle<String> key) { (void)key; return false; }
++	Local<Value> Get(Handle<Value> key) { (void)key; return Local<Value>(); }
++	int InternalFieldCount() const { return 0; }
++	Local<Value> GetInternalField(int index) { (void)index; return Local<Value>(); }
++	void SetAlignedPointerInInternalField(int index, void *value) { (void)index; (void)value; }
++	void* GetAlignedPointerFromInternalField(int index) { (void)index; return 0; }
++};
++class Array : public Object
++{
++public:
++	static Local<Array> New(Isolate *isolate, int length = 0) { (void)isolate; (void)length; return Local<Array>(); }
++	uint32_t Length() const { return 0; }
++	bool Set(uint32_t index, Handle<Value> value) { (void)index; (void)value; return true; }
++};
++class External : public Value
++{
++public:
++	static Local<External> New(Isolate *isolate, void *value) { (void)isolate; (void)value; return Local<External>(); }
++	void* Value() const { return 0; }
++};
++class Function : public Object
++{
++public:
++	Local<String> GetName() const { return Local<String>(); }
++};
++class Context
++{
++public:
++	Isolate* GetIsolate() { return 0; }
++};
++
++class Isolate
++{
++public:
++	class Scope
++	{
++	public:
++		explicit Scope(Isolate *isolate) { (void)isolate; }
++	};
++	Local<Value> ThrowException(Handle<Value> exception) { (void)exception; return Local<Value>(); }
++};
++
++class HandleScope
++{
++public:
++	explicit HandleScope(Isolate *isolate) { (void)isolate; }
++	~HandleScope() {}
++};
++
++template <typename T>
++class FunctionCallbackInfo
++{
++public:
++	Local<Object> Holder() const { return Local<Object>(); }
++	Isolate* GetIsolate() const { return 0; }
++	Local<Function> Callee() const { return Local<Function>(); }
++	int Length() const { return 0; }
++	Local<Value> operator[](int i) const { (void)i; return Local<Value>(); }
++	ReturnValue<T> GetReturnValue() const { return ReturnValue<T>(); }
++};
++
++template <typename T>
++class PropertyCallbackInfo
++{
++public:
++	Local<Object> Holder() const { return Local<Object>(); }
++	Isolate* GetIsolate() const { return 0; }
++	ReturnValue<T> GetReturnValue() const { return ReturnValue<T>(); }
++	Local<Value> Data() const { return Local<Value>(); }
++	Local<Object> This() const { return Local<Object>(); }
++};
++
++class Template
++{
++public:
++	void Set(Handle<String> name, Handle<Value> value, PropertyAttribute attrs = None) { (void)name; (void)value; (void)attrs; }
++	void Set(Isolate *isolate, const char *name, Handle<Value> value, PropertyAttribute attrs = None) { (void)isolate; (void)name; (void)value; (void)attrs; }
++	void SetAccessor(Handle<String> name, AccessorGetterCallback getter, AccessorSetterCallback setter = 0, Handle<Value> data = Handle<Value>(), AccessControl settings = DEFAULT, PropertyAttribute attrs = None, Handle<AccessorSignature> signature = Handle<AccessorSignature>()) { (void)name; (void)getter; (void)setter; (void)data; (void)settings; (void)attrs; (void)signature; }
++};
++
++class FunctionTemplate : public Template
++{
++public:
++	static Local<FunctionTemplate> New(Isolate *isolate, FunctionCallback callback = 0, Handle<Value> data = Handle<Value>(), Handle<Signature> signature = Handle<Signature>(), int length = 0)
++	{ (void)isolate; (void)callback; (void)data; (void)signature; (void)length; return Local<FunctionTemplate>(); }
++	Local<Function> GetFunction() { return Local<Function>(); }
++	Local<ObjectTemplate> PrototypeTemplate() { return Local<ObjectTemplate>(); }
++	Local<ObjectTemplate> InstanceTemplate() { return Local<ObjectTemplate>(); }
++	void SetClassName(Handle<String> name) { (void)name; }
++	void Inherit(Handle<FunctionTemplate> parent) { (void)parent; }
++	void ReadOnlyPrototype() {}
++};
++
++class ObjectTemplate : public Template
++{
++public:
++	static Local<ObjectTemplate> New(Isolate *isolate) { (void)isolate; return Local<ObjectTemplate>(); }
++	Local<FunctionTemplate> NewInstance() { return Local<FunctionTemplate>(); }
++};
++
++class Signature
++{
++public:
++	static Local<Signature> New(Isolate *isolate, Handle<FunctionTemplate> receiver) { (void)isolate; (void)receiver; return Local<Signature>(); }
++};
++
++class AccessorSignature
++{
++public:
++	static Local<AccessorSignature> New(Isolate *isolate, Handle<Signature> signature) { (void)isolate; (void)signature; return Local<AccessorSignature>(); }
++};
++
++class TryCatch
++{
++public:
++	TryCatch() {}
++	explicit TryCatch(Isolate *isolate) { (void)isolate; }
++	bool HasCaught() const { return false; }
++};
++
++} // namespace v8
++
++#endif // CSARM_V8_STUB_H
 diff -ruN a/public/gcsdk/msgprotobuf.h b/public/gcsdk/msgprotobuf.h
 --- a/public/gcsdk/msgprotobuf.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/gcsdk/msgprotobuf.h	2026-11-02 19:22:40.765854264 +0000
@@ -1868,6 +2191,34 @@ diff -ruN a/public/tier1/tokenset.h b/public/tier1/tokenset.h
  //-----------------------------------------------------------------------------
  // 
  // This class is a handy way to match a series of values to stings and vice
+diff -ruN a/thirdparty/JSON_parser/JSON_parser.h b/thirdparty/JSON_parser/JSON_parser.h
+--- a/thirdparty/JSON_parser/JSON_parser.h	2026-11-02 19:47:38.772900776 +0000
++++ b/thirdparty/JSON_parser/JSON_parser.h	2026-11-02 20:09:15.506120113 +0000
+@@ -228,3 +228,24 @@
+     
+ 
+ #endif /* JSON_PARSER_H */
++
++/* [port] The CS:GO 2019 keyvalues code (public/tier1/keyvalues.h,
++ * tier1/keyvaluesjson.cpp) uses the JSON_parser 1.2 buffered-input API that
++ * the 2018-era parser in the leak does not implement.  Feed the buffer
++ * through the character-at-a-time API; semantics are identical. */
++#ifdef __cplusplus
++extern "C" {
++#endif
++static int JSON_parser_string(JSON_parser jc, const char *s, size_t length)
++{
++	size_t i;
++	for ( i = 0; i < length; i++ )
++	{
++		if ( !JSON_parser_char( jc, (unsigned char)s[i] ) )
++			return 0;
++	}
++	return 1;
++}
++#ifdef __cplusplus
++}
++#endif
 diff -ruN a/thirdparty/SDL2/SDL_opengl.h b/thirdparty/SDL2/SDL_opengl.h
 --- a/thirdparty/SDL2/SDL_opengl.h	2026-11-02 19:47:38.657900853 +0000
 +++ b/thirdparty/SDL2/SDL_opengl.h	2026-11-02 19:22:40.765854264 +0000
@@ -2426,6 +2777,22 @@ diff -ruN a/vguimatsurface/MatSystemSurface.cpp b/vguimatsurface/MatSystemSurfac
  
  #if defined( USE_SDL ) || defined(OSX) 
  #include <appframework/ilaunchermgr.h>
+diff -ruN a/vpc_scripts/source_base.vpc b/vpc_scripts/source_base.vpc
+--- a/vpc_scripts/source_base.vpc	2026-08-10 03:28:37.000000000 +0000
++++ b/vpc_scripts/source_base.vpc	2026-11-02 20:09:15.506120113 +0000
+@@ -37,8 +37,10 @@
+ 		$PreprocessorDefinitions		"$BASE;PANORAMA_ENABLE"						[ $PANORAMA_ENABLE ]
+ 		$PreprocessorDefinitions		"$BASE;SURVIVAL_MODE_ENABLED=1"				[ $SURVIVAL_MODE_ENABLED ]
+ 
+-		// DEVELOPMENT_ONLY is on always in debug builds
+-		$PreprocessorDefinitions		"$BASE;DEVELOPMENT_ONLY=1"
++		// [port] DEVELOPMENT_ONLY is on always in debug builds upstream; the
++		// Android build has no debug-only cvars in-tree (their definitions live
++		// in files excluded from the leak), so gate it like the conditional one.
++		$PreprocessorDefinitions		"$BASE;DEVELOPMENT_ONLY=1"		[ $DEVELOPMENT_ONLY ]
+ 	}
+ }
+ 
 diff -ruN a/vstdlib/jobthread.cpp b/vstdlib/jobthread.cpp
 --- a/vstdlib/jobthread.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/vstdlib/jobthread.cpp	2026-11-02 19:26:33.395688348 +0000
