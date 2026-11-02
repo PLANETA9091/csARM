@@ -2125,8 +2125,19 @@ diff -ruN a/public/panorama/globals.h b/public/panorama/globals.h
 +#endif
 diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
 --- a/public/panorama/iuiengine.h	2026-08-10 03:28:37.000000000 +0000
-+++ b/public/panorama/iuiengine.h	2026-11-02 22:05:54.098730536 +0000
-@@ -33,7 +33,7 @@
++++ b/public/panorama/iuiengine.h	2026-11-02 22:16:36.037296725 +0000
+@@ -11,6 +11,10 @@
+ 
+ #if defined( SOURCE2_PANORAMA )
+ #include "tier0/platwindow.h"
++#endif
++// [port] the S1 window methods below take an input context handle; the
++// handle typedef is only declared upstream under SOURCE2_PANORAMA
++#if defined( SOURCE2_PANORAMA ) || defined( CSARM_PORT )
+ FORWARD_DECLARE_HANDLE( InputContextHandle_t );
+ #endif
+ 
+@@ -33,7 +37,7 @@
  #include "steam/isteamhttp.h"
  #include "iuifilesystem.h"
  
@@ -2135,7 +2146,7 @@ diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
  #include "audio/iaudiointerface.h"
  #include <openvr.h>
  #endif
-@@ -285,7 +285,16 @@
+@@ -285,7 +289,16 @@
  #if !defined( SOURCE2_PANORAMA )
  	virtual IUIWindow *CreateNewWindow( const char *pchWindowTitle, uint32 width, uint32 height, ERenderTarget eRenderType, bool bFixedSurfaceSize, bool bEnforceWindowAspectRatio, bool bUseCustomMouseCursor, const char *pchMonitorName ) = 0;
  	virtual IUIWindow *CreateNewOverlayWindow( const char *pchWindowTitle, uint32 width, uint32 height, panorama::IUIEngine::ERenderTarget eTarget, bool bFixedSize, bool bDrawCustomMouseCursor ) = 0;
