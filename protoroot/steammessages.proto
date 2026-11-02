@@ -81,6 +81,8 @@ message CMsgProtoBufHeader
 	optional int32 eresult = 13 [default = 2];	// For response jobs, the corresponding eresult
 	optional string error_message = 14;			// Optionally an error message in case of failure. Mostly used for debugging purpose.
 
+	optional uint32 ip = 15;					// The IP address where this request is coming from
+
 	// Where did this message originally enter the system? From a client, from another GC, etc
 	optional GCProtoBufMsgSrc		gc_msg_src = 200;
 	// If this came from another GC, what is the GC that it came from
@@ -563,6 +565,9 @@ message CGCSystemMsg_GetAccountDetails_Response
 	optional uint32 phone_verification_time = 31;	// Time phone was verified
 	optional uint64 phone_id = 33;					// Phone identifier
 	optional bool is_phone_identifying = 34;		// Phone is identifying
+	optional uint32 rt_identity_linked = 35;		// Epoch time when the user's identity / age were verified
+	optional uint32 rt_birth_date = 36;				// Epoch time of midnight on the user's birthday, UTC
+	optional string txn_country_code = 37;			// Country code determined by user transactions and persisting with the user Steam Store account (see CAMJobUserAccountGetUserCountryFromTxnOrLastIP)
 }
 
 
@@ -793,6 +798,77 @@ message CMsgNotificationOfSuspiciousActivity
 		repeated fixed64 other_steamids = 2;
 	}
 	optional MultipleGameInstances multiple_instances = 3;
+}
+
+//
+// k_EMsgDPPartnerMicroTxns / k_EGCMsgDPPartnerMicroTxns
+//
+message CMsgDPPartnerMicroTxns
+{
+	message PartnerMicroTxn
+	{
+		optional uint32 init_time = 1;
+		optional uint32 last_update_time = 2;			// not currently stored on Steam
+
+		optional uint64 txn_id = 3;						// set for initial transactions
+		optional uint32 account_id = 4;
+		optional uint32 line_item = 5;
+
+		optional uint64 item_id = 6;
+		optional uint32 def_index = 7;
+
+		optional uint64 price = 8;						// local currency units
+		optional uint64 tax = 9;						// local currency units
+
+		optional uint64 price_usd = 10;					// USD cents (estimate)
+		optional uint64 tax_usd = 11;					// USD cents (estimate)
+
+		optional uint32 purchase_type = 12;				// not currently stored on Steam
+		optional uint32 steam_txn_type = 13;			// only values in ESteamStatsTxnType are valid
+
+		optional string country_code = 14;
+		optional string region_code = 15;				// required to be empty for non-US transactions
+
+		optional int32 quantity = 16;					// only values +/- 1-65535 valid
+
+		optional uint64 ref_trans_id = 17;				// set for implied transactions (ie., refund) that may not be independent transactions on the source (ie., GC)
+	}
+
+	message PartnerInfo
+	{
+		optional uint32 partner_id = 1;					// only values 1-255 valid
+		optional string partner_name = 2;
+		optional string currency_code = 3;
+		optional string currency_name = 4;
+	}
+
+	optional uint32 appid = 1;
+	optional string gc_name = 2;
+	optional PartnerInfo partner = 3;
+	repeated PartnerMicroTxn transactions = 4;
+}
+
+//
+// k_EMsgDPPartnerMicroTxnsResponse / k_EGCMsgDPPartnerMicroTxnsResponse
+//
+message CMsgDPPartnerMicroTxnsResponse
+{
+	optional uint32 eresult = 1 [ default = 2 ];
+
+	enum EErrorCode
+	{
+		k_MsgValid = 0;
+		k_MsgInvalidAppID = 1;
+		k_MsgInvalidPartnerInfo = 2;
+		k_MsgNoTransactions = 3;
+		k_MsgSQLFailure = 4;
+		k_MsgPartnerInfoDiscrepancy = 5;
+		// DEPRECATED was: k_MsgTransactionDeleteFailed = 6;
+		k_MsgTransactionInsertFailed = 7;
+		k_MsgAlreadyRunning = 8;
+		k_MsgInvalidTransactionData = 9;
+	};
+	optional EErrorCode eerrorcode = 2;
 }
 
 // Do not remove this comment due to a bug on the Mac OS X protobuf compiler

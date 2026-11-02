@@ -1,21 +1,41 @@
 #!/bin/bash
-# csARM — fetch pristine cstrike15_src from public mirror and apply our port patches
+# csARM — fetch the cstrike15_src 2019 partner tree and apply the port patch
 # usage: setup_source.sh [workspace_root]  (default = repo root)
+#
+# 2019 retarget (2026-11-03):
+#   - main tree: RileyKun/cstrike15_src-2019 @ a4c7aaea (2019 partner build,
+#     NOT the 2018 build seen previously)
+#   - thirdparty/ (SDL2 headers, protobuf-2.5.0, telemetry, quickhull,
+#     libpng, zlib) is absent from the 2019 dump — sparse-cloned from the
+#     2018 mirror (perilouswithadollarsign/cstrike15_src @ f82112a) and
+#     copied into c15/thirdparty
+#   - patches/all_patches.diff is ONE consolidated diff (port + boot probes +
+#     sdlmgr GL gate + tier2 guards) regenerated against the 2019 base; the
+#     old multi-diff layering (all_patches + csarm_boot + csarm_sdlmgr_gl +
+#     csarm_tier2_connect) is gone together with its normalization dance
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 R=${1:-$REPO_DIR}
-MIRROR=${MIRROR:-https://github.com/perilouswithadollarsign/cstrike15_src.git}
+MIRROR=${MIRROR:-https://github.com/RileyKun/cstrike15_src-2019.git}
+PINNED_SHA=a4c7aaea259319aca272839f688a3f4d9fe1cb2c
+OLD_MIRROR=${OLD_MIRROR:-https://github.com/perilouswithadollarsign/cstrike15_src.git}
+OLD_SHA=f82112a2388b841d72cb62ca48ab1846dfcc11c8
 SRC="$R/c15"
-PINNED_SHA=f82112a2388b841d72cb62ca48ab1846dfcc11c8
+TPCACHE="$R/.cache/c15-thirdparty"
 PATTERNS="$REPO_DIR/build/sparse-patterns.txt"
+TP_PATTERNS="$REPO_DIR/build/thirdparty-patterns.txt"
+TP_DIRS="SDL2 libpng-1.5.2 protobuf-2.5.0 zlib-1.2.5 quickhull telemetry"
 
 # Completeness gate: every directory the module build compiles/links from must
 # exist and be non-empty.  Guards against a STALE actions/cache (a cache saved
 # before a newly added module dir entered the sparse list): the 2026-10-30 run
 # failed exactly this way — videocfg/tier3/vpklib/soundsystem/... "produced 0
-# objects" because the restored 80 MB cache predated those dirs and
+# objects" because the restored cache predated those dirs and
 # `git checkout -q HEAD -- <dirs>` silently did nothing.
-NEEDED_DIRS="particles raytrace resourcefile appframework bitmap bonesetup common datacache dmxloader engine external filesystem gcsdk inputsystem interfaces launcher materialsystem mathlib public responserules localize scaleformui scenefilecache soundemittersystem soundsystem studiorender tier0 tier1 tier2 tier3 vgui2 vguimatsurface vstdlib videocfg vpc_scripts vpklib game/client game/server game/shared utils/bzip2 thirdparty/SDL2 thirdparty/protobuf-2.5.0 thirdparty/telemetry thirdparty/quickhull"
+# NOTE: thirdparty/* is NOT part of the 2019 git tree (copied from the 2018
+# mirror below), so the post-clone gate only covers the main tree.
+NEEDED_DIRS="particles raytrace resourcefile appframework bitmap bonesetup common datacache dmxloader engine external filesystem gcsdk inputsystem interfaces launcher materialsystem mathlib public responserules localize scaleformui scenefilecache soundemittersystem soundsystem studiorender tier0 tier1 tier2 tier3 vgui2 vguimatsurface vstdlib videocfg vpc_scripts vpklib game/client game/server game/shared utils/bzip2"
+NEEDED_TP_DIRS="thirdparty/SDL2 thirdparty/protobuf-2.5.0 thirdparty/telemetry thirdparty/quickhull"
 
 check_complete() {
   MISSING=""
@@ -26,6 +46,17 @@ check_complete() {
     fi
   done
   [ -z "$MISSING" ]
+}
+
+check_tp() {
+  MISSING_TP=""
+  local d
+  for d in $NEEDED_TP_DIRS; do
+    if [ ! -d "$SRC/$d" ] || [ -z "$(ls -A "$SRC/$d" 2>/dev/null)" ]; then
+      MISSING_TP="$MISSING_TP $d"
+    fi
+  done
+  [ -z "$MISSING_TP" ]
 }
 
 apply_sparse() {
@@ -42,7 +73,7 @@ do_clone() {
   (
     cd "$SRC"
     apply_sparse
-    git checkout -q "$PINNED_SHA" 2>/dev/null || git checkout -q origin/master || git checkout -q master
+    git checkout -q "$PINNED_SHA" 2>/dev/null || git checkout -q origin/main || git checkout -q main || git checkout -q origin/master || git checkout -q master
     echo "source commit: $(git rev-parse HEAD)"
   )
 }
@@ -72,64 +103,46 @@ if ! check_complete; then
   check_complete || { echo "FATAL: still missing:$MISSING (sparse patterns vs source tree mismatch)"; exit 1; }
 fi
 
-cd "$SRC"
-echo "Applying patches (FRESH=$FRESH)..."
-if [ "$FRESH" = "1" ]; then
-  git apply --whitespace=nowarn "$REPO_DIR/patches/all_patches.diff" || { echo "PATCH APPLY FAILED"; exit 1; }
-else
-  if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/all_patches.diff" 2>/dev/null; then
-    echo "PATCH APPLY: current patches already applied"
-  elif git apply --whitespace=nowarn --check "$REPO_DIR/patches/all_patches.diff" 2>/dev/null; then
-    git apply --whitespace=nowarn "$REPO_DIR/patches/all_patches.diff"
-  else
-    # Patch-state mismatch (e.g. cached c15 has an older patch revision):
-    # reset tracked files + drop untracked extras, then apply the current diff.
-    echo "PATCH STATE MISMATCH -> resetting source tree to pristine"
-    git checkout -- .
-    git clean -fdq
-    git apply --whitespace=nowarn "$REPO_DIR/patches/all_patches.diff" || { echo "PATCH APPLY FAILED"; exit 1; }
+# --- thirdparty: the 2019 dump has none; take it from the 2018 mirror -----
+if [ ! -d "$TPCACHE/.git" ]; then
+  echo "cloning 2018 mirror (thirdparty-only sparse) -> $TPCACHE"
+  rm -rf "$TPCACHE"
+  git clone --filter=blob:none --no-checkout "$OLD_MIRROR" "$TPCACHE"
+  (
+    cd "$TPCACHE"
+    git sparse-checkout init --no-cone 2>/dev/null || true
+    cp "$TP_PATTERNS" "$(git rev-parse --absolute-git-dir)/info/sparse-checkout"
+    git checkout -q "$OLD_SHA" 2>/dev/null || git checkout -q origin/master || git checkout -q master
+    echo "thirdparty source commit: $(git rev-parse HEAD)"
+  )
+fi
+mkdir -p "$SRC/thirdparty"
+for d in $TP_DIRS; do
+  if [ ! -d "$TPCACHE/thirdparty/$d" ] || [ -z "$(ls -A "$TPCACHE/thirdparty/$d" 2>/dev/null)" ]; then
+    echo "FATAL: thirdparty/$d missing in the 2018-mirror sparse checkout"; exit 1
   fi
-fi
+  rm -rf "$SRC/thirdparty/$d"
+  cp -r "$TPCACHE/thirdparty/$d" "$SRC/thirdparty/$d"
+done
+check_tp || { echo "FATAL: thirdparty copy incomplete:$MISSING_TP"; exit 1; }
 
-# csARM engine boot/frame proof (separate diff: applies after all_patches).
-# The boot diff is REGENERATED whenever the probe set changes, so a cached
-# tree can hold any older revision of it (or none).  Restore the files the
-# boot diff owns (all_patches does not touch them — verified: only
-# engine/sys_dll2.cpp overlaps, and the boot hunks there sit in regions
-# all_patches never modifies) to pristine, drop the generated header, and
-# apply the current revision cleanly.
-BOOT_PRISTINE="engine/sys_engine.cpp appframework/AppSystemGroup.cpp launcher/launcher.cpp engine/sys_dll2.cpp appframework/sdlmgr.cpp public/tier0/threadtools.inl vstdlib/jobthread.cpp thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc engine/sys_getmodes.cpp engine/sys_mainwind.cpp"
-if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_boot.diff" 2>/dev/null; then
-  echo "csarm_boot.diff already applied"
+# --- patches: ONE consolidated diff, deterministic --------------------------
+cd "$SRC"
+if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/all_patches.diff" 2>/dev/null; then
+  echo "PATCH APPLY: current patches already applied"
 else
-  echo "csarm_boot.diff revision change -> normalizing probe files"
-  git checkout -f -- $BOOT_PRISTINE 2>/dev/null || git checkout -- $BOOT_PRISTINE || true
-  # engine/sys_dll2.cpp, engine/sys_getmodes.cpp and engine/sys_mainwind.cpp
-  # also carry all_patches hunks (the boot hunks sit in regions all_patches
-  # never modifies) — restore them after the reset so the boot diff applies
-  # on the same state as a fresh clone.
-  git apply --whitespace=nowarn --include=engine/sys_dll2.cpp --include=engine/sys_getmodes.cpp --include=engine/sys_mainwind.cpp "$REPO_DIR/patches/all_patches.diff" || { echo "engine all_patches RE-APPLY FAILED"; exit 1; }
-  rm -f "$SRC/common/csarm_log.h"
-  git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_boot.diff" || { echo "csarm_boot.diff APPLY FAILED"; exit 1; }
-fi
-
-# csARM sdlmgr GL tail gate (applies after the boot diff: appframework/
-# sdlmgr.cpp is normalized to pristine by the boot section above, so this
-# diff is anchored to the BOOT-patched revision).  Idempotent.
-if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_sdlmgr_gl.diff" 2>/dev/null; then
-  echo "csarm_sdlmgr_gl.diff already applied"
-else
-  git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_sdlmgr_gl.diff" || { echo "csarm_sdlmgr_gl.diff APPLY FAILED"; exit 1; }
-fi
-
-# csARM tier2 connect-path null guards (applies after all_patches; neither
-# file is touched by all_patches).  Idempotent like the boot diff.
-if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_tier2_connect.diff" 2>/dev/null; then
-  echo "csarm_tier2_connect.diff already applied"
-else
-  echo "csarm_tier2_connect.diff revision change -> normalizing tier2 files"
-  git checkout -f -- tier2/resourceprecacher.cpp tier2/schemaclassbinding.cpp 2>/dev/null || true
-  git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_tier2_connect.diff" || { echo "csarm_tier2_connect.diff APPLY FAILED"; exit 1; }
+  echo "Applying patches (FRESH=$FRESH)..."
+  # Reset tracked files to pristine; drop untracked strays.  thirdparty/ is
+  # untracked BY DESIGN (copied from the 2018 mirror, not part of the 2019
+  # git tree) — exclude it from the clean and re-copy it fresh so the diff
+  # always applies onto the exact thirdparty revision it was generated with.
+  git checkout -q -- . 2>/dev/null || true
+  git clean -fdq -e thirdparty
+  for d in $TP_DIRS; do
+    rm -rf "thirdparty/$d"
+    cp -r "$TPCACHE/thirdparty/$d" "thirdparty/$d"
+  done
+  git apply --whitespace=nowarn "$REPO_DIR/patches/all_patches.diff" || { echo "PATCH APPLY FAILED"; exit 1; }
 fi
 
 echo "Copying extra files..."

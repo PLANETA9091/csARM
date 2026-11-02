@@ -1,7 +1,201 @@
-diff --git a/common/freetype/config/ftconfig.h b/common/freetype/config/ftconfig.h
-index 8d4a074..ad89abb 100644
---- a/common/freetype/config/ftconfig.h
-+++ b/common/freetype/config/ftconfig.h
+diff -ruN a/appframework/AppSystemGroup.cpp b/appframework/AppSystemGroup.cpp
+--- a/appframework/AppSystemGroup.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/appframework/AppSystemGroup.cpp	2026-11-02 19:26:33.395688348 +0000
+@@ -20,6 +20,7 @@
+ #include "interface.h"
+ #include "filesystem.h"
+ #include "filesystem_init.h"
++#include "common/csarm_log.h"
+ #include <algorithm>
+ 
+ // memdbgon must be the last include file in a .cpp file!!!
+@@ -323,10 +324,12 @@
+ {
+ 	while ( pSystemList->m_pModuleName[0] )
+ 	{
++		CSARM_LOGI( "AddSystem %s <- %s", pSystemList->m_pInterfaceName, pSystemList->m_pModuleName );
+ 		AppModule_t module = LoadModule( pSystemList->m_pModuleName );
+ 		IAppSystem *pSystem = AddSystem( module, pSystemList->m_pInterfaceName );
+ 		if ( !pSystem )
+ 		{
++			CSARM_LOGW( "FAILED AddSystem %s <- %s", pSystemList->m_pInterfaceName, pSystemList->m_pModuleName );
+ 			Warning( "Unable to load interface %s from %s, requested from EXE.\n", pSystemList->m_pInterfaceName, pSystemList->m_pModuleName );
+ 			return false;
+ 		}
+@@ -358,6 +361,7 @@
+ 		if (pInterface)
+ 			return pInterface;
+ 	}
++	CSARM_LOGI( "FindSystem MISS %s: systems=%d parent=%p", pSystemName, (int)m_Systems.Count(), (void*)m_pParentAppSystem );
+ 
+ 	int nExternalCount = m_NonAppSystemFactories.Count();
+ 	for ( i = 0; i < nExternalCount; ++i )
+@@ -831,33 +835,57 @@
+ 
+ 	// Call an installed application creation function
+ 	m_nCurrentStage = CREATION;
++	CSARM_LOGI( "stage CREATION" );
+ 	if ( !Create() )
++	{
++		CSARM_LOGW( "FAILED at stage CREATION" );
+ 		return -1;
++	}
+ 
+ 	// Load dependent libraries
+ 	m_nCurrentStage = DEPENDENCIES;
++	CSARM_LOGI( "stage DEPENDENCIES" );
+ 	if ( !LoadDependentSystems() )
++	{
++		CSARM_LOGW( "FAILED at stage DEPENDENCIES" );
+ 		return -1;
++	}
+ 
+ 	// Let all systems know about each other
+ 	m_nCurrentStage = CONNECTION;
++	CSARM_LOGI( "stage CONNECTION" );
+ 	if ( !ConnectSystems() )
++	{
++		CSARM_LOGW( "FAILED at stage CONNECTION" );
+ 		return -1;
++	}
+ 
+ 	// Allow the application to do some work before init
+ 	m_nCurrentStage = PREINITIALIZATION;
++	CSARM_LOGI( "stage PREINITIALIZATION" );
+ 	if ( !PreInit() )
++	{
++		CSARM_LOGW( "FAILED at stage PREINITIALIZATION" );
+ 		return -1;
++	}
+ 
+ 	// Call Init on all App Systems
+ 	m_nCurrentStage = INITIALIZATION;
++	CSARM_LOGI( "stage INITIALIZATION" );
+ 	int nRetVal = InitSystems();
+ 	if ( nRetVal != INIT_OK )
++	{
++		CSARM_LOGW( "FAILED at stage INITIALIZATION" );
+ 		return -1;
++	}
+ 
+ 	m_nCurrentStage = POSTINITIALIZATION;
++	CSARM_LOGI( "stage POSTINITIALIZATION" );
+ 	if ( !PostInit() )
++	{
++		CSARM_LOGW( "FAILED at stage POSTINITIALIZATION" );
+ 		return -1;
++	}
+ 
+ 	m_nCurrentStage = RUNNING;
+ 	return nRetVal;
+diff -ruN a/appframework/posixapp.cpp b/appframework/posixapp.cpp
+--- a/appframework/posixapp.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/appframework/posixapp.cpp	2026-11-02 19:22:40.767854262 +0000
+@@ -102,7 +102,18 @@
+ 		return false;
+ 
+ 	// Add in the cvar factory
++#ifdef __ANDROID__
++	// csARM: VStdLib_GetICVarFactory() returns Sys_GetFactoryThis() - the
++	// factory of the module that CALLS it.  posixapp.cpp is built into
++	// libappframework.so without a libvstdlib import, so the symbol stays
++	// local and the factory does not answer CVAR_INTERFACE_VERSION - the
++	// outer group silently loses its cvar system (run 41332570591:
++	// "FindSystem MISS VEngineCvar007" for BOTH groups).  Load the real
++	// module through the bin/ symlink instead.
++	AppModule_t cvarModule = LoadModule( "vstdlib" DLL_EXT_STRING );
++#else
+ 	AppModule_t cvarModule = LoadModule( VStdLib_GetICVarFactory() );
++#endif
+ 	AddSystem( cvarModule, CVAR_INTERFACE_VERSION );	
+ 
+ 	AppModule_t fileSystemModule = LoadModule( pFileSystemDLL );
+diff -ruN a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
+--- a/appframework/sdlmgr.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/appframework/sdlmgr.cpp	2026-11-02 19:27:32.787649907 +0000
+@@ -15,6 +15,8 @@
+ #include "tier0/fasttimer.h"
+ 
+ 
++#include "common/csarm_log.h"
++
+ // NOTE: This has to be the last file included! (turned off below, since this is included like a header)
+ #include "tier0/memdbgon.h"
+ 
+@@ -568,6 +570,11 @@
+ 
+ 	m_pixelFormatAttribCount = (attCursor - &m_pixelFormatAttribs[0]) / 2;
+ 
++	#ifdef __ANDROID__
++	// csARM: the hidden GL window needs a Java-side surface that SDL 2.0.2
++	// cannot wire up from this thread; the boot path does not present frames.
++	CSARM_LOGI( "SDLMgr: skip hidden game window (Android)" );
++	#else
+ 	// we need a GL context before we dig down further, since we're calling
+ 	//  GL entry points, but the game hasn't made a window yet. So it's time
+ 	//  to make a window! We make a 640x480 one here, and later, when asked
+@@ -577,6 +584,7 @@
+ 
+ 	if ( !m_bTextMode )
+ 		SDL_HideWindow( m_Window );
++	#endif
+ 
+ 	return INIT_OK;
+ }
+@@ -751,7 +759,13 @@
+ 		SDL_SetWindowFullscreen(m_Window, SDL_TRUE);
+ 	}
+ 
+-#if defined( DX_TO_GL_ABSTRACTION )
++#if defined( DX_TO_GL_ABSTRACTION ) && !defined( __ANDROID__ )
++	// csARM run 41405448535: the GLES context created here has no desktop-GL
++	// compatibility profile (whichProfile=0) and the COpenGLEntryPoints
++	// resolution leaves gGL unusable -> SEGV at gGL->glGenFramebuffersEXT
++	// (fault 0x3d8) before the first tick.  Boot does not present frames:
++	// skip the context + entry-point + clear/swap tail (m_GLContext stays
++	// NULL from the ctor; shaderapiempty never dereferences it).
+ 	m_GLContext = SDL_GL_CreateContext(m_Window);
+ 	if (m_GLContext == NULL)
+ 		Error( "Failed to create GL context: %s", SDL_GetError() );
+@@ -1430,7 +1444,12 @@
+ 	SDL_SetWindowSize(m_Window, width, tall);
+ 	PumpEvents();
+ 
+-#if defined( DX_TO_GL_ABSTRACTION )
++#if defined( DX_TO_GL_ABSTRACTION ) && !defined( __ANDROID__ )
++	// csARM run 41422299535 (SW boot): AdjustWindow->SizeWindow fires before
++	// any real GL context exists on Android, gGL is NULL and the entry-point
++	// struct deref SEGVs at gGL->glViewport (fault 0x338).  Same tail the
++	// SetWindowFullScreen path already skips above (fault 0x3d8 there).
++	// Boot does not present frames: skip the glViewport/glScissor calls.
+ 	gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
+ 	gGL->glScissor( 0,0, (GLsizei) width, (GLsizei) tall );
+ #endif
+diff -ruN a/common/csarm_log.h b/common/csarm_log.h
+--- a/common/csarm_log.h	1970-01-01 00:00:00.000000000 +0000
++++ b/common/csarm_log.h	2026-11-02 19:27:24.976655158 +0000
+@@ -0,0 +1,17 @@
++// csARM - direct logcat logging from patched Valve sources.
++// printf/stderr are redirected to logcat by libmain, but the app-framework
++// failure paths run before any spew listener is installed and the process
++// can exit(0) without flushing - __android_log_print cannot be missed.
++#ifndef CSARM_LOG_H
++#define CSARM_LOG_H
++
++#ifdef __ANDROID__
++#include <android/log.h>
++#define CSARM_LOGI(...) __android_log_print(ANDROID_LOG_INFO,  "CSARM_LNCH", __VA_ARGS__)
++#define CSARM_LOGW(...) __android_log_print(ANDROID_LOG_WARN,  "CSARM_LNCH", __VA_ARGS__)
++#else
++#define CSARM_LOGI(...) ((void)0)
++#define CSARM_LOGW(...) ((void)0)
++#endif
++
++#endif // CSARM_LOG_H
+\ No newline at end of file
+diff -ruN a/common/freetype/config/ftconfig.h b/common/freetype/config/ftconfig.h
+--- a/common/freetype/config/ftconfig.h	2026-08-10 03:28:37.000000000 +0000
++++ b/common/freetype/config/ftconfig.h	2026-11-02 19:22:40.763854265 +0000
 @@ -1,7 +1,11 @@
  #ifndef __FTCONFIG_H__MULTILIB
  #define __FTCONFIG_H__MULTILIB
@@ -15,11 +209,10 @@ index 8d4a074..ad89abb 100644
  
  #if __WORDSIZE == 32
  # include "ftconfig-32.h"
-diff --git a/engine/cl_steamauth.cpp b/engine/cl_steamauth.cpp
-index 03c1be9..52104f7 100644
---- a/engine/cl_steamauth.cpp
-+++ b/engine/cl_steamauth.cpp
-@@ -125,7 +125,7 @@ void CSteam3Client::Activate()
+diff -ruN a/engine/cl_steamauth.cpp b/engine/cl_steamauth.cpp
+--- a/engine/cl_steamauth.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/cl_steamauth.cpp	2026-11-02 19:22:40.763854265 +0000
+@@ -129,7 +129,7 @@
  #if !defined( NO_STEAM )
  
  	#ifndef _PS3
@@ -28,11 +221,10 @@ index 03c1be9..52104f7 100644
  	#else
  	extern SteamPS3Params_t g_EngineSteamPS3Params;
  	SteamAPI_Init( &g_EngineSteamPS3Params );
-diff --git a/engine/downloadthread.cpp b/engine/downloadthread.cpp
-index 674397e..dcbd967 100644
---- a/engine/downloadthread.cpp
-+++ b/engine/downloadthread.cpp
-@@ -523,6 +523,17 @@ uintp DownloadThread( void *voidPtr )
+diff -ruN a/engine/downloadthread.cpp b/engine/downloadthread.cpp
+--- a/engine/downloadthread.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/downloadthread.cpp	2026-11-02 19:23:22.585824389 +0000
+@@ -523,6 +523,17 @@
  
  	return 0;
  }
@@ -47,14 +239,13 @@ index 674397e..dcbd967 100644
 +	rc.status = HTTP_ABORTED;
 +	return 0;
 +}
- #elif defined( POSIX ) && !defined( DEDICATED )
+ #elif (defined( OSX ) || defined( LINUX )) && !defined( DEDICATED )
  
  #include "curl/curl.h"
-diff --git a/engine/gl_matsysiface.cpp b/engine/gl_matsysiface.cpp
-index 15a7ce8..a711a96 100644
---- a/engine/gl_matsysiface.cpp
-+++ b/engine/gl_matsysiface.cpp
-@@ -1041,7 +1041,7 @@ void DebugDrawLightmapAtCrossHair()
+diff -ruN a/engine/gl_matsysiface.cpp b/engine/gl_matsysiface.cpp
+--- a/engine/gl_matsysiface.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/gl_matsysiface.cpp	2026-11-02 19:22:40.763854265 +0000
+@@ -1041,7 +1041,7 @@
  	IMaterial *pMaterial;
  	int lightmapPageSize[2];
  
@@ -63,33 +254,10 @@ index 15a7ce8..a711a96 100644
  	{
  		return;
  	}
-diff --git a/engine/gl_screen.cpp b/engine/gl_screen.cpp
-index b32720a..cbdeb74 100644
---- a/engine/gl_screen.cpp
-+++ b/engine/gl_screen.cpp
-@@ -265,7 +265,7 @@ void SCR_UpdateScreen( void )
- 	CMatRenderContextPtr pRenderContext;
- 	pRenderContext.GetFrom( materials );
- 
--	pRenderContext->RenderScaleformSlot(SF_RESERVED_BEGINFRAME_SLOT);
-+	// [port] Scaleform slot disabled
- 
- 
- 	if( EngineVGui()->IsGameUIVisible() || IsSteam3ClientGameOverlayActive() )
-@@ -303,7 +303,7 @@ void SCR_UpdateScreen( void )
- 	V_RenderView();
- 
- 	pRenderContext.GetFrom( materials );
--	pRenderContext->RenderScaleformSlot(SF_RESERVED_ENDFRAME_SLOT);
-+	// [port] scaleform slot disabled
- 	pRenderContext.SafeRelease();
- 
- 	CL_TakeSnapshotAndSwap();	   
-diff --git a/engine/sv_steamauth.cpp b/engine/sv_steamauth.cpp
-index 75f3e76..cbca387 100644
---- a/engine/sv_steamauth.cpp
-+++ b/engine/sv_steamauth.cpp
-@@ -265,7 +265,7 @@ void CSteam3Server::Activate()
+diff -ruN a/engine/sv_steamauth.cpp b/engine/sv_steamauth.cpp
+--- a/engine/sv_steamauth.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/sv_steamauth.cpp	2026-11-02 19:22:40.763854265 +0000
+@@ -263,7 +263,7 @@
  	if ( !SteamGameServer_Init( &g_EngineSteamPS3Params,
  	#else
  	SteamAPI_SetTryCatchCallbacks( false ); // We don't use exceptions, so tell steam not to use try/catch in callback handlers
@@ -98,7 +266,7 @@ index 75f3e76..cbca387 100644
  	#endif
  				m_unIP, 
  				m_usPort+1,	// Steam lives on -steamport + 1, master server updater lives on -steamport.
-@@ -291,7 +291,7 @@ steam_no_good:
+@@ -289,7 +289,7 @@
  	// to report crashes under a different AppId.  Reset it back to our crashing one now.
  	extern AppId_t g_nDedicatedServerAppIdBreakpad;
  	if ( g_nDedicatedServerAppIdBreakpad )	// Actually force breakpad interfaces to use an override AppID
@@ -107,20 +275,178 @@ index 75f3e76..cbca387 100644
  
  	// Steam API context init
  	Init();
-diff --git a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
-index 329290d..af98be7 100644
---- a/engine/sys_dll2.cpp
-+++ b/engine/sys_dll2.cpp
-@@ -778,7 +778,7 @@ bool CEngineAPI::SetStartupInfo( StartupInfo_t &info )
- 		extern int32 GetClientVersion();
- 		CFmtStr fmtClientVersion( "%d.%d", GetHostVersion(), GetClientVersion() );
- 		Msg( "Using breakpad minidump system %u/%s\n", g_unSteamAppID, fmtClientVersion.Access() );
--		SteamAPI_UseBreakpadCrashHandler( fmtClientVersion.Access(), __DATE__, __TIME__, WantsFullMemoryDumps(), NULL, NULL );
+diff -ruN a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
+--- a/engine/sys_dll2.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/sys_dll2.cpp	2026-11-02 19:26:33.393688350 +0000
+@@ -28,6 +28,7 @@
+ #include "idedicatedexports.h"
+ #include "engine_launcher_api.h"
+ #include "ivideomode.h"
++#include "common/csarm_log.h"
+ #include "common.h"
+ #include "iregistry.h"
+ #include "keys.h"
+@@ -593,7 +594,15 @@
+ 		return false;
+ #endif
+ 
++	CSARM_LOGI( "CEngineAPI::Connect: studio=%d datacache=%d physics=%d mdlcache=%d matssurface=%d input=%d soundemit=%d",
++		g_pStudioRender ? 1 : 0, g_pDataCache ? 1 : 0, g_pPhysics ? 1 : 0, g_pMDLCache ? 1 : 0,
++		g_pMatSystemSurface ? 1 : 0, g_pInputSystem ? 1 : 0, g_pSoundEmitterSystem ? 1 : 0 );
++#ifdef __ANDROID__
++	// csARM: no vphysics on Android (closed IVP core) - boot tolerates it
++	if ( !g_pStudioRender || !g_pDataCache || !g_pMDLCache || !g_pMatSystemSurface || !g_pInputSystem || !g_pSoundEmitterSystem)
++#else
+ 	if ( !g_pStudioRender || !g_pDataCache || !g_pPhysics || !g_pMDLCache || !g_pMatSystemSurface || !g_pInputSystem || !g_pSoundEmitterSystem)
++#endif
+ 	{
+ 		Warning( "Engine wasn't able to acquire required interfaces!\n" );
+ 		return false;
+@@ -998,7 +1007,12 @@
+ #if !defined( NO_STEAM ) && !defined( _GAMECONSOLE )
+ 	if ( !CommandLine()->FindParm( "-nobreakpad" ) )
+ 	{
+-		ConfigureSteamApiBreakpadWithSuffix( NULL );
++		// AppID of the client will be automatically used
++		extern int32 GetHostVersion();
++		extern int32 GetClientVersion();
++		CFmtStr fmtClientVersion( "%d.%d", GetHostVersion(), GetClientVersion() );
++		Msg( "Using breakpad minidump system %u/%s\n", g_unSteamAppID, fmtClientVersion.Access() );
 +		// [port] SteamAPI_UseBreakpadCrashHandler removed in newer Steamworks
  	}
  #endif // !NO_STEAM && !_GAMECONSOLE
  
-@@ -2784,18 +2784,16 @@ bool CDedicatedServerAPI::ModInit( ModInfo_t &info )
+@@ -1017,12 +1031,20 @@
+ #endif // CSTRIKE15
+ 	}
+ 
++#ifdef __ANDROID__
++	// csARM: no local Steam Client process exists on Android; the
++	// steam_api stub reports uninitialized and Valve's own "fall out
++	// later when they don't get a valid logon cookie" comment tolerates
++	// that for the cookie path.  Skip the hard identity gate.
++	CSARM_LOGI( "SetStartupInfo: no Steam on Android - skipping Steam3Client identity gate" );
++#else
+ 	if ( !Steam3Client().IsInitialized() || !Steam3Client().SteamUser() || !Steam3Client().SteamApps() ||
+ 		!Steam3Client().SteamUser()->GetSteamID().IsValid() || !Steam3Client().SteamUser()->GetSteamID().BIndividualAccount() || !Steam3Client().SteamUser()->GetSteamID().GetAccountID() )
+ 	{
+ 		Error( "FATAL ERROR: Failed to connect with local Steam Client process!\n\nPlease make sure that you are running latest version of Steam Client.\nYou can check for Steam Client updates using Steam main menu:\n             Steam > Check for Steam Client Updates..." );
+ 		return false;
+ 	}
++#endif
+ 
+ 	//
+ 	// CS:GO by default in China launches in "Perfect World" mode, and allows for users to override
+@@ -1077,6 +1099,24 @@
+ 	if ( g_pFileSystem )
+ 	{
+ 		char chUserLocalDataFolder[ MAX_PATH ] = {};
++#ifdef __ANDROID__
++		// csARM: SteamUser() is NULL with the steam_api stub (no Steam client
++		// process on Android) and the Steam-profile branch below dereferenced
++		// it -> SEGV in SetStartupInfo (run 41369767472).  The identity gate
++		// above used to return false before reaching this line on Android.
++		// USRLOCAL comes from the env override the JNI loader sets.
++		CSARM_LOGI( "SetStartupInfo: USRLOCAL via env override (no Steam on Android)" );
++		if ( char const * pszLocalOverride = getenv( "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ) ) )
++		{
++			Msg( "USRLOCAL path using environment setting '%s':\n%s\n", "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ), pszLocalOverride );
++			g_pFileSystem->AddSearchPath( pszLocalOverride, "USRLOCAL" );
++			CSARM_LOGI( "SetStartupInfo: USRLOCAL=%s", pszLocalOverride );
++		}
++		else
++		{
++			Warning( "USRLOCAL path not found!\n" );
++		}
++#else
+ 		if ( char const * pszLocalOverride = getenv( "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ) ) )
+ 		{
+ 			Msg( "USRLOCAL path using environment setting '%s':\n%s\n", "USRLOCAL" DLLExtTokenPaste2( VPCGAMECAPS ), pszLocalOverride );
+@@ -1091,6 +1131,7 @@
+ 		{
+ 			Warning( "USRLOCAL path not found!\n" );
+ 		}
++#endif
+ 	}
+ #endif
+ 
+@@ -1478,6 +1519,7 @@
+ //-----------------------------------------------------------------------------
+ bool CEngineAPI::OnStartup( void *pInstance, const char *pStartupModName )
+ {
++	CSARM_LOGI( "CEngineAPI::OnStartup enter" );
+ 	// This fixes a bug on certain machines where the input will 
+ 	// stop coming in for about 1 second when someone hits a key.
+ 	// (true means to disable priority boost)
+@@ -1499,6 +1541,7 @@
+ 	// for use by the code that creates the window
+ 	if ( !game->Init( pInstance ) )
+ 	{
++		CSARM_LOGW( "CEngineAPI::OnStartup FAILED: game->Init" );
+ 		goto onStartupError;
+ 	}
+ 
+@@ -1509,6 +1552,7 @@
+ 	// This way mods can have different default video settings
+ 	if ( !videomode->Init( ) )
+ 	{
++		CSARM_LOGW( "CEngineAPI::OnStartup FAILED: videomode->Init" );
+ 		goto onStartupShutdownGame;
+ 	}
+ 
+@@ -1625,10 +1669,13 @@
+ 	COM_TimestampedLog( "Host_ReadPreStartupConfiguration - Finish" );
+ 	// Create the game window now that we have a search path
+ 	// FIXME: Deal with initial window width + height better
++	CSARM_LOGI( "ModInit: CreateGameWindow %dx%d", g_pMaterialSystemConfig->m_VideoMode.m_Width, g_pMaterialSystemConfig->m_VideoMode.m_Height );
+ 	if ( !videomode || !videomode->CreateGameWindow( g_pMaterialSystemConfig->m_VideoMode.m_Width, g_pMaterialSystemConfig->m_VideoMode.m_Height, g_pMaterialSystemConfig->Windowed(), g_pMaterialSystemConfig->NoWindowBorder() ) )
+ 	{
++		CSARM_LOGW( "ModInit FAILED: videomode=%p CreateGameWindow=false", (void*)videomode );
+ 		return false;
+ 	}
++	CSARM_LOGI( "ModInit: game window created" );
+ 
+ 	return true;
+ }
+@@ -1687,6 +1734,7 @@
+ //-----------------------------------------------------------------------------
+ int CEngineAPI::RunListenServer()
+ {
++	CSARM_LOGI( "CEngineAPI::RunListenServer enter" );
+ 	//
+ 	// NOTE: Systems set up here should depend on the mod 
+ 	// Systems which are mod-independent should be set up in the launcher or Init()
+@@ -1696,7 +1744,9 @@
+ 	int nRunResult = RUN_OK;
+ 
+ 	// Happens every time we start up and shut down a mod
+-	if ( ModInit( m_StartupInfo.m_pInitialMod, m_StartupInfo.m_pInitialGame ) )
++	bool bModInit = ModInit( m_StartupInfo.m_pInitialMod, m_StartupInfo.m_pInitialGame );
++	CSARM_LOGI( "RunListenServer: ModInit=%d", bModInit ? 1 : 0 );
++	if ( bModInit )
+ 	{
+ 		CModAppSystemGroup modAppSystemGroup( false, m_StartupInfo.m_pParentAppSystemGroup );
+ 
+@@ -2020,6 +2070,7 @@
+ //-----------------------------------------------------------------------------
+ int CEngineAPI::Run()
+ {
++	CSARM_LOGI( "CEngineAPI::Run enter" );
+ 	if ( CommandLine()->FindParm("-insecure") )
+ 	{
+ 		extern void Host_DisallowSecureServers();
+@@ -2687,7 +2738,9 @@
+ 		COM_TimestampedLog( "eng->Load" );
+ 
+ 		// Start up the game engine
+-		if ( eng->Load( false, host_parms.basedir ) )					
++		bool bEngLoad = eng->Load( false, host_parms.basedir );
++		CSARM_LOGI( "CModAppSystemGroup::Main: eng->Load=%d", bEngLoad ? 1 : 0 );
++		if ( bEngLoad )					
+ 		{
+ #if !defined(DEDICATED)
+ 			toolframework->ServerInit( g_ServerFactory );
+@@ -3069,18 +3122,16 @@
  			g_nDedicatedServerAppIdBreakpad = bValveDS ? 268480 : 268460;
  			break;
  		}
@@ -142,11 +468,67 @@ index 329290d..af98be7 100644
  	}
  #endif // !NO_STEAM && !_GAMECONSOLE
  
-diff --git a/engine/sys_getmodes.cpp b/engine/sys_getmodes.cpp
-index a0ad555..56f18ac 100644
---- a/engine/sys_getmodes.cpp
-+++ b/engine/sys_getmodes.cpp
-@@ -998,7 +998,7 @@ void CVideoMode_Common::InvalidateWindow()
+diff -ruN a/engine/sys_engine.cpp b/engine/sys_engine.cpp
+--- a/engine/sys_engine.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/sys_engine.cpp	2026-11-02 19:26:33.393688350 +0000
+@@ -8,6 +8,7 @@
+ #include <assert.h>
+ #include "engine_launcher_api.h"
+ #include "iengine.h"
++#include "common/csarm_log.h"
+ #include "ivideomode.h"
+ #include "igame.h"
+ #include "vmodes.h"
+@@ -242,11 +243,13 @@
+ 	// NOTE: We must bypass the 'next state' block here for initialization to work properly.
+ 	m_nDLLState = m_nNextDLLState = DLL_ACTIVE;
+ 
+-	if ( Sys_InitGame( 
++	bool bInitGame = Sys_InitGame( 
+ 		g_AppSystemFactory,
+ 		rootdir, 
+ 		game->GetMainWindowAddress(), 
+-		bDedicated ) )
++		bDedicated );
++	CSARM_LOGI( "CEngine::Load: Sys_InitGame=%d basedir=%s", bInitGame ? 1 : 0, rootdir ? rootdir : "null" );
++	if ( bInitGame )
+ 	{
+ 		success = true;
+ 
+diff -ruN a/engine/sys_getmodes.cpp b/engine/sys_getmodes.cpp
+--- a/engine/sys_getmodes.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/sys_getmodes.cpp	2026-11-02 19:26:33.394688349 +0000
+@@ -29,6 +29,7 @@
+ #include "vmodes.h"
+ #include "modes.h"
+ #include "ivideomode.h"
++#include "common/csarm_log.h"
+ #include "igame.h"
+ #include "iengine.h"
+ #include "engine_launcher_api.h"
+@@ -540,7 +541,9 @@
+ 			return false;
+ 
+         // When running in stand-alone mode, create your own window 
+-        if ( !game->CreateGameWindow() )
++        bool bWindowOK = game->CreateGameWindow();
++        CSARM_LOGI( "CreateGameWindow: game->CreateGameWindow=%d", bWindowOK ? 1 : 0 );
++        if ( !bWindowOK )
+             return false;
+ 
+ 		COM_TimestampedLog( "CreateGameWindow - Finish" );
+@@ -554,7 +557,9 @@
+ 		COM_TimestampedLog( "SetMode - Start" );
+ 
+         // Set the mode and let the materialsystem take over
+-		if ( !SetMode( GetModeWidth(), GetModeHeight(), IsWindowedMode(), NoWindowBorder() ) )
++		bool bModeOK = SetMode( GetModeWidth(), GetModeHeight(), IsWindowedMode(), NoWindowBorder() );
++		CSARM_LOGI( "CreateGameWindow: SetMode=%d", bModeOK ? 1 : 0 );
++		if ( !bModeOK )
+             return false;
+ 
+ #if defined( USE_SDL ) && 0
+@@ -998,7 +1003,7 @@
          InvalWindowRect( (WindowRef)game->GetMainWindow(), &bounds );
  #elif defined( _PS3 )
  #else
@@ -155,25 +537,32 @@ index a0ad555..56f18ac 100644
  #endif
      }
  }
-diff --git a/engine/sys_mainwind.cpp b/engine/sys_mainwind.cpp
-index 66b14f2..de70677 100644
---- a/engine/sys_mainwind.cpp
-+++ b/engine/sys_mainwind.cpp
-@@ -415,9 +415,6 @@ void CGame::DispatchInputEvent( const InputEvent_t &event )
+diff -ruN a/engine/sys_mainwind.cpp b/engine/sys_mainwind.cpp
+--- a/engine/sys_mainwind.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/sys_mainwind.cpp	2026-11-02 19:26:33.395688348 +0000
+@@ -35,6 +35,7 @@
+ #include "appframework/ilaunchermgr.h"
  
- 			if ( event.m_nData >= JOYSTICK_FIRST_AXIS )
- 			{
--				if ( g_pScaleformUI && g_pScaleformUI->HandleInputEvent( event ) )
--					break;
--
- 				if ( g_pMatSystemSurface && g_pMatSystemSurface->HandleInputEvent( event ) )
- 					break;
- 			}
-diff --git a/engine/vengineserver_impl.cpp b/engine/vengineserver_impl.cpp
-index dd170bc..4305344 100644
---- a/engine/vengineserver_impl.cpp
-+++ b/engine/vengineserver_impl.cpp
-@@ -1163,14 +1163,14 @@ public:
+ #include "igame.h"
++#include "common/csarm_log.h"
+ #include "cl_main.h"
+ #include "host.h"
+ #include "quakedef.h"
+@@ -1297,7 +1298,9 @@
+ 	modinfo->deleteThis();
+ 	modinfo = NULL;
+ 
+-	if ( !g_pLauncherMgr->CreateGameWindow( windowName, true, 0, 0, true ) )
++	bool bWindowCreated = g_pLauncherMgr->CreateGameWindow( windowName, true, 0, 0, true );
++	CSARM_LOGI( "CGame::CreateGameWindow: ok=%d sdlerr=[%s]", bWindowCreated ? 1 : 0, SDL_GetError() ? SDL_GetError() : "" );
++	if ( !bWindowCreated )
+ 	{
+ 		Error( "Fatal Error:  Unable to create game window!" );
+ 		return false;
+diff -ruN a/engine/vengineserver_impl.cpp b/engine/vengineserver_impl.cpp
+--- a/engine/vengineserver_impl.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/vengineserver_impl.cpp	2026-11-02 19:22:40.763854265 +0000
+@@ -1163,14 +1163,14 @@
  
  		if ( !msg.IsInitialized() )
  		{
@@ -190,7 +579,7 @@ index dd170bc..4305344 100644
  			if( sv_show_usermessage.GetInt() > 1 )
  				Msg("%s", msg.DebugString().c_str() );
  		}
-@@ -1179,7 +1179,7 @@ public:
+@@ -1179,7 +1179,7 @@
  		_userMsg.mutable_msg_data()->resize( size );
  		if ( !msg.SerializeWithCachedSizesToArray( (uint8*)&(*_userMsg.mutable_msg_data())[0] ) )
  		{
@@ -199,81 +588,87 @@ index dd170bc..4305344 100644
  			return;
  		}
  
-diff --git a/engine/vgui_baseui_interface.cpp b/engine/vgui_baseui_interface.cpp
-index 2dfa21a..d25526d 100644
---- a/engine/vgui_baseui_interface.cpp
-+++ b/engine/vgui_baseui_interface.cpp
-@@ -1872,7 +1872,7 @@ void CEngineVGui::UpdateProgressBar( float progress, const char *pDesc, bool sho
- 				if ( timeScale <= 0.0f )
- 					timeScale = 1.0f;
+diff -ruN a/external/crypto++-5.61/algebra.cpp b/external/crypto++-5.61/algebra.cpp
+--- a/external/crypto++-5.61/algebra.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/external/crypto++-5.61/algebra.cpp	2026-11-02 19:22:40.767854262 +0000
+@@ -58,7 +58,7 @@
+ 	Element g[3]={b, a};
+ 	unsigned int i0=0, i1=1, i2=2;
  
--				g_pScaleformUI->RunFrame( g_ClientGlobalVariables.frametime / timeScale );
-+				// [port] Scaleform RunFrame disabled
- 			}
- 			else
- 			{
-@@ -1882,7 +1882,7 @@ void CEngineVGui::UpdateProgressBar( float progress, const char *pDesc, bool sho
- 	}
- 	else if ( bUpdated )
+-	while (!Equal(g[i1], this->Identity()))
++	while (!this->Equal(g[i1], this->Identity()))
  	{
--		g_pScaleformUI->RunFrame( 0 );
-+		/* [port] scaleform disabled */
- 		// re-render vgui on screen
- 		extern void V_RenderVGuiOnly();
- 		V_RenderVGuiOnly();
-@@ -1932,7 +1932,7 @@ void CEngineVGui::UpdateSecondaryProgressBar( float progress, const wchar_t *des
- 				if ( timeScale <= 0.0f )
- 					timeScale = 1.0f;
+ 		g[i2] = Mod(g[i0], g[i1]);
+ 		unsigned int t = i0; i0 = i1; i1 = i2; i2 = t;
+diff -ruN a/external/crypto++-5.61/eccrypto.cpp b/external/crypto++-5.61/eccrypto.cpp
+--- a/external/crypto++-5.61/eccrypto.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/external/crypto++-5.61/eccrypto.cpp	2026-11-02 19:22:40.767854262 +0000
+@@ -435,7 +435,7 @@
+ 	StringSource ssG(param.g, true, new HexDecoder);
+ 	Element G;
+ 	bool result = GetCurve().DecodePoint(G, ssG, (size_t)ssG.MaxRetrievable());
+-	SetSubgroupGenerator(G);
++	this->SetSubgroupGenerator(G);
+ 	assert(result);
  
--				g_pScaleformUI->RunFrame( g_ClientGlobalVariables.frametime / timeScale );
-+				/* [port] scaleform disabled */
- 			}
- 			else
- 			{
-@@ -1942,7 +1942,7 @@ void CEngineVGui::UpdateSecondaryProgressBar( float progress, const wchar_t *des
- 	}
- 	else if ( bUpdated )
+ 	StringSource ssN(param.n, true, new HexDecoder);
+@@ -591,7 +591,7 @@
+ 	if (level >= 2 && pass)
  	{
--		g_pScaleformUI->RunFrame( 0 );
-+		/* [port] scaleform disabled */
- 		// re-render vgui on screen
- 		extern void V_RenderVGuiOnly();
- 		V_RenderVGuiOnly();
-diff --git a/engine/view.cpp b/engine/view.cpp
-index cf751de..fc6bc59 100644
---- a/engine/view.cpp
-+++ b/engine/view.cpp
-@@ -135,7 +135,7 @@ void V_RenderVGuiOnly_NoSwap()
+ 		const Integer &q = GetSubgroupOrder();
+-		Element gq = gpc ? gpc->Exponentiate(this->GetGroupPrecomputation(), q) : ExponentiateElement(g, q);
++		Element gq = gpc ? gpc->Exponentiate(this->GetGroupPrecomputation(), q) : this->ExponentiateElement(g, q);
+ 		pass = pass && IsIdentity(gq);
+ 	}
+ 	return pass;
+@@ -629,7 +629,7 @@
+ 	typename EC::Point P;
+ 	if (!this->GetGroupParameters().GetCurve().DecodePoint(P, bt, size))
+ 		BERDecodeError();
+-	SetPublicElement(P);
++	this->SetPublicElement(P);
+ }
  
- #if defined( INCLUDE_SCALEFORM )
- 	// Render scaleform before vgui
--	pRenderContext->AdvanceAndRenderScaleformSlot( SF_FULL_SCREEN_SLOT );
-+	// [port] scaleform slot disabled
- #endif
+ template <class EC>
+diff -ruN a/external/crypto++-5.61/eccrypto.h b/external/crypto++-5.61/eccrypto.h
+--- a/external/crypto++-5.61/eccrypto.h	2026-08-10 03:28:37.000000000 +0000
++++ b/external/crypto++-5.61/eccrypto.h	2026-11-02 19:22:40.767854262 +0000
+@@ -43,7 +43,7 @@
+ 	void Initialize(const EllipticCurve &ec, const Point &G, const Integer &n, const Integer &k = Integer::Zero())
+ 	{
+ 		this->m_groupPrecomputation.SetCurve(ec);
+-		SetSubgroupGenerator(G);
++		this->SetSubgroupGenerator(G);
+ 		m_n = n;
+ 		m_k = k;
+ 	}
+@@ -145,9 +145,9 @@
+ 	typedef typename EC::Point Element;
  
- 	EngineVGui()->Paint( PAINT_UIPANELS );
-@@ -158,7 +158,7 @@ void V_RenderVGuiOnly( void )
+ 	void Initialize(const DL_GroupParameters_EC<EC> &params, const Element &Q)
+-		{this->AccessGroupParameters() = params; SetPublicElement(Q);}
++		{this->AccessGroupParameters() = params; this->SetPublicElement(Q);}
+ 	void Initialize(const EC &ec, const Element &G, const Integer &n, const Element &Q)
+-		{this->AccessGroupParameters().Initialize(ec, G, n); SetPublicElement(Q);}
++		{this->AccessGroupParameters().Initialize(ec, G, n); this->SetPublicElement(Q);}
  
- 	CMatRenderContextPtr pRenderContext;
- 	pRenderContext.GetFrom( materials );
--	pRenderContext->RenderScaleformSlot(SF_RESERVED_BEGINFRAME_SLOT);
-+	// [port] Scaleform not available in ToGL/Android build
- 	pRenderContext.SafeRelease();
+ 	// X509PublicKey
+ 	void BERDecodePublicKey(BufferedTransformation &bt, bool parametersPresent, size_t size);
+@@ -166,9 +166,9 @@
+ 	void Initialize(const EC &ec, const Element &G, const Integer &n, const Integer &x)
+ 		{this->AccessGroupParameters().Initialize(ec, G, n); this->SetPrivateExponent(x);}
+ 	void Initialize(RandomNumberGenerator &rng, const DL_GroupParameters_EC<EC> &params)
+-		{GenerateRandom(rng, params);}
++		{this->GenerateRandom(rng, params);}
+ 	void Initialize(RandomNumberGenerator &rng, const EC &ec, const Element &G, const Integer &n)
+-		{GenerateRandom(rng, DL_GroupParameters_EC<EC>(ec, G, n));}
++		{this->GenerateRandom(rng, DL_GroupParameters_EC<EC>(ec, G, n));}
  
- 	EngineVGui()->Simulate();
-@@ -174,7 +174,7 @@ void V_RenderVGuiOnly( void )
- 	g_EngineRenderer->FrameEnd( );
- 
- 	pRenderContext.GetFrom( materials );
--	pRenderContext->RenderScaleformSlot(SF_RESERVED_ENDFRAME_SLOT);
-+	// [port] scaleform slot disabled
- 	pRenderContext.SafeRelease();
- 
- 	materials->EndFrame();
-diff --git a/external/crypto++-5.61/misc.h b/external/crypto++-5.61/misc.h
-index f7fbc34..b2646fb 100644
---- a/external/crypto++-5.61/misc.h
-+++ b/external/crypto++-5.61/misc.h
+ 	// PKCS8PrivateKey
+ 	void BERDecodePrivateKey(BufferedTransformation &bt, bool parametersPresent, size_t size);
+diff -ruN a/external/crypto++-5.61/misc.h b/external/crypto++-5.61/misc.h
+--- a/external/crypto++-5.61/misc.h	2026-08-10 03:28:37.000000000 +0000
++++ b/external/crypto++-5.61/misc.h	2026-11-02 19:22:40.764854264 +0000
 @@ -38,7 +38,11 @@
  
  #if defined(__GNUC__) && defined(__linux__)
@@ -287,11 +682,22 @@ index f7fbc34..b2646fb 100644
  #endif
  
  NAMESPACE_BEGIN(CryptoPP)
-diff --git a/external/crypto++-5.61/pubkey.h b/external/crypto++-5.61/pubkey.h
-index 3a3f3bc..f3c200d 100644
---- a/external/crypto++-5.61/pubkey.h
-+++ b/external/crypto++-5.61/pubkey.h
-@@ -1340,7 +1340,7 @@ class DL_SignerImpl : public DL_ObjectImpl<DL_SignerBase<typename SCHEME_OPTIONS
+diff -ruN a/external/crypto++-5.61/panama.cpp b/external/crypto++-5.61/panama.cpp
+--- a/external/crypto++-5.61/panama.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/external/crypto++-5.61/panama.cpp	2026-11-02 19:22:40.767854262 +0000
+@@ -422,7 +422,7 @@
+ {
+ 	this->ThrowIfInvalidTruncatedSize(size);
+ 
+-	PadLastBlock(this->BLOCKSIZE, 0x01);
++	this->PadLastBlock(this->BLOCKSIZE, 0x01);
+ 	
+ 	HashEndianCorrectedBlock(this->m_data);
+ 
+diff -ruN a/external/crypto++-5.61/pubkey.h b/external/crypto++-5.61/pubkey.h
+--- a/external/crypto++-5.61/pubkey.h	2026-08-10 03:28:37.000000000 +0000
++++ b/external/crypto++-5.61/pubkey.h	2026-11-02 19:22:40.764854264 +0000
+@@ -1340,7 +1340,7 @@
  public:
  	PK_MessageAccumulator * NewSignatureAccumulator(RandomNumberGenerator &rng) const
  	{
@@ -300,11 +706,10 @@ index 3a3f3bc..f3c200d 100644
  		this->RestartMessageAccumulator(rng, *p);
  		return p.release();
  	}
-diff --git a/game/client/c_baselesson.cpp b/game/client/c_baselesson.cpp
-index 663a3bf..4463d7b 100644
---- a/game/client/c_baselesson.cpp
-+++ b/game/client/c_baselesson.cpp
-@@ -998,28 +998,28 @@ void CIconLesson::UpdateLocatorTarget( CLocatorTarget *pLocatorTarget, C_BaseEnt
+diff -ruN a/game/client/c_baselesson.cpp b/game/client/c_baselesson.cpp
+--- a/game/client/c_baselesson.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/client/c_baselesson.cpp	2026-11-02 19:22:40.764854264 +0000
+@@ -998,28 +998,28 @@
  #define LESSON_VARIABLE_INIT_INFO( _varEnum, _varName, _varType ) \
  	void Init_##_varEnum( void ) \
  	{ \
@@ -337,11 +742,10 @@ index 663a3bf..4463d7b 100644
  		varType = FIELD_STRING; \
  	}
  
-diff --git a/game/client/clientmode_shared.cpp b/game/client/clientmode_shared.cpp
-index 4bf558c..d9af246 100644
---- a/game/client/clientmode_shared.cpp
-+++ b/game/client/clientmode_shared.cpp
-@@ -1287,7 +1287,7 @@ void ClientModeShared::FireGameEvent( IGameEvent *event )
+diff -ruN a/game/client/clientmode_shared.cpp b/game/client/clientmode_shared.cpp
+--- a/game/client/clientmode_shared.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/client/clientmode_shared.cpp	2026-11-02 19:22:40.764854264 +0000
+@@ -1357,7 +1357,7 @@
  			}
  		}
  
@@ -350,10 +754,9 @@ index 4bf558c..d9af246 100644
  		{
  			bValidTeam = false;
  		}
-diff --git a/game/client/mumble.cpp b/game/client/mumble.cpp
-index d54a3d4..9a10613 100644
---- a/game/client/mumble.cpp
-+++ b/game/client/mumble.cpp
+diff -ruN a/game/client/mumble.cpp b/game/client/mumble.cpp
+--- a/game/client/mumble.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/client/mumble.cpp	2026-11-02 19:22:40.764854264 +0000
 @@ -12,6 +12,10 @@
  #include <sys/types.h>
  #include <sys/stat.h>
@@ -365,10 +768,9 @@ index d54a3d4..9a10613 100644
  #endif
  
  #include "cbase.h"
-diff --git a/game/server/ai_movesolver.cpp b/game/server/ai_movesolver.cpp
-index f9942dc..9dad1b4 100644
---- a/game/server/ai_movesolver.cpp
-+++ b/game/server/ai_movesolver.cpp
+diff -ruN a/game/server/ai_movesolver.cpp b/game/server/ai_movesolver.cpp
+--- a/game/server/ai_movesolver.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/server/ai_movesolver.cpp	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
 -//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
@@ -386,10 +788,9 @@ index f9942dc..9dad1b4 100644
  // This C99 function exists in VS 2013's math.h and for PS3 but are not currently available elsewhere.
  inline float round( float f )
  {
-diff --git a/game/server/entitylist.h b/game/server/entitylist.h
-index c2799ab..8b4da99 100644
---- a/game/server/entitylist.h
-+++ b/game/server/entitylist.h
+diff -ruN a/game/server/entitylist.h b/game/server/entitylist.h
+--- a/game/server/entitylist.h	2026-08-10 03:28:37.000000000 +0000
++++ b/game/server/entitylist.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
 -//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
@@ -409,7 +810,7 @@ index c2799ab..8b4da99 100644
  
  abstract_class CBaseEntityClassList
  {
-@@ -207,38 +213,46 @@ inline CBaseHandle CGlobalEntityList::AddNonNetworkableEntity( IHandleEntity *pE
+@@ -208,38 +214,46 @@
  
  inline edict_t* CGlobalEntityList::GetEdict( CBaseHandle hEnt ) const
  {
@@ -456,10 +857,9 @@ index c2799ab..8b4da99 100644
  }
  
  
-diff --git a/game/shared/baseachievement.cpp b/game/shared/baseachievement.cpp
-index 1b0abf7..fe7a053 100644
---- a/game/shared/baseachievement.cpp
-+++ b/game/shared/baseachievement.cpp
+diff -ruN a/game/shared/baseachievement.cpp b/game/shared/baseachievement.cpp
+--- a/game/shared/baseachievement.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/shared/baseachievement.cpp	2026-11-02 19:22:40.764854264 +0000
 @@ -17,7 +17,7 @@
  #endif // CLIENT_DLL
  
@@ -469,10 +869,9 @@ index 1b0abf7..fe7a053 100644
  
  // NOTE: This has to be the last file included!
  #include "tier0/memdbgon.h"
-diff --git a/game/shared/baseviewmodel_shared.h b/game/shared/baseviewmodel_shared.h
-index 0fec6a6..4ca6789 100644
---- a/game/shared/baseviewmodel_shared.h
-+++ b/game/shared/baseviewmodel_shared.h
+diff -ruN a/game/shared/baseviewmodel_shared.h b/game/shared/baseviewmodel_shared.h
+--- a/game/shared/baseviewmodel_shared.h	2026-08-10 03:28:37.000000000 +0000
++++ b/game/shared/baseviewmodel_shared.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
 -//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 +//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
@@ -487,11 +886,10 @@ index 0fec6a6..4ca6789 100644
  #endif
  
  class CBaseCombatWeapon;
-diff --git a/game/shared/cstrike15/achievements_cs.cpp b/game/shared/cstrike15/achievements_cs.cpp
-index 45c69c7..bda16e5 100644
---- a/game/shared/cstrike15/achievements_cs.cpp
-+++ b/game/shared/cstrike15/achievements_cs.cpp
-@@ -39,7 +39,7 @@ IAchievementMgr * CAchievementMgr::GetInstanceInterface()
+diff -ruN a/game/shared/cstrike15/achievements_cs.cpp b/game/shared/cstrike15/achievements_cs.cpp
+--- a/game/shared/cstrike15/achievements_cs.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/shared/cstrike15/achievements_cs.cpp	2026-11-02 19:22:40.764854264 +0000
+@@ -39,7 +39,7 @@
  
  // [dwenger] Necessary for sorting achievements by award time
  #include <vgui/ISystem.h>
@@ -500,10 +898,9 @@ index 45c69c7..bda16e5 100644
  
  #endif // CLIENT_DLL
  
-diff --git a/game/shared/cstrike15/fatdemo.h b/game/shared/cstrike15/fatdemo.h
-index 471e807..3818442 100644
---- a/game/shared/cstrike15/fatdemo.h
-+++ b/game/shared/cstrike15/fatdemo.h
+diff -ruN a/game/shared/cstrike15/fatdemo.h b/game/shared/cstrike15/fatdemo.h
+--- a/game/shared/cstrike15/fatdemo.h	2026-08-10 03:28:37.000000000 +0000
++++ b/game/shared/cstrike15/fatdemo.h	2026-11-02 19:22:40.764854264 +0000
 @@ -5,6 +5,8 @@
  #include "GameEventListener.h"
  #include "igamesystem.h"
@@ -513,17 +910,16 @@ index 471e807..3818442 100644
  // This is completely disabled in release builds. We overwrite client Rel DLLs with client Staging DLLs on our cluster.
  #if !defined( CSTRIKE_REL_BUILD )
  
-diff --git a/game/shared/sharedvar.h b/game/shared/sharedvar.h
-index bb4ade6..015df0e 100644
---- a/game/shared/sharedvar.h
-+++ b/game/shared/sharedvar.h
+diff -ruN a/game/shared/sharedvar.h b/game/shared/sharedvar.h
+--- a/game/shared/sharedvar.h	2026-08-10 03:28:37.000000000 +0000
++++ b/game/shared/sharedvar.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
 -//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
  //
-@@ -189,9 +189,11 @@ public:
+@@ -189,9 +189,11 @@
  	{
  		Assert( !m_pSharedMemory && !m_pValue );
  
@@ -535,7 +931,7 @@ index bb4ade6..015df0e 100644
  	}
  
  	#if defined( GAME_DLL )
-@@ -626,10 +628,12 @@ public:
+@@ -626,10 +628,12 @@
  	{
  		Assert( !this->m_pSharedMemory && !this->m_pValue );
  
@@ -548,7 +944,7 @@ index bb4ade6..015df0e 100644
  	}
  
  	bool operator !() const 
-@@ -691,10 +695,12 @@ private:
+@@ -691,10 +695,12 @@
  		#if defined( GAME_DLL )
  			// Server can get the handle directly
  			return (*CSharedHandleBase<Type,Changer>::m_pValue);
@@ -563,7 +959,7 @@ index bb4ade6..015df0e 100644
  		#endif
  	}
  
-@@ -749,9 +755,11 @@ public:
+@@ -749,9 +755,11 @@
  		Assert( !this->m_pSharedMemory && !(CSharedArrayBase<Type,Changer>::m_pValue) && iCount > 0 );
  
  		m_iCount = iCount;
@@ -575,7 +971,7 @@ index bb4ade6..015df0e 100644
  	}
  
  	const int& Count() const
-@@ -833,10 +841,12 @@ public:
+@@ -833,10 +841,12 @@
  		Assert( !this->m_pSharedMemory && !(CSharedHandleArrayBase<Type,Changer>::m_pValue) && iCount > 0 );
  
  		this->m_iCount = iCount;
@@ -588,7 +984,7 @@ index bb4ade6..015df0e 100644
  	}
  
  	const int& Count() const
-@@ -874,10 +884,12 @@ private:
+@@ -874,10 +884,12 @@
  		#if defined( GAME_DLL )
  			// Server can get the handle directly
  			return CSharedHandleArrayBase<Type,Changer>::m_pValue[i];
@@ -602,7 +998,7 @@ index bb4ade6..015df0e 100644
  		#endif
  	}
  
-@@ -945,9 +957,11 @@ public:
+@@ -945,9 +957,11 @@
  	{
  		Assert( !this->m_pSharedMemory && !(CSharedUtlVectorBase<Type,Changer>::m_pValue) );
  
@@ -614,11 +1010,10 @@ index bb4ade6..015df0e 100644
  	}
  
  #if defined( GAME_DLL )
-diff --git a/game/shared/usermessages.cpp b/game/shared/usermessages.cpp
-index a512b7a..456cfda 100644
---- a/game/shared/usermessages.cpp
-+++ b/game/shared/usermessages.cpp
-@@ -82,7 +82,7 @@ bool CUserMessages::DispatchUserMessage( int msg_type, int32 nPassthroughFlags,
+diff -ruN a/game/shared/usermessages.cpp b/game/shared/usermessages.cpp
+--- a/game/shared/usermessages.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/shared/usermessages.cpp	2026-11-02 19:22:40.764854264 +0000
+@@ -82,7 +82,7 @@
  	//handle logging to the console if this is enabled
  	if ( cl_show_usermessage.GetBool() )
  	{
@@ -627,10 +1022,9 @@ index a512b7a..456cfda 100644
  		//handle message content display if they have it set to a value > 1
  		if( cl_show_usermessage.GetInt() > 1 )
  			Msg("%s", pMsg->DebugString().c_str() );
-diff --git a/game/shared/util_shared.h b/game/shared/util_shared.h
-index a1ced3d..42ee38c 100644
---- a/game/shared/util_shared.h
-+++ b/game/shared/util_shared.h
+diff -ruN a/game/shared/util_shared.h b/game/shared/util_shared.h
+--- a/game/shared/util_shared.h	2026-08-10 03:28:37.000000000 +0000
++++ b/game/shared/util_shared.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
 -//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
@@ -650,7 +1044,7 @@ index a1ced3d..42ee38c 100644
  #ifdef _WIN32
  #pragma once
  #endif
-@@ -88,12 +94,14 @@ inline const CBaseEntity *EntityFromEntityHandle( const IHandleEntity *pConstHan
+@@ -91,12 +97,14 @@
  #ifdef CLIENT_DLL
  	IClientUnknown *pUnk = (IClientUnknown*)pHandleEntity;
  	return pUnk->GetBaseEntity();
@@ -666,7 +1060,7 @@ index a1ced3d..42ee38c 100644
  #endif
  }
  
-@@ -102,7 +110,7 @@ inline CBaseEntity *EntityFromEntityHandle( IHandleEntity *pHandleEntity )
+@@ -105,7 +113,7 @@
  #ifdef CLIENT_DLL
  	IClientUnknown *pUnk = (IClientUnknown*)pHandleEntity;
  	return pUnk->GetBaseEntity();
@@ -675,7 +1069,7 @@ index a1ced3d..42ee38c 100644
  #ifndef _GAMECONSOLE
  	if ( staticpropmgr->IsStaticProp( pHandleEntity ) )
  		return NULL;
-@@ -114,6 +122,8 @@ inline CBaseEntity *EntityFromEntityHandle( IHandleEntity *pHandleEntity )
+@@ -117,6 +125,8 @@
  	IServerUnknown *pUnk = (IServerUnknown*)pHandleEntity;
  	Assert( !pUnk || pUnk->GetBaseEntity() );
  	return pUnk->GetBaseEntity();
@@ -684,7 +1078,7 @@ index a1ced3d..42ee38c 100644
  #endif
  }
  
-@@ -306,6 +316,14 @@ extern ConVar r_visualizetraces;
+@@ -322,6 +332,14 @@
  #define ReportExpensiveTrace( repeat ) ((void)0)
  #endif
  
@@ -699,41 +1093,235 @@ index a1ced3d..42ee38c 100644
  inline void UTIL_TraceLine( const Vector& vecAbsStart, const Vector& vecAbsEnd, unsigned int mask, 
  					 const IHandleEntity *ignore, int collisionGroup, trace_t *ptr )
  {
-diff --git a/materialsystem/cmaterialsystem.cpp b/materialsystem/cmaterialsystem.cpp
-index 6fc7865..ca561b5 100644
---- a/materialsystem/cmaterialsystem.cpp
-+++ b/materialsystem/cmaterialsystem.cpp
-@@ -4406,7 +4406,7 @@ void CMaterialSystem::EndFrame( void )
- 				Assert( m_QueuedRenderContexts[i].IsInitialized() );
- 				m_QueuedRenderContexts[i].Shutdown();
- 			}
--			g_pScaleformUI->SetSingleThreadedMode(true);
-+			/* [port] scaleform disabled */
- 			break;
+diff -ruN a/interfaces/interfaces.cpp b/interfaces/interfaces.cpp
+--- a/interfaces/interfaces.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/interfaces/interfaces.cpp	2026-11-02 19:22:40.767854262 +0000
+@@ -220,7 +220,19 @@
  
- 		case MATERIAL_QUEUED_SINGLE_THREADED:
-@@ -4424,7 +4424,7 @@ void CMaterialSystem::EndFrame( void )
- 			if ( m_ThreadMode == MATERIAL_QUEUED_SINGLE_THREADED )
- 			{
- 				g_pShaderAPI->SetDisallowAccess( true );
--				g_pScaleformUI->SetSingleThreadedMode(true);
-+				/* [port] scaleform disabled */
- 			}
- 			else
- 			{
-@@ -4434,7 +4434,7 @@ void CMaterialSystem::EndFrame( void )
- 				g_pShaderAPI->ReleaseThreadOwnership();
- 				m_QueuedRenderContexts[m_iCurQueuedContext].GetCallQueueInternal()->QueueCall( g_pShaderAPI, &IShaderAPI::AcquireThreadOwnership );
+ void ReconnectInterface( CreateInterfaceFn factory, const char *pInterfaceName, void **ppGlobal )
+ {
+-	*ppGlobal = factory( pInterfaceName, NULL );
++	void *pReconnect = factory( pInterfaceName, NULL );
++
++	// csARM run 41422299535 (GLES boot): every .so carries its own copy of
++	// this registry, and bionic symbol interposition routes foreign modules'
++	// Connect() calls through whichever copy wins the relocation lottery.
++	// A foreign Connect() may pass a factory that cannot serve the interface
++	// yet (the launcher parent app-system group holds only filesystem_stdio +
++	// SDLMgr when filesystem's Connect runs, so VMaterialSystem080 misses).
++	// The unconditional write then zeroed libtier2's g_pMaterialSystem ->
++	// SEGV in CMaterialReference::Init from CMatSystemSurface::Init.  Only
++	// overwrite on a hit; a miss keeps the already-wired live singleton.
++	if ( pReconnect || !*ppGlobal )
++		*ppGlobal = pReconnect;
+ 
+ 	bool bFound = false;
+ 	Assert( s_nRegistrationCount < ARRAYSIZE(s_pConnectionRegistration) );
+diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
+--- a/launcher/launcher.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/launcher/launcher.cpp	2026-11-02 19:26:33.394688349 +0000
+@@ -28,6 +28,7 @@
+ #include "appframework/ilaunchermgr.h"
+ #include <stdio.h>
+ #include "tier0/icommandline.h"
++#include "common/csarm_log.h"
+ #include "engine_launcher_api.h"
+ #include "ifilesystem.h"
+ #include "tier1/interface.h"
+@@ -671,6 +672,9 @@
+ 	// Methods of IApplication
+ 	virtual bool Create();
+ 	virtual bool PreInit();
++	// csARM: local factory for the private interface registry (see
++	// CSourceAppSystemGroup::PreInit)
++	static void *csarm_LauncherFactory( const char *pName, int *pReturnCode );
+ 	virtual int Main();
+ 	virtual void PostShutdown();
+ 	virtual void Destroy();
+@@ -703,6 +707,28 @@
+ 
+ IVJobs * g_pVJobs = NULL;
+ 
++static CSourceAppSystemGroup *s_pCsarmPreInitSelf = NULL;
++
++// csARM: ConnectInterfaces() fills THIS module's private copy of the
++// interfaces.cpp registry through the factory pointer PreInit hands it.
++// GetFactory() returns appframework's cross-module thunk, which sees a
++// different s_pCurrentAppSystem copy and returned NULL for every
++// interface in run 41351854560 even though the parent group provably
++// serves them.  Route the calls through this->FindSystem instead.
++void *CSourceAppSystemGroup::csarm_LauncherFactory( const char *pName, int *pReturnCode )
++{
++	if ( !s_pCsarmPreInitSelf )
++	{
++		if ( pReturnCode )
++			*pReturnCode = IFACE_FAILED;
++		return NULL;
++	}
++	void *pInterface = s_pCsarmPreInitSelf->FindSystem( pName );
++	if ( pReturnCode )
++		*pReturnCode = pInterface ? IFACE_OK : IFACE_FAILED;
++	return pInterface;
++}
++
+ 
+ //-----------------------------------------------------------------------------
+ // Instantiate all main libraries
+@@ -710,11 +736,13 @@
+ bool CSourceAppSystemGroup::Create()
+ {
+ 	COM_TimestampedLog( "CSourceAppSystemGroup::Create()" );
++	CSARM_LOGI( "CSourceAppSystemGroup::Create enter" );
+ 
+ 	double start, elapsed;
+ 	start = Plat_FloatTime();
+ 
+ 	IFileSystem *pFileSystem = (IFileSystem*)FindSystem( FILESYSTEM_INTERFACE_VERSION );
++	CSARM_LOGI( "Create: FindSystem(fs)=%p", (void*)pFileSystem );
+ 	pFileSystem->InstallDirtyDiskReportFunc( ReportDirtyDiskNoMaterialSystem );
+ 
+ #ifdef WIN32
+@@ -736,14 +764,25 @@
+ 		{ LAUNCHER_APPSYSTEM( "filesystem_stdio" ),		XBOXINSTALLER_INTERFACE_VERSION },
  #endif
--				g_pScaleformUI->SetSingleThreadedMode(false);
-+				/* [port] scaleform disabled */
- 			}
- 			break;
+ 		{ LAUNCHER_APPSYSTEM( "inputsystem" ),			INPUTSYSTEM_INTERFACE_VERSION },
++		#ifdef __ANDROID__
++		// csARM: the cstrike15 source mirror does not ship the vphysics
++		// library; physics is map-load-time functionality, boot does not
++		// need it.  Restore once vphysics is ported.
++		#else
+ 		{ LAUNCHER_APPSYSTEM( "vphysics" ),				VPHYSICS_INTERFACE_VERSION },
++		#endif
+ 		{ LAUNCHER_APPSYSTEM( "materialsystem" ),		MATERIAL_SYSTEM_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "datacache" ),			DATACACHE_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "datacache" ),			MDLCACHE_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "datacache" ),			STUDIO_DATA_CACHE_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "studiorender" ),			STUDIO_RENDER_INTERFACE_VERSION },
+ 		{ LAUNCHER_APPSYSTEM( "soundemittersystem" ),	SOUNDEMITTERSYSTEM_INTERFACE_VERSION },
++		#ifdef __ANDROID__
++		// csARM: vscript (Squirrel/Lua VM) is not ported yet - the boot
++		// path does not execute game scripts.  Restore with the port.
++		#else
+ 		{ LAUNCHER_APPSYSTEM( "vscript" ),				VSCRIPT_INTERFACE_VERSION },
++		#endif
+ #ifdef WIN32
+ 		{ LAUNCHER_APPSYSTEM("soundsystem"),			SOUNDSYSTEM_INTERFACE_VERSION },
+ #endif
+@@ -763,7 +802,11 @@
+ #endif
+ 		// NOTE: This has to occur before vgui2.dll so it replaces vgui2's surface implementation
+ 		{ LAUNCHER_APPSYSTEM( "vguimatsurface" ),		VGUI_SURFACE_INTERFACE_VERSION },
++		#ifdef __ANDROID__
++		{ LAUNCHER_APPSYSTEM( "vgui" ),				VGUI_IVGUI_INTERFACE_VERSION }, // csARM: our vgui2 build is libvgui.so
++		#else
+ 		{ LAUNCHER_APPSYSTEM( "vgui2" ),				VGUI_IVGUI_INTERFACE_VERSION },
++		#endif
+ 		{ LAUNCHER_APPSYSTEM( "engine" ),				VENGINE_LAUNCHER_API_VERSION },
+ 
+ 		{ "", "" }					// Required to terminate the list
+@@ -776,7 +819,11 @@
+ #endif
+ 
+ 	if ( !AddSystems( appSystems ) ) 
++	{
++		CSARM_LOGW( "Create: AddSystems FAILED" );
+ 		return false;
++	}
++	CSARM_LOGI( "Create: AddSystems OK" );
+ 
+ 	// See if we're running panorama
+ 	bool bPanorama = false;
+@@ -941,14 +988,44 @@
+ 
+ bool CSourceAppSystemGroup::PreInit()
+ {
++	CSARM_LOGI( "PreInit enter" );
+ 	CreateInterfaceFn factory = GetFactory();
++	CSARM_LOGI( "PreInit: probe direct FindSystem fs=%p matsys=%p", FindSystem( FILESYSTEM_INTERFACE_VERSION ), FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION ) );
++	s_pCsarmPreInitSelf = this;
++#ifdef __ANDROID__
++	// csARM: the cross-module GetFactory() thunk does not reach this
++	// module's private interface registry - use the local wrapper
++	factory = &csarm_LauncherFactory;
++#endif
+ 	ConnectTier1Libraries( &factory, 1 );
++	CSARM_LOGI( "PreInit: tier1 -> g_pCVar=%p", (void*)g_pCVar );
+ 	ConVar_Register( );
+ 	ConnectTier2Libraries( &factory, 1 );
++	CSARM_LOGI( "PreInit: tier2 -> g_pFullFileSystem=%p", (void*)g_pFullFileSystem );
+ 	ConnectTier3Libraries( &factory, 1 );
++	CSARM_LOGI( "PreInit: tier3 -> g_pMaterialSystem=%p", (void*)g_pMaterialSystem );
++#ifdef __ANDROID__
++	// csARM run 41356519092: even with the local factory wrapper the
++	// private interfaces.cpp registry in liblauncher stays empty (the
++	// wrapper pointer reaches ConnectInterfaces via a GOT slot and the
++	// bionic symbol-interposition state between the per-.so registry
++	// copies eats the writes).  Fill the globals the launcher itself
++	// uses with direct assignments through this->FindSystem - the same
++	// live path Create already proved works - so the real interfaces,
++	// not stubs, land in this module\'s registry.
++	if ( !g_pCVar )
++		g_pCVar = (ICvar*)FindSystem( CVAR_INTERFACE_VERSION );
++	if ( !g_pFullFileSystem )
++		g_pFullFileSystem = (IFileSystem*)FindSystem( FILESYSTEM_INTERFACE_VERSION );
++	if ( !g_pMaterialSystem )
++		g_pMaterialSystem = (IMaterialSystem*)FindSystem( MATERIAL_SYSTEM_INTERFACE_VERSION );
++#endif
+ 
+ 	if ( !g_pFullFileSystem || !g_pMaterialSystem )
++	{
++		CSARM_LOGW( "PreInit FAILED: no filesystem/materialsystem factory" );
+ 		return false;
++	}
+ 
+ #ifdef _PS3
+ 	g_pVJobs = ( IVJobs* )factory( VJOBS_INTERFACE_VERSION, NULL );  // this is done only once; g_pVJobs doesn't change even after multiple reloads of VJobs.prx
+@@ -969,14 +1046,20 @@
  		}
-diff --git a/materialsystem/custom_material.cpp b/materialsystem/custom_material.cpp
-index 22309cd..cd3d559 100644
---- a/materialsystem/custom_material.cpp
-+++ b/materialsystem/custom_material.cpp
+ 	}
+ 	if ( FileSystem_SetupSteamEnvironment( steamInfo ) != FS_OK )
++	{
++		CSARM_LOGW( "PreInit FAILED: SetupSteamEnvironment" );
+ 		return false;
++	}
+ 
+ 	CFSMountContentInfo fsInfo;
+ 	fsInfo.m_pFileSystem = g_pFullFileSystem;
+ 	fsInfo.m_bToolsMode = m_bEditMode;
+ 	fsInfo.m_pDirectoryName = steamInfo.m_GameInfoPath;
+ 	if ( FileSystem_MountContent( fsInfo ) != FS_OK )
++	{
++		CSARM_LOGW( "PreInit FAILED: MountContent" );
+ 		return false;
++	}
+ 
+ #if defined( SUPPORT_VPK )
+ 	Msg( "start timing %f\n", Plat_FloatTime() );
+@@ -1025,11 +1108,13 @@
+ 	info.m_pParentAppSystemGroup = this;
+ 	info.m_bTextMode = g_bTextMode;
+ 
++	CSARM_LOGI( "PreInit OK -> SetStartupInfo" );
+ 	return g_pEngineAPI->SetStartupInfo( info );
+ }
+ 
+ int CSourceAppSystemGroup::Main()
+ {
++	CSARM_LOGI( "Main -> CEngineAPI::Run" );
+ 	return g_pEngineAPI->Run();
+ }
+ 
+@@ -1955,6 +2040,7 @@
+ 		int nRetval = ValveCocoaMain( &steamApplication ); 
+ #else
+ 		int nRetval = steamApplication.Run();
++		CSARM_LOGI( "LauncherMain: steamApplication.Run() returned %d (stage=%d)", nRetval, (int)steamApplication.GetCurrentStage() );
+ #endif		
+ #if ENABLE_HARDWARE_PROFILER 
+ 		// Hack fix, causes memory leak, but prevents crash due to bad coding not doing proper teardown
+diff -ruN a/materialsystem/custom_material.cpp b/materialsystem/custom_material.cpp
+--- a/materialsystem/custom_material.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/materialsystem/custom_material.cpp	2026-11-02 19:22:40.764854264 +0000
 @@ -7,6 +7,7 @@
  
  //#include "cbase.h"
@@ -742,11 +1330,10 @@ index 22309cd..cd3d559 100644
  #include "custom_material.h"
  #include "composite_texture.h"
  #include "materialsystem/base_visuals_data_processor.h"
-diff --git a/mathlib/sse.cpp b/mathlib/sse.cpp
-index 73b2343..f463206 100644
---- a/mathlib/sse.cpp
-+++ b/mathlib/sse.cpp
-@@ -134,6 +134,12 @@ float FASTCALL _SSE_VectorNormalize (Vector& vec)
+diff -ruN a/mathlib/sse.cpp b/mathlib/sse.cpp
+--- a/mathlib/sse.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/mathlib/sse.cpp	2026-11-02 19:22:40.764854264 +0000
+@@ -134,6 +134,12 @@
  		r[ 1 ] = vec.y * recipSqrt;
  		r[ 2 ] = vec.z * recipSqrt;
  
@@ -759,7 +1346,7 @@ index 73b2343..f463206 100644
  #elif POSIX
  		__asm__ __volatile__(
  #ifdef ALIGNED_VECTOR
-@@ -453,6 +459,8 @@ float FastCos( float x )
+@@ -453,6 +459,8 @@
  	}
  #elif defined( _WIN64 )
  	return cosf( x );
@@ -768,11 +1355,10 @@ index 73b2343..f463206 100644
  #elif POSIX
  	
  	v4sf xmm1, xmm2 = _mm_setzero_ps(), xmm3, y;
-diff --git a/public/XUnzip.cpp b/public/XUnzip.cpp
-index db93bb8..385ee38 100644
---- a/public/XUnzip.cpp
-+++ b/public/XUnzip.cpp
-@@ -4268,6 +4268,14 @@ ZRESULT TUnzip::Unzip(int index,void *dst,unsigned int len,DWORD flags)
+diff -ruN a/public/XUnzip.cpp b/public/XUnzip.cpp
+--- a/public/XUnzip.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/public/XUnzip.cpp	2026-11-02 19:22:40.764854264 +0000
+@@ -4268,6 +4268,14 @@
  		SetFileTime(h,&ze.ctime,&ze.atime,&ze.mtime);
  #elif defined( _PS3 )
  		// PS3 TODO: SetFileTime
@@ -787,17 +1373,16 @@ index db93bb8..385ee38 100644
  #else
  		struct timeval tv[2];
  		tv[0].tv_sec = ze.atime;
-diff --git a/public/basehandle.h b/public/basehandle.h
-index d39297c..0bc3b06 100644
---- a/public/basehandle.h
-+++ b/public/basehandle.h
+diff -ruN a/public/basehandle.h b/public/basehandle.h
+--- a/public/basehandle.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/basehandle.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
 -//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
  //
-@@ -30,6 +30,7 @@ enum INVALID_EHANDLE_tag
+@@ -30,6 +30,7 @@
  class CBaseHandle
  {
  friend class CBaseEntityList;
@@ -805,11 +1390,10 @@ index d39297c..0bc3b06 100644
  
  public:
  
-diff --git a/public/dt_recv.h b/public/dt_recv.h
-index 29cea80..c111aa6 100644
---- a/public/dt_recv.h
-+++ b/public/dt_recv.h
-@@ -282,16 +282,18 @@ inline bool RecvTable::IsInMainList() const
+diff -ruN a/public/dt_recv.h b/public/dt_recv.h
+--- a/public/dt_recv.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/dt_recv.h	2026-11-02 19:23:22.585824389 +0000
+@@ -282,18 +282,20 @@
  	}
  
  
@@ -824,6 +1408,9 @@ index 29cea80..c111aa6 100644
  #define RECVINFO_BASECLASS(tableName)			RecvPropDataTable("this", 0, 0, &REFERENCE_RECV_TABLE(tableName))
 -#define RECVINFO_ARRAY(varName)					#varName, offsetof(currentRecvDTClass, varName), sizeof(((currentRecvDTClass*)0)->varName[0]), sizeof(((currentRecvDTClass*)0)->varName)/sizeof(((currentRecvDTClass*)0)->varName[0])
 +#define RECVINFO_ARRAY(varName)					#varName, RECVOFFSETOF(varName), sizeof(((currentRecvDTClass*)0)->varName[0]), sizeof(((currentRecvDTClass*)0)->varName)/sizeof(((currentRecvDTClass*)0)->varName[0])
+ #define RECVINFO_ARRAY_NAME(varName, remoteVarName) \
+-												#remoteVarName, offsetof(currentRecvDTClass, varName), sizeof(((currentRecvDTClass*)0)->varName[0]), sizeof(((currentRecvDTClass*)0)->varName)/sizeof(((currentRecvDTClass*)0)->varName[0])
++												#remoteVarName, RECVOFFSETOF(varName), sizeof(((currentRecvDTClass*)0)->varName[0]), sizeof(((currentRecvDTClass*)0)->varName)/sizeof(((currentRecvDTClass*)0)->varName[0])
  
  // Just specify the name and offset. Used for strings and data tables.
 -#define RECVINFO_NOSIZE(varName)				#varName, offsetof(currentRecvDTClass, varName)
@@ -834,17 +1421,16 @@ index 29cea80..c111aa6 100644
  
  
  void RecvProxy_FloatToFloat  ( const CRecvProxyData *pData, void *pStruct, void *pOut );
-diff --git a/public/gcsdk/msgprotobuf.h b/public/gcsdk/msgprotobuf.h
-index a69b0d0..608d326 100644
---- a/public/gcsdk/msgprotobuf.h
-+++ b/public/gcsdk/msgprotobuf.h
+diff -ruN a/public/gcsdk/msgprotobuf.h b/public/gcsdk/msgprotobuf.h
+--- a/public/gcsdk/msgprotobuf.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/gcsdk/msgprotobuf.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
 -//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
 +//====== Copyright ï¿½ 1996-2004, Valve Corporation, All rights reserved. =======
  //
  // Purpose: 
  //
-@@ -240,7 +240,7 @@ public:
+@@ -240,7 +240,7 @@
  
  	virtual CUtlString GetName() OVERRIDE
  	{ 
@@ -853,7 +1439,7 @@ index a69b0d0..608d326 100644
  	}
  
  private:
-@@ -376,8 +376,8 @@ public:
+@@ -376,8 +376,8 @@
  		VPROF_BUDGET( "CProtoBufMsg::CProtoBufMsg( MsgType_t, CSteamID, int32 )", VPROF_BUDGETGROUP_OTHER_NETWORKING );
  
  		m_pProtoBufBody = AllocProto();
@@ -864,11 +1450,10 @@ index a69b0d0..608d326 100644
  	}
  
  	// Constructor from an incoming netpacket
-diff --git a/public/materialsystem/imesh.h b/public/materialsystem/imesh.h
-index 3168572..8178949 100644
---- a/public/materialsystem/imesh.h
-+++ b/public/materialsystem/imesh.h
-@@ -1268,6 +1268,10 @@ inline void CVertexBuilder::FastVertex( const ModelVertexDX8_t &vertex )
+diff -ruN a/public/materialsystem/imesh.h b/public/materialsystem/imesh.h
+--- a/public/materialsystem/imesh.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/materialsystem/imesh.h	2026-11-02 19:22:40.765854264 +0000
+@@ -1268,6 +1268,10 @@
  
  			emms
  	}
@@ -879,7 +1464,7 @@ index 3168572..8178949 100644
  #elif defined(GNUC)
  	const void *pRead = &vertex;
  	void *pCurrPos = m_pCurrPosition;
-@@ -1324,6 +1328,10 @@ inline void CVertexBuilder::FastVertexSSE( const ModelVertexDX8_t &vertex )
+@@ -1324,6 +1328,10 @@
  		movntps [edi + 16], xmm1
  		movntps [edi + 32], xmm2
  	}
@@ -890,17 +1475,16 @@ index 3168572..8178949 100644
  #elif defined(GNUC)
  	const void *pRead = &vertex;
  	void *pCurrPos = m_pCurrPosition;
-diff --git a/public/mathlib/math_pfns.h b/public/mathlib/math_pfns.h
-index 85e3308..2cbaa69 100644
---- a/public/mathlib/math_pfns.h
-+++ b/public/mathlib/math_pfns.h
+diff -ruN a/public/mathlib/math_pfns.h b/public/mathlib/math_pfns.h
+--- a/public/mathlib/math_pfns.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/mathlib/math_pfns.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
 -//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
  //
-@@ -76,7 +76,7 @@ enum MatrixAxisType_t
+@@ -76,7 +76,7 @@
  #if !(defined( PLATFORM_PPC ) || defined(SPU))
  // If we are not PPC based or SPU based, then assumes it is SSE2. We should make this code cleaner.
  
@@ -909,11 +1493,10 @@ index 85e3308..2cbaa69 100644
  
  
  
-diff --git a/public/mathlib/mathlib.h b/public/mathlib/mathlib.h
-index 2fe0da2..9390bbf 100644
---- a/public/mathlib/mathlib.h
-+++ b/public/mathlib/mathlib.h
-@@ -532,6 +532,9 @@ void inline SinCos( float radians, float * RESTRICT sine, float * RESTRICT cosin
+diff -ruN a/public/mathlib/mathlib.h b/public/mathlib/mathlib.h
+--- a/public/mathlib/mathlib.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/mathlib/mathlib.h	2026-11-02 19:22:40.765854264 +0000
+@@ -532,6 +532,9 @@
  		fstp DWORD PTR [edx]
  		fstp DWORD PTR [eax]
  	}
@@ -923,7 +1506,7 @@ index 2fe0da2..9390bbf 100644
  #elif defined( GNUC )
  	register double __cosr, __sinr;
   	__asm __volatile__ ("fsincos" : "=t" (__cosr), "=u" (__sinr) : "0" (radians));
-@@ -1653,6 +1656,9 @@ inline float SimpleSplineRemapValClamped( float val, float A, float B, float C,
+@@ -1653,6 +1656,9 @@
  
  FORCEINLINE int RoundFloatToInt(float f)
  {
@@ -933,7 +1516,7 @@ index 2fe0da2..9390bbf 100644
  #if defined( _X360 )
  #ifdef Assert
  	Assert( IsFPUControlWordSet() );
-@@ -1681,9 +1687,7 @@ FORCEINLINE int RoundFloatToInt(float f)
+@@ -1681,9 +1687,7 @@
  		fistp nResult
  	}
  #elif GNUC
@@ -944,7 +1527,7 @@ index 2fe0da2..9390bbf 100644
  #else
  	nResult = static_cast<int>(f);
  #endif
-@@ -1693,6 +1697,9 @@ FORCEINLINE int RoundFloatToInt(float f)
+@@ -1693,6 +1697,9 @@
  
  FORCEINLINE unsigned char RoundFloatToByte(float f)
  {
@@ -954,7 +1537,7 @@ index 2fe0da2..9390bbf 100644
  #if defined( _X360 )
  #ifdef Assert
  	Assert( IsFPUControlWordSet() );
-@@ -1728,9 +1735,7 @@ FORCEINLINE unsigned char RoundFloatToByte(float f)
+@@ -1728,9 +1735,7 @@
  		fistp nResult
  	}
  #elif GNUC
@@ -965,7 +1548,7 @@ index 2fe0da2..9390bbf 100644
  #else
  	nResult = static_cast<unsigned int> (f) & 0xff;
  #endif
-@@ -1745,6 +1750,9 @@ FORCEINLINE unsigned char RoundFloatToByte(float f)
+@@ -1745,6 +1750,9 @@
  
  FORCEINLINE unsigned long RoundFloatToUnsignedLong(float f)
  {
@@ -975,7 +1558,7 @@ index 2fe0da2..9390bbf 100644
  #if defined( _X360 )
  #ifdef Assert
  	Assert( IsFPUControlWordSet() );
-@@ -1775,11 +1783,7 @@ FORCEINLINE unsigned long RoundFloatToUnsignedLong(float f)
+@@ -1775,11 +1783,7 @@
  	}
  	return *((unsigned long*)nResult);
  #elif defined( COMPILER_GCC )
@@ -988,7 +1571,7 @@ index 2fe0da2..9390bbf 100644
  #else
  	return static_cast<unsigned long>(f);
  #endif
-@@ -2807,7 +2811,7 @@ inline bool CloseEnough( const Vector &a, const Vector &b, float epsilon = EQUAL
+@@ -2807,7 +2811,7 @@
  // Fast compare
  // maxUlps is the maximum error in terms of Units in the Last Place. This 
  // specifies how big an error we are willing to accept in terms of the value
@@ -997,10 +1580,9 @@ index 2fe0da2..9390bbf 100644
  // representation. maxUlps can also be interpreted in terms of how many 
  // representable floats we are willing to accept between A and B. 
  // This function will allow maxUlps-1 floats between A and B.
-diff --git a/public/mathlib/ssemath.h b/public/mathlib/ssemath.h
-index 48f2e0b..2177f1a 100644
---- a/public/mathlib/ssemath.h
-+++ b/public/mathlib/ssemath.h
+diff -ruN a/public/mathlib/ssemath.h b/public/mathlib/ssemath.h
+--- a/public/mathlib/ssemath.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/mathlib/ssemath.h	2026-11-02 19:22:40.765854264 +0000
 @@ -12,9 +12,9 @@
  #include <vectormath/c/vectormath_aos.h>
  #include <vectormath/c/vectormath_aos_v.h>
@@ -1013,10 +1595,9 @@ index 48f2e0b..2177f1a 100644
  #endif
  #endif
  
-diff --git a/public/mathlib/ssemath_x86.h b/public/mathlib/ssemath_x86.h
-index 549fcaf..562b658 100644
---- a/public/mathlib/ssemath_x86.h
-+++ b/public/mathlib/ssemath_x86.h
+diff -ruN a/public/mathlib/ssemath_x86.h b/public/mathlib/ssemath_x86.h
+--- a/public/mathlib/ssemath_x86.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/mathlib/ssemath_x86.h	2026-11-02 19:22:40.765854264 +0000
 @@ -9,10 +9,9 @@
  #endif
  
@@ -1030,10 +1611,9 @@ index 549fcaf..562b658 100644
  #endif
   
  
-diff --git a/public/mathlib/vector.h b/public/mathlib/vector.h
-index 5da76e6..acb9c5b 100644
---- a/public/mathlib/vector.h
-+++ b/public/mathlib/vector.h
+diff -ruN a/public/mathlib/vector.h b/public/mathlib/vector.h
+--- a/public/mathlib/vector.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/mathlib/vector.h	2026-11-02 19:22:40.765854264 +0000
 @@ -28,7 +28,7 @@
  
  #ifndef PLATFORM_PPC // we want our linux with xmm support
@@ -1043,10 +1623,9 @@ index 5da76e6..acb9c5b 100644
  #endif
  
  #ifndef ALIGN16_POST
-diff --git a/public/mathlib/vector4d.h b/public/mathlib/vector4d.h
-index 9ea3c99..b07e2ca 100644
---- a/public/mathlib/vector4d.h
-+++ b/public/mathlib/vector4d.h
+diff -ruN a/public/mathlib/vector4d.h b/public/mathlib/vector4d.h
+--- a/public/mathlib/vector4d.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/mathlib/vector4d.h	2026-11-02 19:22:40.765854264 +0000
 @@ -16,7 +16,7 @@
  #include <math.h>
  #include <float.h>
@@ -1056,10 +1635,9 @@ index 9ea3c99..b07e2ca 100644
  #endif
  #include "tier0/basetypes.h"	// For vec_t, put this somewhere else?
  #include "tier0/dbg.h"
-diff --git a/public/tier0/hardware_clock_fast.h b/public/tier0/hardware_clock_fast.h
-index 6706877..ca275d4 100644
---- a/public/tier0/hardware_clock_fast.h
-+++ b/public/tier0/hardware_clock_fast.h
+diff -ruN a/public/tier0/hardware_clock_fast.h b/public/tier0/hardware_clock_fast.h
+--- a/public/tier0/hardware_clock_fast.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/tier0/hardware_clock_fast.h	2026-11-02 19:22:40.765854264 +0000
 @@ -8,7 +8,11 @@
  inline int GetHardwareClockFast( void )
  {
@@ -1072,11 +1650,10 @@ index 6706877..ca275d4 100644
  	return ( int ) nRet;
  }
  
-diff --git a/public/tier0/microprofiler.h b/public/tier0/microprofiler.h
-index 3f75c89..d476e39 100644
---- a/public/tier0/microprofiler.h
-+++ b/public/tier0/microprofiler.h
-@@ -30,7 +30,11 @@ PLATFORM_INTERFACE int64 GetHardwareClockReliably();
+diff -ruN a/public/tier0/microprofiler.h b/public/tier0/microprofiler.h
+--- a/public/tier0/microprofiler.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/tier0/microprofiler.h	2026-11-02 19:22:40.765854264 +0000
+@@ -30,7 +30,11 @@
  #if defined(_LINUX) || defined( OSX )
  inline unsigned long long GetTimebaseRegister( void )
  {
@@ -1089,11 +1666,10 @@ index 3f75c89..d476e39 100644
      unsigned long long Low, High;
      __asm__ __volatile__ ( "rdtsc" : "=a" (Low), "=d" (High) );
      return ( High << 32 ) | ( Low & 0xffffffff );
-diff --git a/public/tier0/platform.h b/public/tier0/platform.h
-index 05764bb..e76f2a7 100644
---- a/public/tier0/platform.h
-+++ b/public/tier0/platform.h
-@@ -699,20 +699,20 @@ typedef void * HINSTANCE;
+diff -ruN a/public/tier0/platform.h b/public/tier0/platform.h
+--- a/public/tier0/platform.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/tier0/platform.h	2026-11-02 19:22:40.765854264 +0000
+@@ -702,20 +702,20 @@
  	#define UINT32_MAX       0xffffffffui32
  	#define UINT64_MAX       0xffffffffffffffffui64
  #else // _MSC_VER
@@ -1101,24 +1677,26 @@ index 05764bb..e76f2a7 100644
 -	#define  INT16_MAX			SHRT_MAX
 -	#define  INT32_MAX			LONG_MAX
 -	#define  INT64_MAX			((int64)0x7fffffffffffffffll)
-+	#define  INT8_MAX			127
-+	#define  INT16_MAX			32767
-+	#define  INT32_MAX			2147483647
-+	#define  INT64_MAX			0x7fffffffffffffffLL
- 
+-
 -	#define  INT8_MIN			SCHAR_MIN
 -	#define  INT16_MIN			SHRT_MIN
 -	#define  INT32_MIN			LONG_MIN
 -	#define  INT64_MIN			(((int64)1) << 63)
-+	#define  INT8_MIN			(-128)
-+	#define  INT16_MIN			(-32768)
-+	#define  INT32_MIN			(-2147483648)
-+	#define  INT64_MIN			(-0x7fffffffffffffffLL - 1)
- 
+-
 -	#define  UINT8_MAX			((uint8)~0)
 -	#define  UINT16_MAX			((uint16)~0)
 -	#define  UINT32_MAX			((uint32)~0)
 -	#define  UINT64_MAX			((uint64)~0)
++	#define  INT8_MAX			127
++	#define  INT16_MAX			32767
++	#define  INT32_MAX			2147483647
++	#define  INT64_MAX			0x7fffffffffffffffLL
++
++	#define  INT8_MIN			(-128)
++	#define  INT16_MIN			(-32768)
++	#define  INT32_MIN			(-2147483648)
++	#define  INT64_MIN			(-0x7fffffffffffffffLL - 1)
++
 +	#define  UINT8_MAX			255
 +	#define  UINT16_MAX			65535
 +	#define  UINT32_MAX			4294967295U
@@ -1126,7 +1704,7 @@ index 05764bb..e76f2a7 100644
  #endif
  
  #define  UINT8_MIN			0
-@@ -732,7 +732,7 @@ typedef void * HINSTANCE;
+@@ -735,7 +735,7 @@
  #ifdef GNUC
  #undef offsetof
  // Note: can't use builtin offsetof because many use cases (esp. in templates) wouldn't compile due to restrictions on the builtin offsetof
@@ -1135,7 +1713,7 @@ index 05764bb..e76f2a7 100644
  #define offsetof(s,m)	( (size_t)&(((s *)0x1000000)->m) - 0x1000000u )
  #else
  #include <stddef.h>
-@@ -1133,7 +1133,11 @@ typedef void * HINSTANCE;
+@@ -1174,7 +1174,11 @@
  	#elif defined( OSX )
  		#define DebuggerBreak()  if ( Plat_IsInDebugSession() ) asm( "int3" ); else { raise(SIGTRAP); }
  	#elif defined( PLATFORM_CYGWIN ) || defined( PLATFORM_POSIX )
@@ -1148,7 +1726,7 @@ index 05764bb..e76f2a7 100644
  	#else
  		#define DebuggerBreak()	raise(SIGTRAP)
  	#endif
-@@ -1369,6 +1373,8 @@ typedef int socklen_t;
+@@ -1410,6 +1414,8 @@
  // C:/tmp/ccIN0aaa.s: Assembler messages:
  // C:/tmp/ccIN0aaa.s(80): Error: Unrecognized opcode: `fnstcw'
  // C:/tmp/ccIN0aaa.s(93): Error: Unrecognized opcode: `fldcw'
@@ -1157,7 +1735,7 @@ index 05764bb..e76f2a7 100644
  #else
  		__volatile unsigned short int __cw;
  		__asm __volatile ("fnstcw %0" : "=m" (__cw));
-@@ -1388,6 +1394,8 @@ typedef int socklen_t;
+@@ -1429,6 +1435,8 @@
  // C:/tmp/ccIN0aaa.s: Assembler messages:
  // C:/tmp/ccIN0aaa.s(80): Error: Unrecognized opcode: `fnstcw'
  // C:/tmp/ccIN0aaa.s(93): Error: Unrecognized opcode: `fldcw'
@@ -1166,7 +1744,7 @@ index 05764bb..e76f2a7 100644
  #else
  		__volatile unsigned short int __cw;
  		__asm __volatile ("fnstcw %0" : "=m" (__cw));
-@@ -1828,6 +1836,10 @@ inline uint64 Plat_Rdtsc()
+@@ -1869,6 +1877,10 @@
  	uint32 lo, hi;
  	__asm__ __volatile__ ( "rdtsc" : "=a" (lo), "=d" (hi));
  	return ( ( ( uint64 )hi ) << 32 ) | lo;
@@ -1177,11 +1755,10 @@ index 05764bb..e76f2a7 100644
  #else
  #error
  #endif
-diff --git a/public/tier0/threadtools.h b/public/tier0/threadtools.h
-index 895f2f7..145df99 100644
---- a/public/tier0/threadtools.h
-+++ b/public/tier0/threadtools.h
-@@ -235,7 +235,11 @@ inline void ThreadPause()
+diff -ruN a/public/tier0/threadtools.h b/public/tier0/threadtools.h
+--- a/public/tier0/threadtools.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/tier0/threadtools.h	2026-11-02 19:22:40.765854264 +0000
+@@ -264,7 +264,11 @@
  #if defined( COMPILER_PS3 )
  	__db16cyc();
  #elif defined( COMPILER_GCC )
@@ -1193,7 +1770,7 @@ index 895f2f7..145df99 100644
  #elif defined ( COMPILER_MSVC64 )
  	_mm_pause();
  #elif defined( COMPILER_MSVC32 )
-@@ -306,6 +310,9 @@ inline int32 ThreadInterlockedDecrement( int32 volatile *p )
+@@ -335,6 +339,9 @@
  inline int32 ThreadInterlockedExchange( int32 volatile *p, int32 value )
  {
  	Assert( (size_t)p % 4 == 0 );
@@ -1203,7 +1780,7 @@ index 895f2f7..145df99 100644
  	int32 nRet;
  
  	// Note: The LOCK instruction prefix is assumed on the XCHG instruction and GCC gets very confused on the Mac when we use it.
-@@ -315,6 +322,7 @@ inline int32 ThreadInterlockedExchange( int32 volatile *p, int32 value )
+@@ -344,6 +351,7 @@
  		: "r" (p), "0" (value)
  		: "memory");
  	return nRet;
@@ -1211,10 +1788,29 @@ index 895f2f7..145df99 100644
  }
  
  inline int32 ThreadInterlockedExchangeAdd( int32 volatile *p, int32 value )
-diff --git a/public/tier1/byteswap.h b/public/tier1/byteswap.h
-index f4e2ef5..bc42741 100644
---- a/public/tier1/byteswap.h
-+++ b/public/tier1/byteswap.h
+diff -ruN a/public/tier0/threadtools.inl b/public/tier0/threadtools.inl
+--- a/public/tier0/threadtools.inl	2026-08-10 03:28:37.000000000 +0000
++++ b/public/tier0/threadtools.inl	2026-11-02 19:26:33.395688348 +0000
+@@ -258,8 +258,15 @@
+ #ifdef _WIN32
+ 		return ThreadJoin( (ThreadHandle_t)m_hThread, timeout );
+ #elif defined(POSIX)
+-		bool ret = ThreadJoin(  (ThreadHandle_t)(m_threadId ? m_threadId : m_threadZombieId), timeout );
++		// csARM (bionic): pthread_join of an already-joined handle aborts the
++		// process. Consume both handle slots BEFORE joining so a second
++		// Join()/destructor call can never re-join the same pthread.
++		ThreadHandle_t hJoin = (ThreadHandle_t)(m_threadId ? m_threadId : m_threadZombieId);
++		m_threadId = 0;
+ 		m_threadZombieId = 0;
++		if ( !hJoin )
++			return true;
++		bool ret = ThreadJoin( hJoin, timeout );
+ 		return ret;
+ #endif
+ 	}
+diff -ruN a/public/tier1/byteswap.h b/public/tier1/byteswap.h
+--- a/public/tier1/byteswap.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/tier1/byteswap.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
 -//========= Copyright © 1996-2006, Valve LLC, All rights reserved. ============
 +//========= Copyright ï¿½ 1996-2006, Valve LLC, All rights reserved. ============
@@ -1238,10 +1834,9 @@ index f4e2ef5..bc42741 100644
  #include "tier0/dbg.h"
  #include "datamap.h"	// needed for typedescription_t.  note datamap.h is tier1 as well.
  
-diff --git a/public/tier1/tokenset.h b/public/tier1/tokenset.h
-index b05e346..dc1384c 100644
---- a/public/tier1/tokenset.h
-+++ b/public/tier1/tokenset.h
+diff -ruN a/public/tier1/tokenset.h b/public/tier1/tokenset.h
+--- a/public/tier1/tokenset.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/tier1/tokenset.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
 -//========= Copyright © 2008, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 2008, Valve Corporation, All rights reserved. ============//
@@ -1257,25 +1852,9 @@ index b05e346..dc1384c 100644
  //-----------------------------------------------------------------------------
  // 
  // This class is a handy way to match a series of values to stings and vice
-diff --git a/public/tier1/utlblockmemory.h b/public/tier1/utlblockmemory.h
-index 81ba5e5..78e13c5 100644
---- a/public/tier1/utlblockmemory.h
-+++ b/public/tier1/utlblockmemory.h
-@@ -137,8 +137,8 @@ void CUtlBlockMemory<T,I>::Swap( CUtlBlockMemory< T, I > &mem )
- {
- 	V_swap( m_pMemory, mem.m_pMemory );
- 	V_swap( m_nBlocks, mem.m_nBlocks );
--	V_swap( m_nIndexMask, mem.m_nIndexMask );
--	V_swap( m_nIndexShift, mem.m_nIndexShift );
-+	{ int a=m_nIndexMask, b=mem.m_nIndexMask; m_nIndexMask=b; mem.m_nIndexMask=a; }
-+	{ int a=m_nIndexShift, b=mem.m_nIndexShift; m_nIndexShift=b; mem.m_nIndexShift=a; }
- }
- 
- 
-diff --git a/thirdparty/SDL2/SDL_opengl.h b/thirdparty/SDL2/SDL_opengl.h
-index b48ea7a..c1cc250 100644
---- a/thirdparty/SDL2/SDL_opengl.h
-+++ b/thirdparty/SDL2/SDL_opengl.h
+diff -ruN a/thirdparty/SDL2/SDL_opengl.h b/thirdparty/SDL2/SDL_opengl.h
+--- a/thirdparty/SDL2/SDL_opengl.h	2026-11-02 19:30:41.374514794 +0000
++++ b/thirdparty/SDL2/SDL_opengl.h	2026-11-02 19:22:40.765854264 +0000
 @@ -25,7 +25,7 @@
   *  This is a simple file to encapsulate the OpenGL API headers.
   */
@@ -1285,11 +1864,94 @@ index b48ea7a..c1cc250 100644
  #define _SDL_opengl_h
  
  #include "SDL_config.h"
-diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h
-index b8581fa..25964d5 100644
---- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h
-+++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h
-@@ -176,6 +176,9 @@ GOOGLE_PROTOBUF_ATOMICOPS_ERROR
+diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc	2026-11-02 19:30:41.409514772 +0000
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/descriptor.cc	2026-11-02 19:26:33.395688348 +0000
+@@ -951,7 +951,13 @@
+   // any descriptor-based operations, since this might cause infinite recursion
+   // or deadlock.
+   InitGeneratedPoolOnce();
+-  GOOGLE_CHECK(generated_database_->Add(encoded_file_descriptor, size));
++  // csARM: one shared libprotobuf.so serves every module; each module's
++  // generated AddDescriptors() re-registers the same files.  Valve's
++  // per-DLL static protobuf never saw this Ã¢Â€Â” re-registration is a no-op.
++  if ( !generated_database_->Add( encoded_file_descriptor, size ) )
++  {
++    return;
++  }
+ }
+ 
+ 
+diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc	2026-11-02 19:30:41.410514772 +0000
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/extension_set.cc	2026-11-02 19:26:33.395688348 +0000
+@@ -80,11 +80,19 @@
+               int number, ExtensionInfo info) {
+   ::google::protobuf::GoogleOnceInit(&registry_init_, &InitRegistry);
+ 
++  // csARM: one shared libprotobuf.so serves every module; the same
++  // generated extension code embedded in engine, client and server
++  // registers identical (containing_type, number) pairs into the ONE
++  // global registry.  Valve links protobuf STATIC per-DLL so every DLL
++  // had a private registry and never met the duplicate.  GOOGLE_LOG(FATAL)
++  // here killed the boot at System.loadLibrary("client") with a clean
++  // exit(0) (run 41219950401: protobuf_AddDesc_steammessages ->
++  // ExtensionSet::RegisterExtension -> Register -> LogMessage::Finish ->
++  // exit(0)).  First module wins; later registrations are a no-op.
+   if (!InsertIfNotPresent(registry_, make_pair(containing_type, number),
+-                          info)) {
+-    GOOGLE_LOG(FATAL) << "Multiple extension registrations for type \""
+-               << containing_type->GetTypeName()
+-               << "\", field number " << number << ".";
++                          info))
++  {
++    return;
+   }
+ }
+ 
+diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc b/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc	2026-11-02 19:30:41.411514771 +0000
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/message.cc	2026-11-02 19:26:33.394688349 +0000
+@@ -276,8 +276,18 @@
+ 
+ void GeneratedMessageFactory::RegisterFile(
+     const char* file, RegistrationFunc* registration_func) {
+-  if (!InsertIfNotPresent(&file_map_, file, registration_func)) {
+-    GOOGLE_LOG(FATAL) << "File is already registered: " << file;
++  // csARM: one shared libprotobuf.so serves every module; engine, client
++  // and server each embed the same generated pb.cc and register the same
++  // files into the SINGLE factory singleton.  Valve links protobuf STATIC
++  // per-DLL so every DLL owned a private factory and never met the
++  // duplicate.  GOOGLE_LOG(FATAL) here killed the boot at
++  // System.loadLibrary("client") with a clean exit(0) (run 41215315729:
++  // protobuf_AddDesc_base_5fgcmessages -> protobuf_AddDesc_steammessages
++  // -> InternalRegisterGeneratedFile -> LogMessage::Finish -> exit(0)).
++  // First module wins; later registrations are a no-op.
++  if (!InsertIfNotPresent(&file_map_, file, registration_func))
++  {
++    return;
+   }
+ }
+ 
+@@ -291,8 +301,12 @@
+   // function during GetPrototype(), in which case we already have locked
+   // the mutex.
+   mutex_.AssertHeld();
+-  if (!InsertIfNotPresent(&type_map_, descriptor, prototype)) {
+-    GOOGLE_LOG(DFATAL) << "Type is already registered: " << descriptor->full_name();
++  // csARM: see RegisterFile above Ã¢Â€Â” duplicate type registration (shared
++  // libprotobuf.so, NDEBUG not defined so DFATAL == FATAL) must not kill
++  // the process; first module wins.
++  if (!InsertIfNotPresent(&type_map_, descriptor, prototype))
++  {
++    return;
+   }
+ }
+ 
+diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h	2026-11-02 19:30:41.412514770 +0000
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/atomicops.h	2026-11-02 19:22:40.766854263 +0000
+@@ -176,6 +176,9 @@
  #elif defined(__GNUC__)
  #if defined(GOOGLE_PROTOBUF_ARCH_IA32) || defined(GOOGLE_PROTOBUF_ARCH_X64)
  #include <google/protobuf/stubs/atomicops_internals_x86_gcc.h>
@@ -1299,10 +1961,9 @@ index b8581fa..25964d5 100644
  #elif defined(GOOGLE_PROTOBUF_ARCH_ARM)
  #include <google/protobuf/stubs/atomicops_internals_arm_gcc.h>
  #elif defined(GOOGLE_PROTOBUF_ARCH_ARM_QNX)
-diff --git a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h
-index b1df60e..3f3c346 100644
---- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h
-+++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h
+diff -ruN a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h
+--- a/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h	2026-11-02 19:30:41.413514770 +0000
++++ b/thirdparty/protobuf-2.5.0/src/google/protobuf/stubs/platform_macros.h	2026-11-02 19:22:40.766854263 +0000
 @@ -49,6 +49,10 @@
  #elif defined(__ARMEL__)
  #define GOOGLE_PROTOBUF_ARCH_ARM 1
@@ -1314,10 +1975,9 @@ index b1df60e..3f3c346 100644
  #elif defined(__MIPSEL__)
  #define GOOGLE_PROTOBUF_ARCH_MIPS 1
  #define GOOGLE_PROTOBUF_ARCH_32_BIT 1
-diff --git a/thirdparty/telemetry/include/radtypes.h b/thirdparty/telemetry/include/radtypes.h
-index c3eae3c..039dd08 100644
---- a/thirdparty/telemetry/include/radtypes.h
-+++ b/thirdparty/telemetry/include/radtypes.h
+diff -ruN a/thirdparty/telemetry/include/radtypes.h b/thirdparty/telemetry/include/radtypes.h
+--- a/thirdparty/telemetry/include/radtypes.h	2026-11-02 19:30:41.430514759 +0000
++++ b/thirdparty/telemetry/include/radtypes.h	2026-11-02 19:22:40.766854263 +0000
 @@ -171,7 +171,7 @@
  
  #define __RAD32__ // we have no non-at-least-32-bit cpus any more
@@ -1327,11 +1987,10 @@ index c3eae3c..039dd08 100644
    #define __RADARM__ 1
    #define __RADDETECTEDPROC__ __RADARM__
    #define __RADLITTLEENDIAN__
-diff --git a/tier0/cpu.cpp b/tier0/cpu.cpp
-index a38f284..b8804a4 100644
---- a/tier0/cpu.cpp
-+++ b/tier0/cpu.cpp
-@@ -45,7 +45,7 @@ struct CpuIdResult_t
+diff -ruN a/tier0/cpu.cpp b/tier0/cpu.cpp
+--- a/tier0/cpu.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/tier0/cpu.cpp	2026-11-02 19:22:40.766854263 +0000
+@@ -45,7 +45,7 @@
  
  static bool cpuid( unsigned long function, CpuIdResult_t &out )
  {
@@ -1340,7 +1999,7 @@ index a38f284..b8804a4 100644
  	return false;
  #elif defined(GNUC)
  	unsigned long out_eax,out_ebx,out_ecx,out_edx;
-@@ -124,7 +124,7 @@ static bool cpuid( unsigned long function, CpuIdResult_t &out )
+@@ -124,7 +124,7 @@
  
  static bool cpuidex( unsigned long function, unsigned long subfunction, CpuIdResult_t &out )
  {
@@ -1349,7 +2008,7 @@ index a38f284..b8804a4 100644
  	return false;
  #elif defined(GNUC)
  	unsigned long out_eax, out_ebx, out_ecx, out_edx;
-@@ -277,7 +277,7 @@ static bool CheckSSETechnology(void)
+@@ -277,7 +277,7 @@
  
  static bool CheckSSE2Technology(void)
  {
@@ -1358,7 +2017,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
      return ( cpuid( 1 ).edx & 0x04000000 ) != 0;
-@@ -286,7 +286,7 @@ static bool CheckSSE2Technology(void)
+@@ -286,7 +286,7 @@
  
  bool CheckSSE3Technology(void)
  {
@@ -1367,7 +2026,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
  	return ( cpuid( 1 ).ecx & 0x00000001 ) != 0;	// bit 1 of ECX
-@@ -295,7 +295,7 @@ bool CheckSSE3Technology(void)
+@@ -295,7 +295,7 @@
  
  bool CheckSSSE3Technology(void)
  {
@@ -1376,7 +2035,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
  	// SSSE 3 is implemented by both Intel and AMD
-@@ -306,7 +306,7 @@ bool CheckSSSE3Technology(void)
+@@ -306,7 +306,7 @@
  
  bool CheckSSE41Technology(void)
  {
@@ -1385,7 +2044,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
  	// SSE 4.1 is implemented by both Intel and AMD
-@@ -318,7 +318,7 @@ bool CheckSSE41Technology(void)
+@@ -318,7 +318,7 @@
  
  bool CheckSSE42Technology(void)
  {
@@ -1394,7 +2053,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
  	// SSE4.2 is an Intel-only feature
-@@ -334,7 +334,7 @@ bool CheckSSE42Technology(void)
+@@ -334,7 +334,7 @@
  
  bool CheckSSE4aTechnology( void )
  {
@@ -1403,7 +2062,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
  	// SSE 4a is an AMD-only feature
-@@ -350,7 +350,7 @@ bool CheckSSE4aTechnology( void )
+@@ -350,7 +350,7 @@
  
  static bool Check3DNowTechnology(void)
  {
@@ -1412,7 +2071,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
  	if ( cpuid( 0x80000000 ).eax > 0x80000000L )
-@@ -363,7 +363,7 @@ static bool Check3DNowTechnology(void)
+@@ -363,7 +363,7 @@
  
  static bool CheckCMOVTechnology()
  {
@@ -1421,7 +2080,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
  	return ( cpuid( 1 ).edx & ( 1 << 15 ) ) != 0;
-@@ -372,7 +372,7 @@ static bool CheckCMOVTechnology()
+@@ -372,7 +372,7 @@
  
  static bool CheckFCMOVTechnology(void)
  {
@@ -1430,7 +2089,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
  	return ( cpuid( 1 ).edx & ( 1 << 16 ) ) != 0;
-@@ -381,7 +381,7 @@ static bool CheckFCMOVTechnology(void)
+@@ -381,7 +381,7 @@
  
  static bool CheckRDTSCTechnology(void)
  {
@@ -1439,7 +2098,7 @@ index a38f284..b8804a4 100644
  	return false;
  #else
  	return ( cpuid( 1 ).edx & 0x10 ) != 0;
-@@ -920,6 +920,21 @@ const CPUInformation& GetCPUInformation()
+@@ -923,6 +923,21 @@
  			pi.m_nL2CacheSizeKb = ( cpuid( 0x80000006 ).ecx >> 16 );
  		}
  	}
@@ -1461,10 +2120,9 @@ index a38f284..b8804a4 100644
  	return pi;
  }
  
-diff --git a/tier0/cpu_posix.cpp b/tier0/cpu_posix.cpp
-index ba7ac80..5802725 100644
---- a/tier0/cpu_posix.cpp
-+++ b/tier0/cpu_posix.cpp
+diff -ruN a/tier0/cpu_posix.cpp b/tier0/cpu_posix.cpp
+--- a/tier0/cpu_posix.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/tier0/cpu_posix.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -7,7 +7,9 @@
  #include <stdio.h>
  #include <stdlib.h>
@@ -1475,23 +2133,9 @@ index ba7ac80..5802725 100644
  #include <sys/time.h>
  #include <unistd.h>
  #include <tier0/platform.h>
-diff --git a/tier1/fileio.cpp b/tier1/fileio.cpp
-index ebf8a32..ba2116d 100644
---- a/tier1/fileio.cpp
-+++ b/tier1/fileio.cpp
-@@ -51,7 +51,7 @@
- #include <sys/statvfs.h>
- #endif
- #include <sched.h>
--#define int64 int64_t
-+// [port] removed: int64 comes from platform.h (LP64 conflict)
- 
- // On OSX the native API file offset is always 64-bit
- // and things like stat64 are deprecated.
-diff --git a/tier1/pathmatch.cpp b/tier1/pathmatch.cpp
-index 9746841..e3e5e9b 100644
---- a/tier1/pathmatch.cpp
-+++ b/tier1/pathmatch.cpp
+diff -ruN a/tier1/pathmatch.cpp b/tier1/pathmatch.cpp
+--- a/tier1/pathmatch.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/tier1/pathmatch.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -66,7 +66,11 @@
  
  static bool s_bShowDiag;
@@ -1504,10 +2148,9 @@ index 9746841..e3e5e9b 100644
  #define _COMPILE_TIME_ASSERT(pred) switch(0){case 0:case pred:;}
  
  #define WRAP( fn, ret, ... ) \
-diff --git a/tier1/processor_detect_linux.cpp b/tier1/processor_detect_linux.cpp
-index 0421b7e..6866441 100644
---- a/tier1/processor_detect_linux.cpp
-+++ b/tier1/processor_detect_linux.cpp
+diff -ruN a/tier1/processor_detect_linux.cpp b/tier1/processor_detect_linux.cpp
+--- a/tier1/processor_detect_linux.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/tier1/processor_detect_linux.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -1,4 +1,4 @@
 -//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
@@ -1524,7 +2167,7 @@ index 0421b7e..6866441 100644
  #if defined(PLATFORM_64BITS)
  	asm("mov %%rbx, %%rsi\n\t"
  		"cpuid\n\t"
-@@ -39,6 +42,7 @@ static void cpuid(uint32 function, uint32& out_eax, uint32& out_ebx, uint32& out
+@@ -39,6 +42,7 @@
  		: "a" (function) 
  	);
  #endif
@@ -1532,10 +2175,9 @@ index 0421b7e..6866441 100644
  }
  
  bool CheckMMXTechnology(void)
-diff --git a/tier1/strtools.cpp b/tier1/strtools.cpp
-index b017d89..9ff735d 100644
---- a/tier1/strtools.cpp
-+++ b/tier1/strtools.cpp
+diff -ruN a/tier1/strtools.cpp b/tier1/strtools.cpp
+--- a/tier1/strtools.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/tier1/strtools.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -56,7 +56,11 @@
  #ifdef POSIX
  
@@ -1548,7 +2190,7 @@ index b017d89..9ff735d 100644
  #endif // _PS3
  
  #include <ctype.h>
-@@ -1405,23 +1409,12 @@ int _V_UCS2ToUnicode( const ucs2 *pUCS2, wchar_t *pUnicode, int cubDestSizeInByt
+@@ -1405,23 +1409,12 @@
  #ifdef _WIN32
  	int cchResult = V_wcslen( pUCS2 );
  	V_memcpy( pUnicode, pUCS2, cubDestSizeInBytes );
@@ -1577,7 +2219,7 @@ index b017d89..9ff735d 100644
  #endif
  	pUnicode[(cubDestSizeInBytes / sizeof(wchar_t)) - 1] = 0;
  	return cchResult;	
-@@ -1448,6 +1441,8 @@ int _V_UnicodeToUCS2( const wchar_t *pUnicode, int cubSrcInBytes, char *pUCS2, i
+@@ -1448,6 +1441,8 @@
  	// Make sure we NULL-terminate.
  	pDest[ cchResult - 1 ] = 0;
  
@@ -1586,7 +2228,7 @@ index b017d89..9ff735d 100644
  #elif defined (POSIX)
  	iconv_t conv_t = iconv_open( "UCS-2LE", "UTF-32LE" );
  	size_t cchResult = -1;
-@@ -1455,7 +1450,7 @@ int _V_UnicodeToUCS2( const wchar_t *pUnicode, int cubSrcInBytes, char *pUCS2, i
+@@ -1455,7 +1450,7 @@
  	size_t nMaxUCS2 = cubDestSizeInBytes;
  	char *pIn = (char*)pUnicode;
  	char *pOut = pUCS2;
@@ -1595,7 +2237,7 @@ index b017d89..9ff735d 100644
  	{
  		cchResult = 0;
  		cchResult = iconv( conv_t, &pIn, &nLenUnicde, &pOut, &nMaxUCS2 );
-@@ -1481,6 +1476,8 @@ int _V_UCS2ToUTF8( const ucs2 *pUCS2, char *pUTF8, int cubDestSizeInBytes )
+@@ -1481,6 +1476,8 @@
  #ifdef _WIN32
  	// under win32 wchar_t == ucs2, sigh
  	int cchResult = WideCharToMultiByte( CP_UTF8, 0, pUCS2, -1, pUTF8, cubDestSizeInBytes, NULL, NULL );
@@ -1604,7 +2246,7 @@ index b017d89..9ff735d 100644
  #elif defined(POSIX)
  	iconv_t conv_t = iconv_open( "UTF-8", "UCS-2LE" );
  	size_t cchResult = -1;
-@@ -1488,7 +1485,7 @@ int _V_UCS2ToUTF8( const ucs2 *pUCS2, char *pUTF8, int cubDestSizeInBytes )
+@@ -1488,7 +1485,7 @@
  	size_t nMaxUTF8 = cubDestSizeInBytes;
  	char *pIn = (char *)pUCS2;
  	char *pOut = (char *)pUTF8;
@@ -1613,7 +2255,7 @@ index b017d89..9ff735d 100644
  	{
  		cchResult = 0;
  		cchResult = iconv( conv_t, &pIn, &nLenUnicde, &pOut, &nMaxUTF8 );
-@@ -1517,6 +1514,8 @@ int _V_UTF8ToUCS2( const char *pUTF8, int cubSrcInBytes, ucs2 *pUCS2, int cubDes
+@@ -1517,6 +1514,8 @@
  #elif defined( _PS3 ) // bugbug JLB
  	int cchResult = 0;
  	Assert( 0 );
@@ -1622,7 +2264,7 @@ index b017d89..9ff735d 100644
  #elif defined(POSIX)
  	iconv_t conv_t = iconv_open( "UCS-2LE", "UTF-8" );
  	size_t cchResult = -1;
-@@ -1524,7 +1523,7 @@ int _V_UTF8ToUCS2( const char *pUTF8, int cubSrcInBytes, ucs2 *pUCS2, int cubDes
+@@ -1524,7 +1523,7 @@
  	size_t nMaxUTF8 = cubDestSizeInBytes;
  	char *pIn = (char *)pUTF8;
  	char *pOut = (char *)pUCS2;
@@ -1631,17 +2273,48 @@ index b017d89..9ff735d 100644
  	{
  		cchResult = 0;
  		cchResult = iconv( conv_t, &pIn, &nLenUnicde, &pOut, &nMaxUTF8 );
-diff --git a/utils/common/bsplib.cpp b/utils/common/bsplib.cpp
-index 7888342..482a445 100644
---- a/utils/common/bsplib.cpp
-+++ b/utils/common/bsplib.cpp
+diff -ruN a/tier2/resourceprecacher.cpp b/tier2/resourceprecacher.cpp
+--- a/tier2/resourceprecacher.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/tier2/resourceprecacher.cpp	2026-11-02 19:27:11.956663648 +0000
+@@ -15,6 +15,13 @@
+ //-----------------------------------------------------------------------------
+ void CBaseResourcePrecacher::RegisterAll()
+ {
++	// csARM: the libtier2.so-resident copy of this function reads libtier2's
++	// own g_pPrecacheSystem, which is never filled (libtier2 is not an app
++	// system; nothing calls ConnectInterfaces inside it).  Every real module
++	// carries a local RegisterAll via the link.sh tier-connect hand-out; this
++	// guard only keeps the remote-binding path inert instead of SIGSEGV.
++	if ( !g_pPrecacheSystem )
++		return;
+ 	for ( int iSystem = 0; iSystem < PRECACHE_SYSTEM_COUNT; iSystem++ )
+ 	{
+ 		g_pPrecacheSystem->Register( sm_pFirst[iSystem], (PrecacheSystem_t) iSystem );
+diff -ruN a/tier2/schemaclassbinding.cpp b/tier2/schemaclassbinding.cpp
+--- a/tier2/schemaclassbinding.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/tier2/schemaclassbinding.cpp	2026-11-02 19:27:11.956663648 +0000
+@@ -17,6 +17,11 @@
+ 
+ void CSchemaClassBindingBase::Install()
+ {
++	// csARM: same per-.so registry-copy rationale as CBaseResourcePrecacher::
++	// RegisterAll (see patches/extras/csarm_tier2_connect.diff header).  The
++	// libtier2.so copy of g_pResourceSystem is never filled; guard it.
++	if ( !g_pResourceSystem )
++		return;
+ 	for ( CSchemaClassBindingBase *pBinding = sm_pClassBindingList; pBinding; pBinding = pBinding->m_pNextBinding )
+ 	{
+ 		g_pResourceSystem->InstallSchemaClassBinding( pBinding );
+diff -ruN a/utils/common/bsplib.cpp b/utils/common/bsplib.cpp
+--- a/utils/common/bsplib.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/utils/common/bsplib.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -1,4 +1,4 @@
 -//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 +//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
  //
  // Purpose: 
  //
-@@ -789,7 +789,7 @@ CUtlVector<ddispinfo_t> g_dispinfo;
+@@ -812,7 +812,7 @@
  CUtlVector<CDispVert> g_DispVerts;
  CUtlVector<CDispTri> g_DispTris;
  CUtlVector<CDispMultiBlend> g_DispMultiBlend;
@@ -1650,7 +2323,7 @@ index 7888342..482a445 100644
  
  int         numorigfaces;
  dface_t     dorigfaces[MAX_MAP_FACES];
-@@ -2261,6 +2261,17 @@ void CopyLump( int fieldType, int lump, CUtlVector<T> &dest, int forceVersion =
+@@ -2344,6 +2344,17 @@
  	CopyLumpInternal( fieldType, lump, dest.Base(), forceVersion );
  }
  
@@ -1668,7 +2341,7 @@ index 7888342..482a445 100644
  template< class T >
  void CopyOptionalLump( int fieldType, int lump, CUtlVector<T> &dest, int forceVersion = -1 )
  {
-@@ -2336,6 +2347,13 @@ void CopyLump( int lump, CUtlVector<T> &dest, int forceVersion = -1 )
+@@ -2419,6 +2430,13 @@
  	CopyLumpInternal( lump, dest.Base(), forceVersion );
  }
  
@@ -1682,24 +2355,23 @@ index 7888342..482a445 100644
  template< class T >
  void CopyOptionalLump( int lump, CUtlVector<T> &dest, int forceVersion = -1 )
  {
-@@ -3075,6 +3093,12 @@ static void AddLump( int lumpnum, CUtlVector<T> &data, int version, int nAlignme
+@@ -3162,6 +3180,12 @@
+ {
  	AddLumpInternal( lumpnum, data.Base(), data.Count() * sizeof(T), version, nAlignment );
  }
- 
++
 +template< class T, class A >
 +static void AddLump( int lumpnum, CUtlVector<T, A> &data, int version = 0, int nAlignment = 1 )
 +{
 +	AddLumpInternal( lumpnum, data.Base(), data.Count() * sizeof(T), version, nAlignment );
 +}
-+
+ 
  /*
  =============
- WriteBSPFile
-diff --git a/utils/common/cmdlib.cpp b/utils/common/cmdlib.cpp
-index ac6fcc5..f1b306a 100644
---- a/utils/common/cmdlib.cpp
-+++ b/utils/common/cmdlib.cpp
-@@ -518,7 +518,7 @@ static void CmdLib_getwd( char *out, int outSize )
+diff -ruN a/utils/common/cmdlib.cpp b/utils/common/cmdlib.cpp
+--- a/utils/common/cmdlib.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/utils/common/cmdlib.cpp	2026-11-02 19:22:40.766854263 +0000
+@@ -518,7 +518,7 @@
  	_getcwd( out, outSize );
  	Q_strncat( out, "\\", outSize, COPY_ALL_CHARACTERS );
  #else
@@ -1708,10 +2380,21 @@ index ac6fcc5..f1b306a 100644
  	strcat( out, "/" );
  #endif
  	Q_FixSlashes( out );
-diff --git a/vguimatsurface/MatSystemSurface.cpp b/vguimatsurface/MatSystemSurface.cpp
-index 80fdef8..f3f5ba2 100644
---- a/vguimatsurface/MatSystemSurface.cpp
-+++ b/vguimatsurface/MatSystemSurface.cpp
+diff -ruN a/vgui2/vgui_surfacelib/linuxfont.cpp b/vgui2/vgui_surfacelib/linuxfont.cpp
+--- a/vgui2/vgui_surfacelib/linuxfont.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/vgui2/vgui_surfacelib/linuxfont.cpp	2026-11-02 19:22:40.767854262 +0000
+@@ -194,7 +194,7 @@
+                 fcvalue.u.s = (FcChar8*) value;
+                 break;
+             case FcTypeInteger:
+-                fcvalue.u.i = (int) value;
++                fcvalue.u.i = (int)(intptr_t) value;
+                 break;
+             default:
+                 Assert(!"FontMatch unhandled type");
+diff -ruN a/vguimatsurface/MatSystemSurface.cpp b/vguimatsurface/MatSystemSurface.cpp
+--- a/vguimatsurface/MatSystemSurface.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/vguimatsurface/MatSystemSurface.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -18,8 +18,14 @@
  #include <Carbon/Carbon.h>
  #endif
@@ -1727,10 +2410,25 @@ index 80fdef8..f3f5ba2 100644
  
  #if defined( USE_SDL ) || defined(OSX) 
  #include <appframework/ilaunchermgr.h>
-diff --git a/vstdlib/vstrtools.cpp b/vstdlib/vstrtools.cpp
-index fb69147..382632d 100644
---- a/vstdlib/vstrtools.cpp
-+++ b/vstdlib/vstrtools.cpp
+diff -ruN a/vstdlib/jobthread.cpp b/vstdlib/jobthread.cpp
+--- a/vstdlib/jobthread.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/vstdlib/jobthread.cpp	2026-11-02 19:26:33.395688348 +0000
+@@ -1239,7 +1239,11 @@
+ 	{
+ 		if ( arrHandles[i] )
+ 		{
+-			ThreadJoin( arrHandles[i] );
++			// csARM (bionic): joining the raw handle leaves the CThread zombie
++			// bookkeeping set; the destructor then joins the SAME pthread a
++			// second time and bionic aborts ("invalid pthread_t"). The object
++			// Join() consumes its handle slots, so the destructor is a no-op.
++			m_Threads[i]->Join();
+ 
+ #ifdef WIN32
+ 			Assert( !m_Threads[i]->GetThreadHandle() );
+diff -ruN a/vstdlib/vstrtools.cpp b/vstdlib/vstrtools.cpp
+--- a/vstdlib/vstrtools.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/vstdlib/vstrtools.cpp	2026-11-02 19:22:40.767854262 +0000
 @@ -6,7 +6,7 @@
  #include <windows.h>
  #endif
@@ -1740,7 +2438,7 @@ index fb69147..382632d 100644
  #endif
  
  #ifdef _PS3
-@@ -51,23 +51,34 @@ int V_UTF8ToUnicode( const char *pUTF8, wchar_t *pwchDest, int cubDestSizeInByte
+@@ -51,23 +51,34 @@
  	L10nResult result = UTF8stoUCS2s( ( const uint8 *) pUTF8, &cchSrc, ( uint16 * ) pwchDest, &cchResult );
  	Assert( result == ConversionOK );
  	cchResult *= sizeof( uint16 );
@@ -1791,7 +2489,7 @@ index fb69147..382632d 100644
  	}
  #endif
  	pwchDest[(cubDestSizeInBytes / sizeof(wchar_t)) - 1] = 0;
-@@ -93,24 +104,39 @@ int V_UnicodeToUTF8( const wchar_t *pUnicode, char *pUTF8, int cubDestSizeInByte
+@@ -93,24 +104,39 @@
  	size_t cchResult = cubDestSizeInBytes, cchSrc = V_wcslen( pUnicode ) + 1;
  	L10nResult result = UCS2stoUTF8s( ( const uint16 *) pUnicode, &cchSrc, ( uint8 * ) pUTF8, &cchResult );
  	Assert( result == ConversionOK );
@@ -1844,7 +2542,7 @@ index fb69147..382632d 100644
  	}
  #endif
  
-@@ -136,23 +162,10 @@ int V_UCS2ToUnicode( const ucs2 *pUCS2, wchar_t *pUnicode, int cubDestSizeInByte
+@@ -136,23 +162,10 @@
  	int lenUCS2 = V_wcslen( pUCS2 );
  	int cchResult = MIN( (lenUCS2+1)*( int )sizeof(ucs2), cubDestSizeInBytes );
  	V_wcsncpy( (wchar_t*)pUCS2, pUnicode, cchResult );
@@ -1871,7 +2569,7 @@ index fb69147..382632d 100644
  #endif
  	pUnicode[(cubDestSizeInBytes / sizeof(wchar_t)) - 1] = 0;
  	return cchResult;	
-@@ -169,23 +182,10 @@ int V_UnicodeToUCS2( const wchar_t *pUnicode, int cubSrcInBytes, char *pUCS2, in
+@@ -169,23 +182,10 @@
  #if defined( _WIN32 ) || defined( _PS3 )
  	int cchResult = MIN( cubSrcInBytes, cubDestSizeInBytes );
  	V_wcsncpy( (wchar_t*)pUCS2, pUnicode, cchResult );
@@ -1898,7 +2596,7 @@ index fb69147..382632d 100644
  #endif
  	return cchResult;	
  }
-@@ -213,23 +213,10 @@ VSTRTOOLS_INTERFACE int V_UCS2ToUTF8( const ucs2 *pUCS2, char *pUTF8, int cubDes
+@@ -213,23 +213,10 @@
  	size_t cchResult = cubDestSizeInBytes, cchSrc = V_wcslen( pUCS2 ) + 1;
  	L10nResult result = UCS2stoUTF8s( ( const uint16 *) pUCS2, &cchSrc, ( uint8 * ) pUTF8, &cchResult );
  	Assert( result == ConversionOK );
@@ -1925,7 +2623,7 @@ index fb69147..382632d 100644
  #endif
  	pUTF8[cubDestSizeInBytes - 1] = '\0';
  	return cchResult;	
-@@ -253,24 +240,10 @@ VSTRTOOLS_INTERFACE int V_UTF8ToUCS2( const char *pUTF8, int cubSrcInBytes, ucs2
+@@ -253,24 +240,10 @@
  	L10nResult result = UTF8stoUCS2s( ( const uint8 *) pUTF8, &cchSrc, ( uint16 * ) pUCS2, &cchResult );
  	Assert( result == ConversionOK );
  	cchResult *= sizeof( uint16 );
@@ -1953,165 +2651,3 @@ index fb69147..382632d 100644
  #endif
  	pUCS2[ (cubDestSizeInBytes/sizeof(ucs2)) - 1] = 0;
  	return cchResult;	
-diff --git a/vgui2/vgui_surfacelib/linuxfont.cpp b/vgui2/vgui_surfacelib/linuxfont.cpp
---- a/vgui2/vgui_surfacelib/linuxfont.cpp
-+++ b/vgui2/vgui_surfacelib/linuxfont.cpp
-@@ -194,7 +194,7 @@
-                 fcvalue.u.s = (FcChar8*) value;
-                 break;
-             case FcTypeInteger:
--                fcvalue.u.i = (int) value;
-+                fcvalue.u.i = (int)(intptr_t) value;
-                 break;
-             default:
-                 Assert(!"FontMatch unhandled type");
-diff --git a/external/crypto++-5.61/algebra.cpp b/external/crypto++-5.61/algebra.cpp
-index 78c3947..b8818e6 100644
---- a/external/crypto++-5.61/algebra.cpp
-+++ b/external/crypto++-5.61/algebra.cpp
-@@ -58,7 +58,7 @@ template <class T> const T& AbstractEuclideanDomain<T>::Gcd(const Element &a, co
- 	Element g[3]={b, a};
- 	unsigned int i0=0, i1=1, i2=2;
- 
--	while (!Equal(g[i1], this->Identity()))
-+	while (!this->Equal(g[i1], this->Identity()))
- 	{
- 		g[i2] = Mod(g[i0], g[i1]);
- 		unsigned int t = i0; i0 = i1; i1 = i2; i2 = t;
-diff --git a/external/crypto++-5.61/eccrypto.h b/external/crypto++-5.61/eccrypto.h
-index b359e03..ebe3f07 100644
---- a/external/crypto++-5.61/eccrypto.h
-+++ b/external/crypto++-5.61/eccrypto.h
-@@ -43,7 +43,7 @@ public:
- 	void Initialize(const EllipticCurve &ec, const Point &G, const Integer &n, const Integer &k = Integer::Zero())
- 	{
- 		this->m_groupPrecomputation.SetCurve(ec);
--		SetSubgroupGenerator(G);
-+		this->SetSubgroupGenerator(G);
- 		m_n = n;
- 		m_k = k;
- 	}
-diff --git a/external/crypto++-5.61/eccrypto.cpp b/external/crypto++-5.61/eccrypto.cpp
-index fd8462f..058c509 100644
---- a/external/crypto++-5.61/eccrypto.cpp
-+++ b/external/crypto++-5.61/eccrypto.cpp
-@@ -435,7 +435,7 @@ template <class EC> void DL_GroupParameters_EC<EC>::Initialize(const OID &oid)
- 	StringSource ssG(param.g, true, new HexDecoder);
- 	Element G;
- 	bool result = GetCurve().DecodePoint(G, ssG, (size_t)ssG.MaxRetrievable());
--	SetSubgroupGenerator(G);
-+	this->SetSubgroupGenerator(G);
- 	assert(result);
- 
- 	StringSource ssN(param.n, true, new HexDecoder);
-diff --git a/external/crypto++-5.61/panama.cpp b/external/crypto++-5.61/panama.cpp
-index 09b1708..a1a37d6 100644
---- a/external/crypto++-5.61/panama.cpp
-+++ b/external/crypto++-5.61/panama.cpp
-@@ -422,7 +422,7 @@ void PanamaHash<B>::TruncatedFinal(byte *hash, size_t size)
- {
- 	this->ThrowIfInvalidTruncatedSize(size);
- 
--	PadLastBlock(this->BLOCKSIZE, 0x01);
-+	this->PadLastBlock(this->BLOCKSIZE, 0x01);
- 	
- 	HashEndianCorrectedBlock(this->m_data);
- 
-diff --git a/external/crypto++-5.61/eccrypto.cpp b/external/crypto++-5.61/eccrypto.cpp
-index fd8462f..0537614 100644
---- a/external/crypto++-5.61/eccrypto.cpp
-+++ b/external/crypto++-5.61/eccrypto.cpp
-@@ -591,7 +591,7 @@ bool DL_GroupParameters_EC<EC>::ValidateElement(unsigned int level, const Elemen
- 	if (level >= 2 && pass)
- 	{
- 		const Integer &q = GetSubgroupOrder();
--		Element gq = gpc ? gpc->Exponentiate(this->GetGroupPrecomputation(), q) : ExponentiateElement(g, q);
-+		Element gq = gpc ? gpc->Exponentiate(this->GetGroupPrecomputation(), q) : this->ExponentiateElement(g, q);
- 		pass = pass && IsIdentity(gq);
- 	}
- 	return pass;
-@@ -629,7 +629,7 @@ void DL_PublicKey_EC<EC>::BERDecodePublicKey(BufferedTransformation &bt, bool pa
- 	typename EC::Point P;
- 	if (!this->GetGroupParameters().GetCurve().DecodePoint(P, bt, size))
- 		BERDecodeError();
--	SetPublicElement(P);
-+	this->SetPublicElement(P);
- }
- 
- template <class EC>
-diff --git a/external/crypto++-5.61/eccrypto.h b/external/crypto++-5.61/eccrypto.h
-index b359e03..536fb04 100644
---- a/external/crypto++-5.61/eccrypto.h
-+++ b/external/crypto++-5.61/eccrypto.h
-@@ -145,9 +145,9 @@ public:
- 	typedef typename EC::Point Element;
- 
- 	void Initialize(const DL_GroupParameters_EC<EC> &params, const Element &Q)
--		{this->AccessGroupParameters() = params; SetPublicElement(Q);}
-+		{this->AccessGroupParameters() = params; this->SetPublicElement(Q);}
- 	void Initialize(const EC &ec, const Element &G, const Integer &n, const Element &Q)
--		{this->AccessGroupParameters().Initialize(ec, G, n); SetPublicElement(Q);}
-+		{this->AccessGroupParameters().Initialize(ec, G, n); this->SetPublicElement(Q);}
- 
- 	// X509PublicKey
- 	void BERDecodePublicKey(BufferedTransformation &bt, bool parametersPresent, size_t size);
-diff --git a/external/crypto++-5.61/eccrypto.h b/external/crypto++-5.61/eccrypto.h
-index b359e03..8d7f70f 100644
---- a/external/crypto++-5.61/eccrypto.h
-+++ b/external/crypto++-5.61/eccrypto.h
-@@ -166,9 +166,9 @@ public:
- 	void Initialize(const EC &ec, const Element &G, const Integer &n, const Integer &x)
- 		{this->AccessGroupParameters().Initialize(ec, G, n); this->SetPrivateExponent(x);}
- 	void Initialize(RandomNumberGenerator &rng, const DL_GroupParameters_EC<EC> &params)
--		{GenerateRandom(rng, params);}
-+		{this->GenerateRandom(rng, params);}
- 	void Initialize(RandomNumberGenerator &rng, const EC &ec, const Element &G, const Integer &n)
--		{GenerateRandom(rng, DL_GroupParameters_EC<EC>(ec, G, n));}
-+		{this->GenerateRandom(rng, DL_GroupParameters_EC<EC>(ec, G, n));}
- 
- 	// PKCS8PrivateKey
- 	void BERDecodePrivateKey(BufferedTransformation &bt, bool parametersPresent, size_t size);
---- a/appframework/posixapp.cpp
-+++ b/appframework/posixapp.cpp
-@@ -102,7 +102,18 @@
- 		return false;
- 
- 	// Add in the cvar factory
-+#ifdef __ANDROID__
-+	// csARM: VStdLib_GetICVarFactory() returns Sys_GetFactoryThis() - the
-+	// factory of the module that CALLS it.  posixapp.cpp is built into
-+	// libappframework.so without a libvstdlib import, so the symbol stays
-+	// local and the factory does not answer CVAR_INTERFACE_VERSION - the
-+	// outer group silently loses its cvar system (run 41332570591:
-+	// "FindSystem MISS VEngineCvar007" for BOTH groups).  Load the real
-+	// module through the bin/ symlink instead.
-+	AppModule_t cvarModule = LoadModule( "vstdlib" DLL_EXT_STRING );
-+#else
- 	AppModule_t cvarModule = LoadModule( VStdLib_GetICVarFactory() );
-+#endif
- 	AddSystem( cvarModule, CVAR_INTERFACE_VERSION );	
- 
- 	AppModule_t fileSystemModule = LoadModule( pFileSystemDLL );
---- a/interfaces/interfaces.cpp	2026-11-02 16:49:36.394960394 +0000
-+++ b/interfaces/interfaces.cpp	2026-11-02 16:50:32.970184587 +0000
-@@ -212,7 +212,19 @@
- 
- void ReconnectInterface( CreateInterfaceFn factory, const char *pInterfaceName, void **ppGlobal )
- {
--	*ppGlobal = factory( pInterfaceName, NULL );
-+	void *pReconnect = factory( pInterfaceName, NULL );
-+
-+	// csARM run 41422299535 (GLES boot): every .so carries its own copy of
-+	// this registry, and bionic symbol interposition routes foreign modules'
-+	// Connect() calls through whichever copy wins the relocation lottery.
-+	// A foreign Connect() may pass a factory that cannot serve the interface
-+	// yet (the launcher parent app-system group holds only filesystem_stdio +
-+	// SDLMgr when filesystem's Connect runs, so VMaterialSystem080 misses).
-+	// The unconditional write then zeroed libtier2's g_pMaterialSystem ->
-+	// SEGV in CMaterialReference::Init from CMatSystemSurface::Init.  Only
-+	// overwrite on a hit; a miss keeps the already-wired live singleton.
-+	if ( pReconnect || !*ppGlobal )
-+		*ppGlobal = pReconnect;
- 
- 	bool bFound = false;
- 	Assert( s_nRegistrationCount < ARRAYSIZE(s_pConnectionRegistration) );

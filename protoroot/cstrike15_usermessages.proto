@@ -132,6 +132,12 @@ enum ECstrike15UserMessages
 	CS_UM_QuestProgress = 66;			// Send notification to user when quest progress was made.	
 	CS_UM_ScoreLeaderboardData = 67;	// Game server broadcasting match end scoreboard and leaderboard data			
 	CS_UM_PlayerDecalDigitalSignature = 68;	// Game server can ask client to provide a digital signature for decal data
+	CS_UM_WeaponSound = 69;
+	CS_UM_UpdateScreenHealthBar = 70;
+	CS_UM_EntityOutlineHighlight = 71;
+    CS_UM_SSUI = 72;
+    CS_UM_SurvivalStats = 73;
+	CS_UM_DisconnectToLobby2 = 74;
 }
 
 //=============================================================================
@@ -323,6 +329,7 @@ message CCSUsrMsg_SendPlayerItemFound
 	optional int32 entindex = 2;
 }
 
+//Deprecated in favor of the more general CCSUsrMsg_WeaponSound
 message CCSUsrMsg_ReloadEffect
 {
 	optional int32 entidx = 1;
@@ -330,6 +337,29 @@ message CCSUsrMsg_ReloadEffect
 	optional float origin_x = 3;
 	optional float origin_y = 4;
 	optional float origin_z = 5;
+}
+
+message CCSUsrMsg_WeaponSound
+{
+	optional int32 entidx = 1;
+	optional float origin_x = 2;
+	optional float origin_y = 3;
+	optional float origin_z = 4;
+	optional string sound = 5;
+	optional float timestamp = 6;
+}
+
+message CCSUsrMsg_UpdateScreenHealthBar
+{
+	optional int32 entidx = 1;
+	optional float healthratio_old = 2;
+	optional float healthratio_new = 3;
+	optional int32 style = 4;
+}
+
+message CCSUsrMsg_EntityOutlineHighlight
+{
+	optional int32 entidx = 1;
 }
 
 message CCSUsrMsg_AdjustMoney
@@ -492,6 +522,7 @@ message CCSUsrMsg_ServerRankUpdate
 		optional int32 rank_new = 3;
 		optional int32 num_wins = 4;
 		optional float rank_change = 5;
+		optional int32 rank_type_id = 6;
 	}
 
 	repeated RankUpdate rank_update = 1;
@@ -554,7 +585,44 @@ message CCSUsrMsg_RoundBackupFilenames
     optional string nicename = 4;
 }
 
+//=============================================================================
+// Survival mode messages
+//=============================================================================
+message CCSUsrMsg_SSUI
+{
+    optional bool show = 1;
+}
 
+message CCSUsrMsg_SurvivalStats
+{
+    optional uint64 xuid = 1;
+
+    message Fact {
+        optional int32 type = 1;        // ESurvivalFact
+        optional int32 display = 2;     // ESurvivalFactType
+        optional int32 value = 3;
+        optional float interestingness = 4;
+    };
+    repeated Fact facts = 2;
+
+	message Placement {
+		optional uint64 xuid = 1;		// user
+		optional int32 teamnumber = 2;	// party affiliation
+		optional int32 placement = 3;	// placement of this user
+	};
+	repeated Placement users = 3;
+
+    message Damage {
+        optional uint64 xuid = 1;       // user did damage to/from
+        optional int32 to = 2;          // damage you dealt to that user
+        optional int32 to_hits = 3;
+        optional int32 from = 4;        // damage you took from that user
+        optional int32 from_hits = 5;
+    }
+    repeated Damage damages = 5;
+
+	optional int32 ticknumber = 4;		// tick number when this message was generated
+}
 
 //=============================================================================
 // Messages where the data seems to be irrelevant
@@ -578,6 +646,13 @@ message CCSUsrMsg_RequestState
 message CCSUsrMsg_StopSpectatorMode
 {
 	optional int32 dummy = 1;
+}
+
+// This enum is used on the wire, do not rename/reuse values
+enum ECSUsrMsg_DisconnectToLobby_Action
+{
+	k_ECSUsrMsg_DisconnectToLobby_Action_Default		= 0;
+	k_ECSUsrMsg_DisconnectToLobby_Action_GoQueue		= 1;
 }
 
 message CCSUsrMsg_DisconnectToLobby

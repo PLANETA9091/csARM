@@ -21,7 +21,8 @@ on:
         default: '0'
 
 env:
-  MIRROR: https://github.com/perilouswithadollarsign/cstrike15_src.git
+  MIRROR: https://github.com/RileyKun/cstrike15_src-2019.git
+  OLD_MIRROR: https://github.com/perilouswithadollarsign/cstrike15_src.git
 
 # The boot job reads the DRAFT release 'game-content'. Draft releases are
 # invisible to a read-only GITHUB_TOKEN — contents:write is required to list
@@ -135,7 +136,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v6
+          key: cstrike15-src-v7
 
       - name: Fetch pristine source + apply patches (idempotent, always)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -261,7 +262,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v6
+          key: cstrike15-src-v7
 
       - name: Fetch source + patches (needed for genproto compile and SDL2 headers)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
@@ -1096,7 +1097,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: c15
-          key: cstrike15-src-v6
+          key: cstrike15-src-v7
 
       - name: Fetch/refresh source (idempotent)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"

@@ -217,6 +217,8 @@ enum CLC_Messages
 	clc_ClientMessage 			= 17; 
 	clc_CmdKeyValues			= 18;
 	clc_HltvReplay				= 20;
+	clc_HltvFixupOperatorTick		= 21;
+	clc_HltvFixupOperatorReceiver	= 22;
 }
 
 message CCLCMsg_ClientInfo
@@ -360,6 +362,7 @@ enum SVC_Messages
 	svc_EncryptedData		= 35;		// Server submites encrypted data
 	svc_HltvReplay			= 36;		// start or stop HLTV-fed replay
 	svc_Broadcast_Command	= 38;		// broadcasting a user command
+	svc_HltvFixupOperatorStatus = 39;	// status of fixup override
 }
 
 message CSVCMsg_ServerInfo
@@ -644,6 +647,7 @@ message CSVCMsg_HltvReplay
 	optional int32 replay_slowdown_begin = 5;
 	optional int32 replay_slowdown_end = 6;
 	optional float replay_slowdown_rate = 7;
+	optional int32 reason = 8; // reason why the replay is initiated by the game server
 }
 
 enum ReplayEventType_t
@@ -652,6 +656,7 @@ enum ReplayEventType_t
 	REPLAY_EVENT_DEATH   = 1;   // replay the last player death
 	REPLAY_EVENT_GENERIC = 2;   // replay the event specified in the message
 	REPLAY_EVENT_STUCK_NEED_FULL_UPDATE = 3; // the client is stuck , the full frame update was somehow discarded at netchan level (reason unknown as of end of 2015), and a new full update is requested
+	REPLAY_EVENT_VICTORY = 4;	// Victory replay
 }
 
 message CCLCMsg_HltvReplay
@@ -669,6 +674,27 @@ message CSVCMsg_Broadcast_Command
 	optional string cmd = 1;
 }
 
+message CCLCMsg_HltvFixupOperatorTick
+{
+	optional int32 tick = 1; // the tick in which the data is transmitted
+	optional bytes props_data = 2;
+	optional CMsgVector origin = 3;
+	optional CMsgQAngle eye_angles = 4;
+	optional int32 observer_mode = 5;
+	optional bool cameraman_scoreboard = 6;
+	optional int32 observer_target = 7; // 0 = INVALID_EHANDLE
+	optional CMsgVector view_offset = 8;
+	//optional int32 cellbits = 9;
+	//optional int32 cell_x = 10;
+	//optional int32 cell_y = 11;
+	//optional int32 cell_z = 12;
+}
+
+message CSVCMsg_HltvFixupOperatorStatus
+{
+	optional uint32 mode = 1; // 0: no override; 1 : override
+	optional string override_operator_name = 2; 
+}
  
 
 // Do not remove this comment due to a bug on the Mac OS X protobuf compiler - <sergiy> integrated from Dota

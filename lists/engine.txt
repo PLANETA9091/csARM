@@ -161,11 +161,6 @@ engine/quakedef.cpp
 engine/randomstream.cpp
 common/randoverride.cpp
 public/registry.cpp
-engine/replay.cpp
-engine/replayclient.cpp
-engine/replayhistorymanager.cpp
-engine/replaydemo.cpp
-engine/replayserver.cpp
 public/sentence.cpp
 engine/singleplayersharedmemory.cpp
 engine/sound_shared.cpp

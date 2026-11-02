@@ -289,7 +289,6 @@ game/server/ragdoll_manager.cpp
 game/shared/ragdoll_shared.cpp
 game/server/RagdollBoogie.cpp
 game/server/recipientfilter.cpp
-game/server/replaydirector.cpp
 game/server/rope.cpp
 game/shared/rope_helpers.cpp
 game/shared/saverestore.cpp

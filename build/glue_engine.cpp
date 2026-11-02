@@ -55,3 +55,11 @@ class CMixerControls;
 CMixerControls *g_pMixerControls = nullptr;
 void InitMixerControls(void) {}
 void ShutdownMixerControls(void) {}
+
+/* --- Replay system removal (2019 tree) ------------------------------------ *
+ * The 2019 partner tree dropped the replay system (engine/replay*.cpp and
+ * game/server/replaydirector.cpp are gone), but engine/host.cpp and
+ * engine/matsys_interface.cpp keep `extern bool g_bReplayLoadedTools;`
+ * references.  Replay tools never load on Android, so the flag stays false.
+ */
+bool g_bReplayLoadedTools = false;

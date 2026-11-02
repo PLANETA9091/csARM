@@ -71,7 +71,7 @@ enum ECsgoGCMsg
 	k_EMsgGCCStrike15_v2_WatchInfoUsers =					9126;
 	k_EMsgGCCStrike15_v2_ClientRequestPlayersProfile =		9127;
 	k_EMsgGCCStrike15_v2_PlayersProfile =					9128;
-	k_EMsgGCCStrike15_v2_SetMyMedalsInfo =					9129;
+	// k_EMsgGCCStrike15_v2_SetMyMedalsInfo_Obsolete =					9129; // OBSOLETE: May 2018
 	// k_EMsgGCCStrike15_v2_PlayerEarnedRewardNotification_Obsolete =	9130; // OBSOLETE: May 2015
 	k_EMsgGCCStrike15_v2_PlayerOverwatchCaseUpdate =		9131;
 	k_EMsgGCCStrike15_v2_PlayerOverwatchCaseAssignment =	9132;
@@ -134,6 +134,13 @@ enum ECsgoGCMsg
 	k_EMsgGCCStrike15_v2_Party_Search =						9191;	// GC <-> client: search the party metadata
 	k_EMsgGCCStrike15_v2_Party_Invite =						9192;	// GC -> client: you have been invited to this party
 	k_EMsgGCCStrike15_v2_Account_RequestCoPlays =			9193;	// client <-> GC: download recent co players
+	k_EMsgGCCStrike15_v2_ClientGCRankUpdate =				9194;	// client <-> GC: download pips rank
+	k_EMsgGCCStrike15_v2_ClientRequestOffers =				9195;	// client <-> GC: replenish client's limited time offers
+	k_EMsgGCCStrike15_v2_ClientAccountBalance =				9196;	// client <-> GC: request or update account balance
+	k_EMsgGCCStrike15_v2_ClientPartyJoinRelay =				9197;	// client <-> GC: request for client lobby to be created or response after lobby has been created
+	k_EMsgGCCStrike15_v2_ClientPartyWarning =				9198;	// GC -> client: show a warning about a party member
+	k_EMsgGCCStrike15_v2_MatchmakingServerMatchEndPartial =	9199;   // Server -> GC: match ended for some (but not all) players on the server.  Requests XP/item drops
+	k_EMsgGCCStrike15_v2_ClientRequestSouvenir =			9204;	// client <-> GC: redeem souvenir rewards
 };
 
 
@@ -212,6 +219,8 @@ message GlobalStatistics
 	optional uint32 twitch_streams_version = 11;// Force Twitch.tv streams version number, 0 to disable the feature on the client
 	optional uint32 active_tournament_eventid = 12;	// Currently active tournament EventID
 	optional uint32 active_survey_id = 13;		// Currently active SurveyID
+	optional uint32 rtime32_cur = 14;			// Current RTime32 on GC, transmitted only as delta, to sync up client
+	optional uint32 rtime32_event_start = 15;	// Overridden Operation Start time for testing events (will never be set on public)
 };
 
 message OperationalStatisticDescription
@@ -239,6 +248,8 @@ message PlayerRankingInfo
 	optional uint32 rank_id = 2;				// Player rank id
 	optional uint32 wins = 3;					// Number of won matches
 	optional float rank_change = 4;				// How did the player rank change if the rank changed
+	// optional uint32 pips_type = 5;			// (old) What type of pips are included in this message
+	optional uint32 rank_type_id = 6;			// Rank type id
 };
 
 message PlayerCommendationInfo
@@ -248,14 +259,13 @@ message PlayerCommendationInfo
 	optional uint32 cmd_leader = 4;				// Leader
 };
 
-// Also payload for: k_EMsgGCCStrike15_v2_SetMyMedalsInfo
 message PlayerMedalsInfo
 {
-	optional uint32 medal_team = 1;				// Team achievements
-	optional uint32 medal_combat = 2;			// Combat achievements
-	optional uint32 medal_weapon = 3;			// Weapon achievements
-	optional uint32 medal_global = 4;			// Global achievements
-	optional uint32 medal_arms = 5;				// Arms Race achievements
+	// optional uint32 legacy__medal_team = 1;				// Team achievements
+	// optional uint32 legacy__medal_combat = 2;			// Combat achievements
+	// optional uint32 legacy__medal_weapon = 3;			// Weapon achievements
+	// optional uint32 legacy__medal_global = 4;			// Global achievements
+	// optional uint32 legacy__medal_arms = 5;				// Arms Race achievements
 	// optional uint32 legacy__coin_op_payback = 6;// LEGACY: pre-economy update -- Challenge Coin for 'Operation: Payback'
 	repeated uint32 display_items_defidx = 7;	// Array of display items
 	optional uint32 featured_display_item_defidx = 8;	// Featured flair item
@@ -267,6 +277,7 @@ message AccountActivity
 	optional uint32 activity = 1;				// What is the account currently doing
 	optional uint32 mode = 2;					// Which mode the account has loaded
 	optional uint32 map = 3;					// Which map the account has loaded
+	optional uint64 matchid = 4;				// Which matchid the account is following
 };
 
 message TournamentMatchSetup
@@ -298,6 +309,7 @@ message ServerHltvInfo
 	optional uint32 tv_relay_address = 18;		// Relay connection address
 	optional uint32 tv_relay_port = 19;			// Relay connection port
 	optional uint64 tv_relay_steamid = 20;		// When relaying GOTV broadcast this is the SteamID of relay connection server which is not necessarily the master
+	optional uint32 flags = 21;					// Reservation flags also buried here for recompute NQMM purposes
 };
 
 // IP Address mask (e.g. 192.69.96.0/22 -> a=192, b=69, c=96, d=0, bits=22), token represents datacenter id when multiple masks apply
@@ -354,6 +366,7 @@ message PlayerQuestData
 		optional uint64 quest_id = 1;
 		optional int32 quest_normal_points_earned = 2;
 		optional int32 quest_bonus_points_earned = 3;
+		// optional int32 quest_cycle = 4;					// For repeating quests, which 'cycle' of events this quest came from
 	};
 
 	optional uint32 quester_account_id = 1;
@@ -362,6 +375,7 @@ message PlayerQuestData
 	optional uint32 time_played = 4;
 	optional uint32 mm_game_mode = 5;					// game mode of the match this progress happened in. Number is a EMsgGCCStrike15_v2_MatchmakingGame_t enum
 	repeated MatchEndItemUpdates item_updates = 6;		// list of items which need attribute updates based on match completion
+    optional bool operation_points_eligible = 7;
 };
 
 //
@@ -454,6 +468,8 @@ message CMsgGCCStrike15_v2_MatchmakingClient2ServerPing
 	//
 	repeated DataCenterPing data_center_pings = 4;
 	optional uint32 max_ping = 5;				// User preference indicating how much max acceptable ping is allowed
+
+	optional fixed32 test_token = 6; // Client is asking to just be placed in this data center, for testing purposes
 };
 
 //
@@ -521,6 +537,7 @@ message CPreMatchInfoData
 		repeated string match_info_teams = 3;				// Match info values per team
 	};
 	repeated TeamStats stats = 5;							// A bundle of different stats
+	repeated int32 wins = 6;								// How many wins each team has
 };
 
 //
@@ -534,6 +551,7 @@ message CMsgGCCStrike15_v2_MatchmakingGC2ServerReserve
 	optional uint32 game_type = 2;						// Game for the reservation
 	optional uint64 match_id = 3;						// If this match proceeds and happens this will be the match id
 	optional uint32 server_version = 4;					// Server version required for this match to proceed
+	optional uint32 flags = 18;							// Flags of the reservation for NQMM servers
 	// --- next section of the reservation doesn't have to be filled out by the server.dll when communicating with GC ---
 	repeated PlayerRankingInfo rankings = 5;			// Player rankings for the match
 	optional uint64 encryption_key = 6;					// Encryption key unique per match
@@ -546,6 +564,8 @@ message CMsgGCCStrike15_v2_MatchmakingGC2ServerReserve
 	repeated uint32 tournament_casters_account_ids = 13;	// Tournament caster account IDs that will be allowed to connect to the game server directly
 	optional uint64 tv_relay_steamid = 14;				// For server reservations of official GOTV relay proxies this is SteamID of upstream relay connection proxy which can be different from master
 	optional CPreMatchInfoData pre_match_data = 15;		// When tournament predictions were placed for teams involved in the match this will be the percentage in favor of team0, valid values between [1..99], 0 means undefined
+    optional uint32 rtime32_event_start = 16;           // (Never set on public) Overriden start time for events from GC
+	optional uint32 tv_control = 17;					// Controls TV overrides for the game server
 };
 
 //
@@ -568,7 +588,10 @@ message CMsgGCCStrike15_v2_MatchmakingServerReservationResponse
 	optional uint32 reward_item_attr_reward_idx = 11;	// Index of tha attribute to modify
 	optional uint32 reward_drop_list = 12;		// Series of weapon case to (sometimes?) reward in this map
 	optional string tournament_tag = 13;				// Tournament tag setting of the game server
-	optional uint32 steamdatagram_port = 14;			// If we can be proxied by steam datagram, what port are we listening on?
+	optional uint32 legacy_steamdatagram_port = 14;	// If we can be proxied by steam datagram, what port are we listening on?
+	optional uint32 steamdatagram_routing = 17;		// If we can be proxied by steam datagram, what's the rojting info to put into the ticket?
+	optional fixed32 test_token = 15;				// Force our IP to map to the requested data center token.
+	optional uint32 flags = 16;						// Server reservation flags
 };
 
 //
@@ -646,6 +669,20 @@ message CMsgGCCStrike15_v2_MatchmakingServerMatchEnd
 };
 
 //
+// k_EMsgGCCStrike15_v2_MatchmakingServerMatchEndPartial
+//
+// Server reports its match stats to GC for a subset of players whose match is now over
+//
+message CMsgGCCStrike15_v2_MatchmakingServerMatchEndPartial
+{
+	optional uint64 reservationid = 1;					                    // Reservation id for connecting to the server
+	optional CMsgGCCStrike15_v2_MatchmakingGC2ServerReserve reservation = 2;// Current matchmaking reservation of the server
+	optional CMsgGCCStrike15_v2_MatchmakingGC2ServerConfirm confirm = 3;	// Confirmation to deliver
+	optional CMsgGC_ServerQuestUpdateData completed_player_quest_data = 4;	// Quest update data for players
+	optional uint32 server_version = 5;										// Version of the server submitting match outcome
+};
+
+//
 // k_EMsgGCCStrike15_v2_MatchmakingClient2GCHello
 //
 // Client is at the main menu, GC has an opportunity to
@@ -668,7 +705,7 @@ message CMsgGCCStrike15_v2_MatchmakingGC2ClientHello
 	optional uint32 penalty_seconds = 4;				// How many penalty seconds remaining for the player
 	optional uint32 penalty_reason = 5;					// What is the reason for player being penalized
 	optional int32 vac_banned = 6;						// When non-zero means the account has been VAC banned
-	optional PlayerRankingInfo ranking = 7;				// Account ranking information
+	optional PlayerRankingInfo ranking = 7;				// Account ranking information for classic competitive
 	optional PlayerCommendationInfo commendation = 8;	// Commendation information
 	optional PlayerMedalsInfo medals = 9;				// Medals that GC has cached for the client
 	optional TournamentEvent my_current_event = 10;		// Event that the user is currently participating in
@@ -681,6 +718,7 @@ message CMsgGCCStrike15_v2_MatchmakingGC2ClientHello
 	optional int32 player_level = 17;					// Player's level based on xp earned in matches
 	optional int32 player_cur_xp = 18;					// Player's xp earned towards next level 
 	optional int32 player_xp_bonus_flags = 19;			// Flags marking which perodic bonuses the player has available
+	repeated PlayerRankingInfo rankings = 20;			// Account ranking information for other game modes
 };
 
 //
@@ -733,6 +771,14 @@ message CMsgGCCStrike15_v2_MatchmakingGC2ServerRankUpdate
 {
 	repeated PlayerRankingInfo rankings = 1;	// Updated rankings
 	optional uint64 match_id = 2;				// Match ID
+};
+
+//
+// k_EMsgGCCStrike15_v2_ClientGCRankUpdate
+//
+message CMsgGCCStrike15_v2_ClientGCRankUpdate
+{
+	repeated PlayerRankingInfo rankings = 1;	// Updated rankings
 };
 
 //
@@ -830,6 +876,8 @@ message CMsgGCCStrike15_v2_ClientRequestWatchInfoFriends
 	repeated uint32 account_ids = 2;			// Friends account ids
 	optional uint64 serverid = 3;				// Server SteamID
 	optional uint64 matchid = 4;				// Server MatchID
+	optional uint32 client_launcher = 5;		// Client launcher
+	repeated DataCenterPing data_center_pings = 6;	// Suggested datacenter tokens
 };
 
 message WatchableMatchInfo
@@ -897,6 +945,7 @@ message CMsgGCCstrike15_v2_GC2ServerNotifyXPRewarded
 	optional uint32 current_xp = 3;						// xp before the current progress is applied
 	optional uint32 current_level = 4;					// player level before current xp is applied
 	optional uint32 upgraded_defidx = 5;				// upgraded item that player acquired
+    optional uint32 operation_points_awarded = 6;       // number of operation points (stars) granted
 };
 
 
@@ -1063,6 +1112,7 @@ message CEconItemPreviewDataBlock
 	optional uint32 questid = 15;			// Quest ID that was completed for this item
 	optional uint32 dropreason = 16;		// Reason user got this drop (used to show display icon in drop list)
 	optional uint32 musicindex = 17;		// Music kit id in schema
+    optional int32 entindex = 18;          // Server -> Client only: entity index of player receiving drop
 };
 
 
@@ -1435,6 +1485,7 @@ message CSOEconCoupon
 //
 message CSOQuestProgress
 {
+	// optional uint32		event_cycle_index = 1 [ (key_field) = true ];
 	optional uint32		questid = 1 [ (key_field) = true ];
 	optional uint32		points_remaining = 2;
 	optional uint32		bonus_points = 3;
@@ -1497,8 +1548,25 @@ message CMsgGCCStrike15_v2_AcknowledgePenalty
 //
 // Client wants to trade max level status for current prestige coin
 //
+// Protocol is as follows:
+//		client->gc: empty message inquirying about current state
+//		gc->client: response about what the client will get as part of prestige:
+//						defindex = the defindex of the new prestige coin
+//						upgradeid = itemid of existing coin if an upgrade will happen in place, no value if new coin will be created
+//						hours = when close to New Year will have number of hours to wait if client wants new coin, otherwise empty
+//		client->gc: message containing defindex to claim (now that client knows what they will get)
+//		gc->client: response about the successful upgrade
+//						defindex = the defindex of the new prestige coin client now owns
+//						upgradeid = itemid of the prestige coin client now owns (previously existing if upgraded, or newly created if new)
+//						prestigetime = the GMT timestamp of coin assignment (differentiates successful upgrade response from inquiry response)
+// client needs to be aware that network communication or transient GC failures will result in no response being generated.
+//
 message CMsgGCCStrike15_v2_Client2GCRequestPrestigeCoin 
 {
+	optional uint32 defindex = 1;					// Defindex that the client expects to get
+	optional uint64 upgradeid = 2;					// If the coin is upgraded then this is the coin ID
+	optional uint32 hours = 3;						// If new coin is imminent then number of hours to wait
+	optional uint32 prestigetime = 4;				// Timestamp of the newly issued prestige service medal
 };
 
 //
@@ -1607,6 +1675,7 @@ message CMsgGCCStrike15_v2_ClientLogonFatalError
 {
 	optional uint32 errorcode = 1; // error code
 	optional string message = 2; // message
+	optional string country = 3; // country detected by backend as user's IP location
 };
 
 //
@@ -1633,6 +1702,7 @@ message CMsgGCCStrike15_v2_Party_Register
 	optional uint32 grp = 6;	// AccountID_t of Steam Group advertisement
 	optional uint32 slots = 7;	// Number of available slots
 	optional uint32 launcher = 8;	// Launcher used by the party
+	optional uint32 game_type = 9;	// Game type that the client is registering
 };
 
 //
@@ -1645,6 +1715,7 @@ message CMsgGCCStrike15_v2_Party_Search
 	optional uint32 ark = 3;	// Rank setting
 	repeated uint32 grps = 4;	// Clan AccountID_t of Steam Groups that should match
 	optional uint32 launcher = 5;	// Launcher used by the search
+	optional uint32 game_type = 6;	// Game type that the client is searching for
 };
 message CMsgGCCStrike15_v2_Party_SearchResults
 {
@@ -1688,5 +1759,78 @@ message CMsgGCCStrike15_v2_ClientToGCRequestTicket
 	optional fixed64 authorized_steam_id = 1;					// Client that is being authorized to communicate
 	optional fixed32 authorized_public_ip = 2;					// They are allowed to talk on which public IP?  (This is necessary to prevent ticket sharing.)
 	optional fixed64 gameserver_steam_id = 3;					// Gameserver they are authorized to talk to
-	optional fixed64 gameserver_net_id = 4;						// Network-routable ID of the gameserver
+	optional fixed64 legacy_gameserver_net_id = 4;				// Network-routable ID of the gameserver
+	optional string gameserver_sdr_routing = 5;					// Routing blob for how relays talk to this server
 };
+
+//
+// k_EMsgGCCStrike15_v2_GCToClientSteamdatagramTicket
+//
+message CMsgGCToClientSteamDatagramTicket
+{
+
+	/// Legacy fields.  These are designed to match CMsgSteamDatagramRelayAuthTicket, so that
+	/// we can deserialize a blob, reserialize it, and pass that re-serialized blob
+	/// to steamdatagramlib ticket handling code such as SteamDatagramRelayAuthTicket::Parse,
+	/// and it will handle it properly.
+	optional fixed32 legacy_time_expiry = 1;
+	optional fixed64 legacy_authorized_steam_id = 2;
+	optional fixed32 legacy_authorized_public_ip = 3;
+	optional fixed64 legacy_gameserver_steam_id = 4;
+	optional fixed64 legacy_gameserver_net_id = 5;
+	optional bytes legacy_signature = 6;
+	optional uint32 legacy_app_id = 7;
+	repeated bytes legacy_extra_fields = 8; // actually repeated *messages*, but since we don't need to crack them, bytes will work just fine.
+
+	/// A modern message will just pass the ticket around as a single serialized blob
+	optional bytes serialized_ticket = 16;
+};
+//
+// k_EMsgGCCStrike15_v2_ClientRequestOffers
+//
+message CMsgGCCStrike15_v2_ClientRequestOffers
+{
+};
+
+//
+// k_EMsgGCCStrike15_v2_ClientRequestSouvenir
+//
+message CMsgGCCStrike15_v2_ClientRequestSouvenir
+{
+	optional uint64 itemid = 1;
+	optional uint64 matchid = 2;
+	optional int32 eventid = 3;
+};
+
+//
+// k_EMsgGCCStrike15_v2_ClientAccountBalance
+//
+message CMsgGCCStrike15_v2_ClientAccountBalance
+{
+	optional uint64 amount = 1;
+	optional string url = 2;
+};
+
+//
+// k_EMsgGCCStrike15_v2_ClientPartyJoinRelay
+//
+message CMsgGCCStrike15_v2_ClientPartyJoinRelay
+{
+	optional uint32 accountid = 1;
+	optional uint64 lobbyid = 2;
+};
+
+
+//
+// k_EMsgGCCStrike15_v2_ClientPartyWarning
+//
+message CMsgGCCStrike15_v2_ClientPartyWarning
+{
+	message Entry
+	{
+		optional uint32 accountid = 1;		// Account ID of the teammate
+		optional uint32 warntype = 2;		// Type of the warning provided
+	};
+	repeated Entry entries = 1;				// All the warnings in one batch
+};
+
