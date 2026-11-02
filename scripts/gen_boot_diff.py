@@ -391,6 +391,39 @@ pairs.append((
     + T + T + 'return false;\n'
     + T + '}\n'))
 
+# csARM run 41360940662: boot passes the whole appframework pipeline
+# (CEngineAPI::Connect probe shows studio=1 datacache=1 physics=0 mdlcache=1
+# matssurface=1 input=1 soundemit=1 - only the gated vphysics is absent) and
+# PreInit OK -> SetStartupInfo, which then hard-fails:
+#   FATAL ERROR: Failed to connect with local Steam Client process!
+# (CEngineAPI::SetStartupInfo -> Steam3Client().Activate() with the steam_api
+# stub -> the hard identity gate).  No Steam client process exists on
+# Android; Valve's own "ignore failure, that will fall out later when they
+# don't get a valid logon cookie" comment in CSteam3Client::Activate
+# tolerates the uninitialized state for the cookie path - only this gate
+# hard-fails.  Platform-gate it like vphysics.
+pairs.append((
+    T + 'if ( !Steam3Client().IsInitialized() || !Steam3Client().SteamUser() ||\n'
+    + T + T + '!Steam3Client().SteamUser()->GetSteamID().IsValid() || !Steam3Client().SteamUser()->GetSteamID().BIndividualAccount() || !Steam3Client().SteamUser()->GetSteamID().GetAccountID() )\n'
+    + T + '{\n'
+    + T + T + 'Error( "FATAL ERROR: Failed to connect with local Steam Client process!\\n\\nPlease make sure that you are running latest version of Steam Client.\\nYou can check for Steam Client updates using Steam main menu:\\n             Steam > Check for Steam Client Updates..." );\n'
+    + T + T + 'return false;\n'
+    + T + '}\n',
+    '#ifdef __ANDROID__\n'
+    + T + '// csARM: no local Steam Client process exists on Android; the\n'
+    + T + '// steam_api stub reports uninitialized and Valve\'s own "fall out\n'
+    + T + '// later when they don\'t get a valid logon cookie" comment tolerates\n'
+    + T + '// that for the cookie path.  Skip the hard identity gate.\n'
+    + T + 'CSARM_LOGI( "SetStartupInfo: no Steam on Android - skipping Steam3Client identity gate" );\n'
+    + '#else\n'
+    + T + 'if ( !Steam3Client().IsInitialized() || !Steam3Client().SteamUser() ||\n'
+    + T + T + '!Steam3Client().SteamUser()->GetSteamID().IsValid() || !Steam3Client().SteamUser()->GetSteamID().BIndividualAccount() || !Steam3Client().SteamUser()->GetSteamID().GetAccountID() )\n'
+    + T + '{\n'
+    + T + T + 'Error( "FATAL ERROR: Failed to connect with local Steam Client process!\\n\\nPlease make sure that you are running latest version of Steam Client.\\nYou can check for Steam Client updates using Steam main menu:\\n             Steam > Check for Steam Client Updates..." );\n'
+    + T + T + 'return false;\n'
+    + T + '}\n'
+    + '#endif\n'))
+
 # csARM silent-rc0 probes (run 41326912005: clean exit 467ms after launch,
 # zero engine spew after "SDL video target").  Three return-false-silently
 # paths funnel into RUN_OK: CEngineAPI::OnStartup sub-inits, ModInit's
