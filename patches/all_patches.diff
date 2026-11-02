@@ -1451,8 +1451,8 @@ diff -ruN a/public/dt_recv.h b/public/dt_recv.h
  void RecvProxy_FloatToFloat  ( const CRecvProxyData *pData, void *pStruct, void *pOut );
 diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 --- a/public/external/v8/include/v8.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/public/external/v8/include/v8.h	2026-11-02 20:09:03.869129123 +0000
-@@ -0,0 +1,307 @@
++++ b/public/external/v8/include/v8.h	2026-11-02 20:21:48.131651536 +0000
+@@ -0,0 +1,309 @@
 +// csARM port stub: minimal v8 declarations.
 +//
 +// The 2019 partner tree integrated the Panorama UI into the client's public
@@ -1513,6 +1513,8 @@ diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 +class TryCatch;
 +template <class T> class FunctionCallbackInfo;
 +template <class T> class PropertyCallbackInfo;
++template <class T> class Handle;
++template <class T> class Local;
 +
 +typedef void (*FunctionCallback)(const FunctionCallbackInfo<Value>& info);
 +typedef void (*AccessorGetterCallback)(Local<String> property, const PropertyCallbackInfo<Value>& info);
@@ -1974,6 +1976,30 @@ diff -ruN a/public/mathlib/vector4d.h b/public/mathlib/vector4d.h
  #endif
  #include "tier0/basetypes.h"	// For vec_t, put this somewhere else?
  #include "tier0/dbg.h"
+diff -ruN a/public/panorama/iuiengine.h b/public/panorama/iuiengine.h
+--- a/public/panorama/iuiengine.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/panorama/iuiengine.h	2026-11-02 20:21:48.131651536 +0000
+@@ -33,7 +33,7 @@
+ #include "steam/isteamhttp.h"
+ #include "iuifilesystem.h"
+ 
+-#if !defined( SOURCE2_PANORAMA )
++#if !defined( SOURCE2_PANORAMA ) && !defined( CSARM_PORT )
+ #include "audio/iaudiointerface.h"
+ #include <openvr.h>
+ #endif
+diff -ruN a/public/panorama/panoramatypes.h b/public/panorama/panoramatypes.h
+--- a/public/panorama/panoramatypes.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/panorama/panoramatypes.h	2026-11-02 20:21:48.131651536 +0000
+@@ -619,7 +619,7 @@
+ } // namespace panorama
+ 
+ 
+-#if !defined( SOURCE2_PANORAMA )
++#if !defined( SOURCE2_PANORAMA ) && !defined( CSARM_PORT )
+ template< class T, int A >
+ class CUtlVectorFixedGrowable : public CUtlVector< T >
+ {
 diff -ruN a/public/tier0/hardware_clock_fast.h b/public/tier0/hardware_clock_fast.h
 --- a/public/tier0/hardware_clock_fast.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/tier0/hardware_clock_fast.h	2026-11-02 19:22:40.765854264 +0000
