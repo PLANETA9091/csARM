@@ -534,6 +534,21 @@ diff --git a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
  
  	return INIT_OK;
  }
+@@ -751,7 +759,13 @@
+ 		SDL_SetWindowFullscreen(m_Window, SDL_TRUE);
+ 	}
+ 
+-#if defined( DX_TO_GL_ABSTRACTION )
++#if defined( DX_TO_GL_ABSTRACTION ) && !defined( __ANDROID__ )
++	// csARM run 41405448535: the GLES context created here has no desktop-GL
++	// compatibility profile (whichProfile=0) and the COpenGLEntryPoints
++	// resolution leaves gGL unusable -> SEGV at gGL->glGenFramebuffersEXT
++	// (fault 0x3d8) before the first tick.  Boot does not present frames:
++	// skip the context + entry-point + clear/swap tail (m_GLContext stays
++	// NULL from the ctor; shaderapiempty never dereferences it).
+ 	m_GLContext = SDL_GL_CreateContext(m_Window);
+ 	if (m_GLContext == NULL)
+ 		Error( "Failed to create GL context: %s", SDL_GetError() );
 
 diff --git a/public/tier0/threadtools.inl b/public/tier0/threadtools.inl
 --- a/public/tier0/threadtools.inl

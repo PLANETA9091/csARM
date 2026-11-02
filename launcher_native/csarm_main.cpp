@@ -197,6 +197,115 @@ static void makeModuleLinks(const std::string &filesDir, const std::string &libD
 }
 
 // ---------------------------------------------------------------------------
+// csARM: deterministically fill every module's private interfaces.cpp
+// registry (materials, g_pMaterialSystem, g_pFullFileSystem, g_pCVar, ...).
+//
+// Valve links interfaces.cpp as a static lib into EVERY module, so each .so
+// carries its own copy of the global interface pointers plus its own
+// ConnectInterfaces().  In the original model every DLL filled its own copy
+// during Connect(); in our shared-.so port only the copy of the module that
+// happens to win the bionic relocation binding gets written, and which one
+// that is depends on load-order/namespace state (run 41405448535: the
+// system-EGL APK left libtier2's `materials` NULL -> SEGV in
+// CMaterialReference::Init from CMatSystemSurface::Init, while the identical
+// binary with bundled SwiftShader resolved it fine and booted far past it).
+//
+// Fix: after all port libs are loaded, call ConnectInterfaces() INSIDE each
+// module (dlsym per handle) with a composite CreateInterface factory that
+// walks every loaded module's exported CreateInterface.  Every private
+// registry is then filled with the real singletons before LauncherMain runs,
+// no relocation-binding lottery involved.  Later Valve Connect/Reconnect
+// calls are compatible: RegisterInterface skips already-filled globals and
+// ReconnectInterface overwrites them with the same live pointers.
+// ---------------------------------------------------------------------------
+typedef void *(*CreateInterfaceFn_t)(const char *pName, int *pReturnCode);
+typedef void (*ConnectInterfacesFn_t)(CreateInterfaceFn_t *pFactoryList, int nFactoryCount);
+
+static void **g_csarmFactoryModules = NULL;
+static int g_csarmFactoryModuleCount = 0;
+static CreateInterfaceFn_t g_csarmCompositeFactory = NULL;
+
+// ConnectInterfaces has C++ linkage in interfaces.cpp (no extern "C"), so
+// dlsym must use its Itanium mangling: void ConnectInterfaces(CreateInterfaceFn*, int)
+static void *csarm_dlsym_connect_interfaces(void *h)
+{
+    void *p = dlsym(h, "ConnectInterfaces"); // extern "C" alias, if one exists
+    if (p)
+        return p;
+    return dlsym(h, "_Z17ConnectInterfacesPPFPvPKcPiEi");
+}
+
+static void *csarm_CompositeCreateInterface(const char *pName, int *pReturnCode)
+{
+    if (pReturnCode)
+        *pReturnCode = 1; // IFACE_FAILED
+    if (!pName || !g_csarmFactoryModules)
+        return NULL;
+    for (int i = 0; i < g_csarmFactoryModuleCount; i++)
+    {
+        void *h = g_csarmFactoryModules[i];
+        if (!h)
+            continue;
+        CreateInterfaceFn_t fn = (CreateInterfaceFn_t)dlsym(h, "CreateInterface");
+        if (!fn)
+            continue;
+        void *r = fn(pName, NULL);
+        if (r)
+        {
+            if (pReturnCode)
+                *pReturnCode = 0; // IFACE_OK
+            return r;
+        }
+    }
+    return NULL;
+}
+
+static void fillInterfaceRegistries()
+{
+    void *handles[64] = {0};
+    int n = 0;
+    for (int i = 0; kModules[i]; i++)
+    {
+        char soname[64];
+        snprintf(soname, sizeof(soname), "lib%s.so", kModules[i]);
+        // RTLD_NOLOAD: never load anything here; only already-loaded modules
+        void *h = dlopen(soname, RTLD_NOW | RTLD_NOLOAD);
+        if (!h)
+            continue;
+        // only modules that carry the interfaces.cpp registry (export
+        // ConnectInterfaces) can be filled - and only those also export
+        // CreateInterface, so they are exactly the composite-factory set
+        if (!csarm_dlsym_connect_interfaces(h))
+            continue;
+        handles[n++] = h;
+        if (n >= (int)(sizeof(handles) / sizeof(handles[0])))
+            break;
+    }
+    if (n == 0)
+    {
+        LOGW("CSARM_IFACE_FILL no registry modules found");
+        return;
+    }
+    g_csarmFactoryModules = handles;
+    g_csarmFactoryModuleCount = n;
+    g_csarmCompositeFactory = &csarm_CompositeCreateInterface;
+    int connected = 0;
+    for (int i = 0; i < n; i++)
+    {
+        ConnectInterfacesFn_t ci = (ConnectInterfacesFn_t)csarm_dlsym_connect_interfaces(handles[i]);
+        if (!ci)
+            continue;
+        dlerror();
+        ci(&g_csarmCompositeFactory, 1);
+        connected++;
+    }
+    g_csarmFactoryModules = NULL;
+    g_csarmFactoryModuleCount = 0;
+    g_csarmCompositeFactory = NULL;
+    LOGI("CSARM_IFACE_FILL modules=%d connected=%d", n, connected);
+}
+
+// ---------------------------------------------------------------------------
 // SDL_main: the real boot
 // ---------------------------------------------------------------------------
 extern "C" int SDL_main(int argc, char *argv[])
@@ -252,11 +361,18 @@ extern "C" int SDL_main(int argc, char *argv[])
     // CEngineAPI::SetStartupInfo mounts the USRLOCAL search path from
     // getenv("USRLOCAL" DLLExtTokenPaste2(VPCGAMECAPS)) on Android (the
     // Steam-profile branch is platform-gated away): without it the engine
-    // has no writable USRLOCAL dir for configs/saves.
+    // has no writable USRLOCAL dir for configs/saves.  basetypes.h defines
+    // DLLExtTokenPaste2(x) as the STRINGIZER (#x), so the engine literally
+    // reads "USRLOCALVPCGAMECAPS" - run 41405448535 proved it ("USRLOCAL
+    // path not found!" while USRLOCAL/USRLOCALCSGO were both set).
     setenv("USRLOCAL", filesDir.c_str(), 1);
     setenv("USRLOCALCSGO", filesDir.c_str(), 1);
+    setenv("USRLOCALVPCGAMECAPS", filesDir.c_str(), 1);
 
     makeModuleLinks(filesDir, nativeLibDir());
+
+    // --- fill every module's private interfaces.cpp registry ---------------
+    fillInterfaceRegistries();
 
     // --- GL driver report: bundled SwiftShader shadows system EGL ----------
     // When the APK ships libEGL.so/libGLESv2.so (SwiftShader), the app

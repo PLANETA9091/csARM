@@ -583,6 +583,23 @@ pairs.append((
     + T + 'if ( !m_bTextMode )\n'
     + T + T + 'SDL_HideWindow( m_Window );\n'
     + T + '#endif\n'))
+# The ModInit-time game window (CGame::CreateGameWindow -> CSDLMgr::CreateGameWindow
+# -> CreateHiddenGameWindow) builds a real GL context and resolves the desktop-GL
+# entry points.  Under SwiftShader's GLES context there is no compatibility profile
+# (whichProfile=0) and the COpenGLEntryPoints machinery leaves gGL unusable ->
+# SEGV at gGL->glGenFramebuffersEXT (fault 0x3d8, run 41405448535).  The boot path
+# does not present frames: keep the SDL window, skip the whole GL-context tail.
+pairs.append((
+    '#if defined( DX_TO_GL_ABSTRACTION )\n'
+    + T + 'm_GLContext = SDL_GL_CreateContext(m_Window);\n',
+    '#if defined( DX_TO_GL_ABSTRACTION ) && !defined( __ANDROID__ )\n'
+    + T + '// csARM run 41405448535: the GLES context created here has no desktop-GL\n'
+    + T + '// compatibility profile (whichProfile=0) and the COpenGLEntryPoints\n'
+    + T + '// resolution leaves gGL unusable -> SEGV at gGL->glGenFramebuffersEXT\n'
+    + T + '// (fault 0x3d8) before the first tick.  Boot does not present frames:\n'
+    + T + '// skip the context + entry-point + clear/swap tail (m_GLContext stays\n'
+    + T + '// NULL from the ctor; shaderapiempty never dereferences it).\n'
+    + T + 'm_GLContext = SDL_GL_CreateContext(m_Window);\n'))
 orig = text
 text = apply(text, 'sdlmgr.cpp', pairs)
 out.append(unified(orig, text, 'appframework/sdlmgr.cpp'))
