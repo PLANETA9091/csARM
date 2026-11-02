@@ -1105,6 +1105,19 @@ diff -ruN a/game/shared/util_shared.h b/game/shared/util_shared.h
  inline void UTIL_TraceLine( const Vector& vecAbsStart, const Vector& vecAbsEnd, unsigned int mask, 
  					 const IHandleEntity *ignore, int collisionGroup, trace_t *ptr )
  {
+diff -ruN a/game/shared/weapon_parse_default.cpp b/game/shared/weapon_parse_default.cpp
+--- a/game/shared/weapon_parse_default.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/shared/weapon_parse_default.cpp	2026-11-02 20:58:28.637208666 +0000
+@@ -6,6 +6,9 @@
+ 
+ #include "cbase.h"
+ #include "weapon_parse.h"
++// [port] the 2019 file allocates FileWeaponInfo_t, whose full definition
++// lives in weapon_cache.h (weapon_parse.h only forward-declares it)
++#include "weapon_cache.h"
+ 
+ // memdbgon must be the last include file in a .cpp file!!!
+ #include "tier0/memdbgon.h"
 diff -ruN a/interfaces/interfaces.cpp b/interfaces/interfaces.cpp
 --- a/interfaces/interfaces.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/interfaces/interfaces.cpp	2026-11-02 19:22:40.767854262 +0000
@@ -2109,28 +2122,6 @@ diff -ruN a/public/panorama/localization/reliabletimer.h b/public/panorama/local
 +#ifndef CSARM_STUB_RELIABLETIMER_H
 +#define CSARM_STUB_RELIABLETIMER_H
 +#endif
-diff -ruN a/public/panorama/localization/rtime.h b/public/panorama/localization/rtime.h
---- a/public/panorama/localization/rtime.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/public/panorama/localization/rtime.h	2026-11-02 20:46:19.354668403 +0000
-@@ -0,0 +1,18 @@
-+// [port] Steam localization header excluded from the 2019 leak; minimal stub
-+// for the panorama public headers that reference CRTime by value.
-+#ifndef CSARM_STUB_RTIME_H
-+#define CSARM_STUB_RTIME_H
-+class CRTime
-+{
-+public:
-+	CRTime() {}
-+	explicit CRTime( unsigned int t ) { (void)t; }
-+};
-+
-+class CRTimeDuration
-+{
-+public:
-+	CRTimeDuration() {}
-+	explicit CRTimeDuration( unsigned int secs ) { (void)secs; }
-+};
-+#endif
 diff -ruN a/public/panorama/localization/stime.h b/public/panorama/localization/stime.h
 --- a/public/panorama/localization/stime.h	1970-01-01 00:00:00.000000000 +0000
 +++ b/public/panorama/localization/stime.h	2026-11-02 20:43:53.322757344 +0000
@@ -2158,28 +2149,6 @@ diff -ruN a/public/panorama/reliabletimer.h b/public/panorama/reliabletimer.h
 +// [port] Steam header excluded from the 2019 leak; empty stub.
 +#ifndef CSARM_STUB_RELIABLETIMER_H
 +#define CSARM_STUB_RELIABLETIMER_H
-+#endif
-diff -ruN a/public/panorama/rtime.h b/public/panorama/rtime.h
---- a/public/panorama/rtime.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/public/panorama/rtime.h	2026-11-02 20:46:19.342668410 +0000
-@@ -0,0 +1,18 @@
-+// [port] Steam localization header excluded from the 2019 leak; minimal stub
-+// for the panorama public headers that reference CRTime by value.
-+#ifndef CSARM_STUB_RTIME_H
-+#define CSARM_STUB_RTIME_H
-+class CRTime
-+{
-+public:
-+	CRTime() {}
-+	explicit CRTime( unsigned int t ) { (void)t; }
-+};
-+
-+class CRTimeDuration
-+{
-+public:
-+	CRTimeDuration() {}
-+	explicit CRTimeDuration( unsigned int secs ) { (void)secs; }
-+};
 +#endif
 diff -ruN a/public/panorama/stime.h b/public/panorama/stime.h
 --- a/public/panorama/stime.h	1970-01-01 00:00:00.000000000 +0000
