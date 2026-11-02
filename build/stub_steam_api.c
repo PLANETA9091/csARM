@@ -60,3 +60,20 @@ int SteamInternal_GameServer_Init(uint32_t unIP, uint16_t usPort, uint16_t usGam
 #ifdef __cplusplus
 }
 #endif
+
+/* --- 2019 engine: SteamNetworkingSockets / SteamDatagram / breakpad ------ *
+ * Declarations live in public/steamnetworkingsockets (extern "C") and
+ * steam_api_internal.h.  The stub world has no Steam client: the init
+ * functions return false and the accessors return NULL.  The engine's
+ * steam-off code paths never dereference them (everything is guarded by
+ * SteamAPI_Init() == false), the symbols only need to exist for the link. */
+void *SteamNetworkingSockets( void ) { return 0; }
+void *SteamNetworkingSocketsGameServer( void ) { return 0; }
+void SteamNetworkingSockets_SetDebugOutputFunction( int eDetailLevel, void *pfnFunc ) { (void)eDetailLevel; (void)pfnFunc; }
+void *SteamNetworkingUtils( void ) { return 0; }
+void SteamDatagramClient_Internal_SteamAPIKludge( void *a, void *b, void *c, void *d ) { (void)a; (void)b; (void)c; (void)d; }
+int SteamDatagramClient_Init_InternalV6( char *errMsg, void *fnCreateInterface, int hSteamUser, int hSteamPipe ) { (void)errMsg; (void)fnCreateInterface; (void)hSteamUser; (void)hSteamPipe; return 0; }
+int SteamDatagramServer_Init_Internal( char *errMsg, void *fnCreateInterface, int hSteamUser, int hSteamPipe ) { (void)errMsg; (void)fnCreateInterface; (void)hSteamUser; (void)hSteamPipe; return 0; }
+void SteamDatagramClient_Kill( void ) {}
+void SteamDatagramServer_Kill( void ) {}
+void SteamAPI_UseBreakpadCrashHandler( const char *a, const char *b, const char *c, int d, void *e, void *f ) { (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; }

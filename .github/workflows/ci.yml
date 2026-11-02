@@ -267,6 +267,19 @@ jobs:
       - name: Fetch source + patches (needed for genproto compile and SDL2 headers)
         run: ./build/setup_source.sh "$GITHUB_WORKSPACE"
 
+      # The link job compiles genproto/*.pb.cc itself (obj/genproto is not in
+      # the build-job artifacts), so the committed genproto must be
+      # REGENERATED from protoroot: a proto refresh (e.g. the 2019 retarget)
+      # otherwise leaves stale 2018-era generated classes on the boot path.
+      - name: Cache host protoc
+        uses: actions/cache@v4
+        with:
+          path: .cache/protoc25
+          key: protoc25-linux
+
+      - name: Generate protobuf messages (genproto)
+        run: bash build/setup_proto.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
+
       - name: Download all objects
         uses: actions/download-artifact@v4
         with:
