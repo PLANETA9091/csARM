@@ -756,8 +756,25 @@ diff -ruN a/game/client/client_cstrike15_inc.vpc b/game/client/client_cstrike15_
  				$File	"cstrike15/uicomponents/uicomponent_common.cpp" 
 diff -ruN a/game/client/clientmode_shared.cpp b/game/client/clientmode_shared.cpp
 --- a/game/client/clientmode_shared.cpp	2026-08-10 03:28:37.000000000 +0000
-+++ b/game/client/clientmode_shared.cpp	2026-11-02 19:22:40.764854264 +0000
-@@ -1357,7 +1357,7 @@
++++ b/game/client/clientmode_shared.cpp	2026-11-02 21:30:48.743088301 +0000
+@@ -769,11 +769,16 @@
+ 		return;
+ 	}
+ 
++	// [port] GetHudChat/IHudChat come from gameui_hudinterfaces.h, included
++	// upstream behind PANORAMA_ENABLE; without the panorama UI the chat
++	// message mode has no target, so the body is compiled out.
++#if defined( PANORAMA_ENABLE )
+ 	IHudChat* pHudChat = GetHudChat();
+ 	if ( pHudChat )
+ 	{
+ 		pHudChat->StartMessageMode( iMessageModeType );
+ 	}
++#endif
+ }
+ 
+ //-----------------------------------------------------------------------------
+@@ -1357,7 +1362,7 @@
  			}
  		}
  
@@ -766,6 +783,36 @@ diff -ruN a/game/client/clientmode_shared.cpp b/game/client/clientmode_shared.cp
  		{
  			bValidTeam = false;
  		}
+diff -ruN a/game/client/cstrike15/c_cs_player.cpp b/game/client/cstrike15/c_cs_player.cpp
+--- a/game/client/cstrike15/c_cs_player.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/client/cstrike15/c_cs_player.cpp	2026-11-02 21:32:59.915005873 +0000
+@@ -1575,7 +1575,7 @@
+ 		Assert( gpGlobals->curtime >= timestamp );
+ 
+ 		CLocalPlayerFilter filter;
+-		pEnt->EmitSound( filter, pEnt->GetSoundSourceIndex(), STRING( msg.sound().c_str() ), pOrigin );
++		pEnt->EmitSound( filter, pEnt->GetSoundSourceIndex(), msg.sound().c_str(), pOrigin );
+ 	}
+ 
+ 	return true;
+@@ -5221,7 +5221,7 @@
+ 				pOrigin = &pEvent->m_SoundOrigin;
+ 			}
+ 			CLocalPlayerFilter filter;
+-			EmitSound( filter, GetSoundSourceIndex(), STRING( pEvent->m_SoundName.c_str() ), pOrigin );
++			EmitSound( filter, GetSoundSourceIndex(), pEvent->m_SoundName.c_str(), pOrigin );
+ 
+ 			m_SoundEvents.Remove( i );
+ 		}
+@@ -8046,7 +8046,7 @@
+ 	if ( !pEntity )
+ 		return;
+ 
+-	pEntity->SetModelName( pItem->GetMagazineModel() );
++	pEntity->SetModelName( MAKE_STRING( pItem->GetMagazineModel() ) );
+ 	pEntity->SetPhysicsMode( PHYSICS_MULTIPLAYER_CLIENTSIDE );
+ 	pEntity->SetCollisionGroup( COLLISION_GROUP_DEBRIS );
+ 	pEntity->SetDistanceFade( 500.0f, 550.0f );
 diff -ruN a/game/client/mumble.cpp b/game/client/mumble.cpp
 --- a/game/client/mumble.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/client/mumble.cpp	2026-11-02 19:22:40.764854264 +0000
@@ -780,6 +827,17 @@ diff -ruN a/game/client/mumble.cpp b/game/client/mumble.cpp
  #endif
  
  #include "cbase.h"
+diff -ruN a/game/client/panorama/ui_itempreview_renderer.h b/game/client/panorama/ui_itempreview_renderer.h
+--- a/game/client/panorama/ui_itempreview_renderer.h	2026-08-10 03:28:37.000000000 +0000
++++ b/game/client/panorama/ui_itempreview_renderer.h	2026-11-02 21:31:08.305076486 +0000
+@@ -9,6 +9,7 @@
+ #include "datacache/imdlcache.h"
+ #include "materialsystem/MaterialSystemUtil.h"
+ #include "tier3/mdlutils.h"
++#include "panorama/iuirenderengine.h" // [port] full CRenderThreadCallback definition (only forward-declared via rendercommands.h)
+ 
+ 
+ //-----------------------------------------------------------------------------
 diff -ruN a/game/server/ai_movesolver.cpp b/game/server/ai_movesolver.cpp
 --- a/game/server/ai_movesolver.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/server/ai_movesolver.cpp	2026-11-02 19:22:40.764854264 +0000
@@ -1464,8 +1522,8 @@ diff -ruN a/public/dt_recv.h b/public/dt_recv.h
  void RecvProxy_FloatToFloat  ( const CRecvProxyData *pData, void *pStruct, void *pOut );
 diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 --- a/public/external/v8/include/v8.h	1970-01-01 00:00:00.000000000 +0000
-+++ b/public/external/v8/include/v8.h	2026-11-02 20:44:44.922733116 +0000
-@@ -0,0 +1,316 @@
++++ b/public/external/v8/include/v8.h	2026-11-02 21:29:38.170127920 +0000
+@@ -0,0 +1,319 @@
 +// csARM port stub: minimal v8 declarations.
 +//
 +// The 2019 partner tree integrated the Panorama UI into the client's public
@@ -1590,6 +1648,9 @@ diff -ruN a/public/external/v8/include/v8.h b/public/external/v8/include/v8.h
 +	T* operator->() const { return 0; }
 +	bool IsEmpty() const { return true; }
 +	void Reset() {}
++	template <class S> void Reset(Isolate *isolate, const Handle<S>& that) { (void)isolate; (void)that; }
++	template <class S> void Reset(Isolate *isolate, const Local<S>& that) { (void)isolate; (void)that; }
++	Local<T> Get(Isolate *isolate) const { (void)isolate; return Local<T>(); }
 +};
 +
 +class Value
