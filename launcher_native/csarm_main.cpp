@@ -308,11 +308,22 @@ static void fillInterfaceRegistries()
 // ---------------------------------------------------------------------------
 // SDL_main: the real boot
 // ---------------------------------------------------------------------------
+// csARM run 41485882642: libtier0's static initializer set
+// g_ThreadMainThreadID in the Java UI thread that System.loadLibrary used,
+// while the engine runs on the SDL thread.  The first CreateGameWindow ->
+// CVideoMode_MaterialSystem::SetMode -> CMaterialSystem::ForceSingleThreaded
+// then hit Error("Can't force single thread from within thread!") and a
+// clean exit(0) (CSARM_EXIT_HIT, no tombstone).  The SDL thread owns the
+// engine from SDL_main onward: declare it the main thread once up front.
+extern "C" void DeclareCurrentThreadIsMainThread(void);
+
 extern "C" int SDL_main(int argc, char *argv[])
 {
     (void)argc; (void)argv;
     long long t0 = nowMs();
     LOGI("CSARM_MAIN enter");
+    DeclareCurrentThreadIsMainThread();
+    LOGI("CSARM_MAIN thread declared main");
 
     const std::string filesDir = APP_DATA_DIR "/files";
     mkdir(filesDir.c_str(), 0755);
