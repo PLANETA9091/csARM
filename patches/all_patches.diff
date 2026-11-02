@@ -2092,3 +2092,26 @@ index b359e03..8d7f70f 100644
  	AddSystem( cvarModule, CVAR_INTERFACE_VERSION );	
  
  	AppModule_t fileSystemModule = LoadModule( pFileSystemDLL );
+--- a/interfaces/interfaces.cpp	2026-11-02 16:49:36.394960394 +0000
++++ b/interfaces/interfaces.cpp	2026-11-02 16:50:32.970184587 +0000
+@@ -212,7 +212,19 @@
+ 
+ void ReconnectInterface( CreateInterfaceFn factory, const char *pInterfaceName, void **ppGlobal )
+ {
+-	*ppGlobal = factory( pInterfaceName, NULL );
++	void *pReconnect = factory( pInterfaceName, NULL );
++
++	// csARM run 41422299535 (GLES boot): every .so carries its own copy of
++	// this registry, and bionic symbol interposition routes foreign modules'
++	// Connect() calls through whichever copy wins the relocation lottery.
++	// A foreign Connect() may pass a factory that cannot serve the interface
++	// yet (the launcher parent app-system group holds only filesystem_stdio +
++	// SDLMgr when filesystem's Connect runs, so VMaterialSystem080 misses).
++	// The unconditional write then zeroed libtier2's g_pMaterialSystem ->
++	// SEGV in CMaterialReference::Init from CMatSystemSurface::Init.  Only
++	// overwrite on a hit; a miss keeps the already-wired live singleton.
++	if ( pReconnect || !*ppGlobal )
++		*ppGlobal = pReconnect;
+ 
+ 	bool bFound = false;
+ 	Assert( s_nRegistrationCount < ARRAYSIZE(s_pConnectionRegistration) );

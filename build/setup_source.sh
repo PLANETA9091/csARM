@@ -113,6 +113,15 @@ else
   git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_boot.diff" || { echo "csarm_boot.diff APPLY FAILED"; exit 1; }
 fi
 
+# csARM sdlmgr GL tail gate (applies after the boot diff: appframework/
+# sdlmgr.cpp is normalized to pristine by the boot section above, so this
+# diff is anchored to the BOOT-patched revision).  Idempotent.
+if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_sdlmgr_gl.diff" 2>/dev/null; then
+  echo "csarm_sdlmgr_gl.diff already applied"
+else
+  git apply --whitespace=nowarn "$REPO_DIR/patches/extras/csarm_sdlmgr_gl.diff" || { echo "csarm_sdlmgr_gl.diff APPLY FAILED"; exit 1; }
+fi
+
 # csARM tier2 connect-path null guards (applies after all_patches; neither
 # file is touched by all_patches).  Idempotent like the boot diff.
 if git apply --whitespace=nowarn --reverse --check "$REPO_DIR/patches/extras/csarm_tier2_connect.diff" 2>/dev/null; then
