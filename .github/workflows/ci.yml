@@ -1119,7 +1119,7 @@ jobs:
             -I c15/thirdparty/telemetry/include -I c15/tier0 -I c15/thirdparty -I c15/thirdparty/sse2neon \
             tests/test_math.cpp tests/test_stubs.cpp \
             c15/tier0/cpu.cpp c15/tier0/cpu_posix.cpp c15/tier0/tier0_strtools.cpp c15/tier1/processor_detect_linux.cpp \
-            c15/tier1/convar.cpp c15/tier1/characterset.cpp c15/tier1/utlstring.cpp c15/tier1/utlbuffer.cpp \
+            c15/tier1/convar.cpp c15/tier1/characterset.cpp c15/tier1/utlstring.cpp c15/tier1/utlbuffer.cpp c15/tier1/strtools_unicode.cpp \
             $SRCS \
             -o tests/out/test_math -lm 2> tests/build.log || { tail -30 tests/build.log; exit 1; }
           qemu-aarch64 -L /usr/aarch64-linux-gnu tests/out/test_math
@@ -1135,7 +1135,7 @@ jobs:
             -I c15/thirdparty/telemetry/include -I c15/tier0 -I c15/thirdparty -I c15/thirdparty/sse2neon \
             tests/test_render.cpp tests/test_stubs.cpp \
             c15/tier0/cpu.cpp c15/tier0/cpu_posix.cpp c15/tier0/tier0_strtools.cpp c15/tier1/processor_detect_linux.cpp \
-            c15/tier1/convar.cpp c15/tier1/characterset.cpp c15/tier1/utlstring.cpp c15/tier1/utlbuffer.cpp \
+            c15/tier1/convar.cpp c15/tier1/characterset.cpp c15/tier1/utlstring.cpp c15/tier1/utlbuffer.cpp c15/tier1/strtools_unicode.cpp \
             $SRCS \
             -o tests/out/test_render -lm 2> tests/build_render.log || { tail -30 tests/build_render.log; exit 1; }
           qemu-aarch64 -L /usr/aarch64-linux-gnu tests/out/test_render
