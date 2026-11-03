@@ -31,15 +31,83 @@ void jpeg_set_quality(void *cinfo, int quality, int force_baseline)
 void jpeg_write_scanlines(void *cinfo, unsigned char **scanlines, int num)
 { (void)cinfo; (void)scanlines; (void)num; }
 
-/* --- Phonon binaural spatializer (ipl* = Steam Audio 2015 era) ------------ */
-void *iplCreate3DContext(void *renderPath, void *hrtf, void *simulationSettings)
-{ (void)renderPath; (void)hrtf; (void)simulationSettings; return 0; }
-void *iplCreateBinauralEffect(void *context, void *audioCfg, void *effectCfg)
-{ (void)context; (void)audioCfg; (void)effectCfg; return 0; }
-void iplDestroyBinauralEffect(void *effect) { (void)effect; }
-void iplApplyBinauralEffect(void *effect, void *in, void *out, int directionIndex,
-                            float spatialBlend, float dualBandHiFreqAmt)
-{ (void)effect; (void)in; (void)out; (void)directionIndex; (void)spatialBlend; (void)dualBandHiFreqAmt; }
+/* --- Phonon binaural spatializer (ipl* API) ------------------------------- *
+ * Valve ships libphonon3d as a prebuilt binary (no source, no ARM build).
+ * The 2019 partner tree carries the Steam Audio 2.x SDK header
+ * (public/phonon/phonon.h) and calls the full API from the engine audio
+ * path (SND_Init occlusion in snd_dma.cpp, per-channel HRTF/occlusion in
+ * snd_wave_data.cpp).  Every caller checks the returned status and
+ * degrades cleanly: create-failures log a DevMsg and disable the feature
+ * (snd_hwcompat / snd_occlusion flip off, the null-device path stays).
+ * The stubs below therefore report IPL_STATUS_FAILURE from every factory
+ * and no-op the apply/destroy/set family — spatial audio is simply off. */
+#include <phonon/phonon.h>
+
+IPLerror iplCreateScene(IPLContext context, IPLhandle computeDevice,
+                        IPLSimulationSettings simulationSettings,
+                        IPLint32 numMaterials, IPLhandle* scene)
+{ (void)context; (void)computeDevice; (void)simulationSettings; (void)numMaterials;
+  (void)scene; return IPL_STATUS_FAILURE; }
+
+IPLvoid iplSetSceneMaterial(IPLhandle scene, IPLint32 materialIndex, IPLMaterial material)
+{ (void)scene; (void)materialIndex; (void)material; }
+
+IPLvoid iplFinalizeScene(IPLhandle scene, IPLFinalizeSceneProgressCallback progressCallback)
+{ (void)scene; (void)progressCallback; }
+
+IPLerror iplCreateEnvironment(IPLContext context, IPLhandle computeDevice,
+                              IPLSimulationSettings simulationSettings,
+                              IPLhandle scene, IPLhandle probeManager, IPLhandle* environment)
+{ (void)context; (void)computeDevice; (void)simulationSettings; (void)scene;
+  (void)probeManager; (void)environment; return IPL_STATUS_FAILURE; }
+
+IPLerror iplCreateEnvironmentalRenderer(IPLContext context, IPLhandle environment,
+                                        IPLRenderingSettings renderingSettings,
+                                        IPLAudioFormat outputFormat,
+                                        IPLSimulationThreadCreateCallback threadCreateCallback,
+                                        IPLSimulationThreadDestroyCallback threadDestroyCallback,
+                                        IPLhandle* renderer)
+{ (void)context; (void)environment; (void)renderingSettings; (void)outputFormat;
+  (void)threadCreateCallback; (void)threadDestroyCallback; (void)renderer;
+  return IPL_STATUS_FAILURE; }
+
+IPLerror iplCreateBinauralRenderer(IPLContext context, IPLRenderingSettings renderingSettings,
+                                   IPLHrtfParams params, IPLhandle* renderer)
+{ (void)context; (void)renderingSettings; (void)params; (void)renderer;
+  return IPL_STATUS_FAILURE; }
+
+IPLerror iplCreateBinauralEffect(IPLhandle renderer, IPLAudioFormat inputFormat,
+                                 IPLAudioFormat outputFormat, IPLhandle* effect)
+{ (void)renderer; (void)inputFormat; (void)outputFormat; (void)effect;
+  return IPL_STATUS_FAILURE; }
+
+IPLvoid iplDestroyBinauralEffect(IPLhandle* effect) { (void)effect; }
+
+IPLvoid iplApplyBinauralEffect(IPLhandle effect, IPLAudioBuffer inputAudio,
+                               IPLVector3 direction, IPLHrtfInterpolation interpolation,
+                               IPLAudioBuffer outputAudio)
+{ (void)effect; (void)inputAudio; (void)direction; (void)interpolation; (void)outputAudio; }
+
+IPLvoid iplApplyBinauralEffectWithParameters(IPLhandle effect, IPLAudioBuffer inputAudio,
+                                             IPLVector3 direction,
+                                             IPLHrtfInterpolation interpolation,
+                                             IPLAudioBuffer outputAudio,
+                                             IPLfloat32* leftDelay, IPLfloat32* rightDelay)
+{ (void)effect; (void)inputAudio; (void)direction; (void)interpolation; (void)outputAudio;
+  (void)leftDelay; (void)rightDelay; }
+
+IPLerror iplCreateDirectSoundEffect(IPLhandle renderer, IPLAudioFormat inputFormat,
+                                    IPLAudioFormat outputFormat, IPLhandle* effect)
+{ (void)renderer; (void)inputFormat; (void)outputFormat; (void)effect;
+  return IPL_STATUS_FAILURE; }
+
+IPLvoid iplDestroyDirectSoundEffect(IPLhandle* effect) { (void)effect; }
+
+IPLvoid iplApplyDirectSoundEffect(IPLhandle effect, IPLAudioBuffer inputAudio,
+                                  IPLDirectSoundPath directSoundPath,
+                                  IPLDirectSoundEffectOptions options,
+                                  IPLAudioBuffer outputAudio)
+{ (void)effect; (void)inputAudio; (void)directSoundPath; (void)options; (void)outputAudio; }
 
 #ifdef __cplusplus
 }

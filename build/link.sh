@@ -116,7 +116,10 @@ GLUE_FS_O=""
 $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_fs.cpp.o" "$SCRIPT_DIR/glue_fs.cpp" 2>>"$LOG" && GLUE_FS_O="$OUTDIR/glue_fs.cpp.o"
 # engine middleware stubs (jpeg / Phonon / DSound voice capture)
 GLUE_ENG_O=""
-$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_engine.cpp.o" "$SCRIPT_DIR/glue_engine.cpp" 2>>"$LOG" && GLUE_ENG_O="$OUTDIR/glue_engine.cpp.o"
+# -I c15/public: glue_engine.cpp includes <phonon/phonon.h> (2019 tree ships
+# the Steam Audio SDK header under public/phonon) to stub the ipl* API with
+# real signatures; the libphonon3d binary itself is never linked.
+$CC -c -fPIC -O1 -w -std=gnu++17 -I "$R/c15/public" -o "$OUTDIR/glue_engine.cpp.o" "$SCRIPT_DIR/glue_engine.cpp" 2>>"$LOG" && GLUE_ENG_O="$OUTDIR/glue_engine.cpp.o"
 # soundsystem glue (windows-only device factories)
 GLUE_SND_O=""
 $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_soundsystem.cpp.o" "$SCRIPT_DIR/glue_soundsystem.cpp" 2>>"$LOG" && GLUE_SND_O="$OUTDIR/glue_soundsystem.cpp.o"
