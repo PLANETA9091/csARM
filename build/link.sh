@@ -122,7 +122,7 @@ GLUE_ENG_O=""
 # (webapi_response.cpp is absent from the 2019 depot).  The platform defines
 # mirror trybuild.sh's DEF — tier0/platform.h needs the POSIX branch (the
 # Windows branch includes <tchar.h>, absent on Linux).
-$CC -c -fPIC -O1 -w -std=gnu++17 -I "$R/c15/public" -I "$R/c15/thirdparty" -I "$R/c15/thirdparty/sse2neon" \
+$CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing -I "$R/c15/public" -I "$R/c15/thirdparty" -I "$R/c15/thirdparty/sse2neon" \
   -DPOSIX -D_POSIX -DLINUX -D_LINUX -DLINUXALL -DGNUC -DCOMPILER_GCC \
   -DPLATFORM_64BITS -DX64BITS -D__ANDROID__ -DANDROID \
   -o "$OUTDIR/glue_engine.cpp.o" "$SCRIPT_DIR/glue_engine.cpp" 2>>"$LOG" && GLUE_ENG_O="$OUTDIR/glue_engine.cpp.o"
