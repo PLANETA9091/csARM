@@ -742,18 +742,6 @@ diff -ruN a/game/client/c_baselesson.cpp b/game/client/c_baselesson.cpp
  		varType = FIELD_STRING; \
  	}
  
-diff -ruN a/game/client/client_cstrike15_inc.vpc b/game/client/client_cstrike15_inc.vpc
---- a/game/client/client_cstrike15_inc.vpc	2026-08-10 03:28:37.000000000 +0000
-+++ b/game/client/client_cstrike15_inc.vpc	2026-11-02 20:09:07.829126063 +0000
-@@ -909,7 +909,7 @@
- 				}
- 			}
- 
--			$Folder "UIcomponents" 
-+			$Folder "UIcomponents"	[$PANORAMA_ENABLE]
- 			{
- 				$File	"cstrike15/uicomponents/uicomponent_common.h" 
- 				$File	"cstrike15/uicomponents/uicomponent_common.cpp" 
 diff -ruN a/game/client/clientmode_shared.cpp b/game/client/clientmode_shared.cpp
 --- a/game/client/clientmode_shared.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/client/clientmode_shared.cpp	2026-11-02 21:30:48.743088301 +0000

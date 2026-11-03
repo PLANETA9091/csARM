@@ -266,7 +266,7 @@ build_symmap() {
 # bionic punishes at dlopen time (tier0 -> libserver killed the boot).
 lib_rank() {
   case "$1" in
-    libtier0.so|libbzip2.so|libcrypto++.so|libquickhull.so|libprotobuf.so|libSDL2.so|libpng.so) echo 0 ;;
+    libtier0.so|libbzip2.so|libcrypto++.so|libquickhull.so|libprotobuf.so|libSDL2.so|libpng.so|libkv3.so) echo 0 ;;
     libtier1.so)  echo 1 ;;
     libvstdlib.so|libmathlib.so) echo 2 ;;
     libtier2.so)  echo 3 ;;
@@ -534,7 +534,7 @@ link_so() {
   # bzip2 keep their own static copies and must not duplicate symbols.
   case "$name" in
     libtier0.so|libtier1.so|libtier2.so|libprotobuf.so|libbzip2.so|libSDL2.so|\
-    libcrypto++.so|libquickhull.so|libpng.so) ;;
+    libcrypto++.so|libquickhull.so|libpng.so|libkv3.so) ;;
     *)
       [ -n "$TIER1_CONN_O" ] && [ -f "$TIER1_CONN_O" ] && { objs+=("$TIER1_CONN_O"); total=$((total+1)); }
       [ -n "$TIER2_CONN_O" ] && [ -f "$TIER2_CONN_O" ] && { objs+=("$TIER2_CONN_O"); total=$((total+1)); }
@@ -633,6 +633,10 @@ link_so libbzip2.so "" bzip2 || true
 # the png read API through common/imageutils.cpp (client econ item-image
 # stamping, server survival texture load). Pure C leaf, needs only -lz.
 link_so libpng.so "" libpng || true
+# kv3lib (2019): the KeyValues3 read/write stack. server_base.vpc links it
+# ("$Lib kv3lib"); the server's survival/ruleset code reads KV3 files through
+# it (run #144: KeyValues3::HasMetadata et al UND in libserver). Pure leaf.
+link_so libkv3.so "" kv3lib || true
 link_so libfilesystem_stdio.so "tier0 tier1 vstdlib" filesystem_stdio vpklib || true
 link_so libtier3.so "tier0 tier1 vstdlib" tier3 || true
 link_so libdmxloader.so "tier0 tier1" dmxloader || true
