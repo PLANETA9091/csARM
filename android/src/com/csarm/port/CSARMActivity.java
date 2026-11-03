@@ -90,6 +90,14 @@ public class CSARMActivity extends SDLActivity {
         String extra = in != null ? in.getStringExtra("args") : null;
         if (extra != null && !extra.trim().isEmpty()) {
             sb.append(extra.trim()).append("\n");
+        } else if (new File(files, "csarm.args").exists()) {
+            // a staged csarm.args (map-load probe pushes one via adb root)
+            // wins over the built-in defaults — otherwise this method would
+            // clobber it on every start and the probe would boot the menu
+            // instead of +map (run #152)
+            sb.setLength(0);
+            Log.i(TAG, "CSARM_ARGS_READY keep existing csarm.args");
+            return;
         } else {
             // fast boot defaults (no intro video, windowed, threaded engine)
             sb.append("-novid\n");

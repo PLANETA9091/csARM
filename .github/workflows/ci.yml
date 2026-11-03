@@ -1069,17 +1069,27 @@ jobs:
           echo "--- csarm.args on device ---"
           "$ADB" shell "cat /data/data/$APP/files/csarm.args" || true
           # --- 3. relaunch the engine on the probe args ---
+          # (CSARMActivity now KEEPS a staged csarm.args instead of clobbering
+          # it with defaults — run #152 lost +map ar_dizzy exactly there)
           "$ADB" -s emulator-5554 shell am force-stop $APP || true
           sleep 3
           "$ADB" -s emulator-5554 logcat -c || true
           "$ADB" -s emulator-5554 shell am start -n $APP/.CSARMActivity || true
           # --- 4. wait for map progress / fail / death (diagnostic-first) ---
-          LIMIT=480; PROG=""
+          LIMIT=480; PROG=""; LAUNCH_S=""
           while [ $SECONDS -lt $LIMIT ]; do
             "$ADB" -s emulator-5554 logcat -d > logcat_map.txt 2>/dev/null || true
             if grep -q "CSARM_MAIN_FAIL" logcat_map.txt; then echo "MAIN_FAIL at t=${SECONDS}s"; break; fi
-            [ "$(grep -c CSARM_EXIT_HIT logcat_map.txt 2>/dev/null || echo 0)" -ge 6 ] && { echo "crash-loop at t=${SECONDS}s"; break; }
-            if ! "$ADB" -s emulator-5554 shell pidof $APP >/dev/null 2>&1; then echo "process died at t=${SECONDS}s"; break; fi
+            CNT=$(grep -c CSARM_EXIT_HIT logcat_map.txt 2>/dev/null); [ -n "$CNT" ] || CNT=0
+            [ "$CNT" -ge 6 ] && { echo "crash-loop at t=${SECONDS}s"; break; }
+            if [ -z "$LAUNCH_S" ] && grep -q "CSARM_LAUNCHER_CALL" logcat_map.txt; then
+              LAUNCH_S=$SECONDS; echo "LauncherMain called at t=${SECONDS}s"
+            fi
+            # dead-process break only once the launcher was seen alive (run
+            # #152: pidof failed at t=3s while the app was still spawning)
+            if [ -n "$LAUNCH_S" ] && ! "$ADB" -s emulator-5554 shell pidof $APP >/dev/null 2>&1; then
+              echo "engine process died after LauncherMain at t=${SECONDS}s"; break
+            fi
             if grep -qaE 'Host_NewGame|Loading map|Spawning server' logcat_map.txt; then
               if [ -z "$PROG" ]; then PROG=$SECONDS; echo "map spawn progress at t=${SECONDS}s — 60s capture window"; fi
               [ $((SECONDS - PROG)) -ge 60 ] && break
