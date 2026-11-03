@@ -13,6 +13,7 @@
 /thirdparty/zlib-1.2.5/
 /thirdparty/quickhull/
 /thirdparty/telemetry/
+/kv3lib/
 /appframework/
 /common/
 /datacache/
