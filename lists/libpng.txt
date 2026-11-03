@@ -1,0 +1,15 @@
+thirdparty/libpng-1.5.2/png.c
+thirdparty/libpng-1.5.2/pngerror.c
+thirdparty/libpng-1.5.2/pngget.c
+thirdparty/libpng-1.5.2/pngmem.c
+thirdparty/libpng-1.5.2/pngpread.c
+thirdparty/libpng-1.5.2/pngread.c
+thirdparty/libpng-1.5.2/pngrio.c
+thirdparty/libpng-1.5.2/pngrtran.c
+thirdparty/libpng-1.5.2/pngrutil.c
+thirdparty/libpng-1.5.2/pngset.c
+thirdparty/libpng-1.5.2/pngtrans.c
+thirdparty/libpng-1.5.2/pngwio.c
+thirdparty/libpng-1.5.2/pngwrite.c
+thirdparty/libpng-1.5.2/pngwtran.c
+thirdparty/libpng-1.5.2/pngwutil.c

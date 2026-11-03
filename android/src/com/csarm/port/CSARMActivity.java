@@ -34,7 +34,7 @@ public class CSARMActivity extends SDLActivity {
         "protobuf", "tier0", "tier1", "tier2", "vstdlib", "mathlib",
         "appframework", "datacache", "studiorender", "soundemittersystem",
         "vguimatsurface", "vgui", "vgui_controls", "materialsystem",
-        "inputsystem", "engine", "client", "server", "launcher",
+        "inputsystem", "engine", "png", "client", "server", "launcher",
         "bzip2", "tier3", "dmxloader", "bitmap", "vtf", "shaderlib", "scenefilecache",
         "filesystem_stdio"
     };

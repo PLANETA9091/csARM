@@ -266,7 +266,7 @@ build_symmap() {
 # bionic punishes at dlopen time (tier0 -> libserver killed the boot).
 lib_rank() {
   case "$1" in
-    libtier0.so|libbzip2.so|libcrypto++.so|libquickhull.so|libprotobuf.so|libSDL2.so) echo 0 ;;
+    libtier0.so|libbzip2.so|libcrypto++.so|libquickhull.so|libprotobuf.so|libSDL2.so|libpng.so) echo 0 ;;
     libtier1.so)  echo 1 ;;
     libvstdlib.so|libmathlib.so) echo 2 ;;
     libtier2.so)  echo 3 ;;
@@ -534,7 +534,7 @@ link_so() {
   # bzip2 keep their own static copies and must not duplicate symbols.
   case "$name" in
     libtier0.so|libtier1.so|libtier2.so|libprotobuf.so|libbzip2.so|libSDL2.so|\
-    libcrypto++.so|libquickhull.so) ;;
+    libcrypto++.so|libquickhull.so|libpng.so) ;;
     *)
       [ -n "$TIER1_CONN_O" ] && [ -f "$TIER1_CONN_O" ] && { objs+=("$TIER1_CONN_O"); total=$((total+1)); }
       [ -n "$TIER2_CONN_O" ] && [ -f "$TIER2_CONN_O" ] && { objs+=("$TIER2_CONN_O"); total=$((total+1)); }
@@ -629,6 +629,10 @@ link_so libmaterialsystem.so "tier0 tier1 mathlib vstdlib tier2" materialsystem 
 link_so libshaderlib.so "tier0 tier1 mathlib vstdlib" shaderlib || true
 link_so libinputsystem.so "tier0 tier1 vstdlib SDL2" inputsystem || true
 link_so libbzip2.so "" bzip2 || true
+# libpng 1.5.2 (vendored from the 2018 mirror): the 2019 game DLLs reference
+# the png read API through common/imageutils.cpp (client econ item-image
+# stamping, server survival texture load). Pure C leaf, needs only -lz.
+link_so libpng.so "" libpng || true
 link_so libfilesystem_stdio.so "tier0 tier1 vstdlib" filesystem_stdio vpklib || true
 link_so libtier3.so "tier0 tier1 vstdlib" tier3 || true
 link_so libdmxloader.so "tier0 tier1" dmxloader || true
