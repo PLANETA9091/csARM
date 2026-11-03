@@ -1036,8 +1036,16 @@ jobs:
           ADB=$SDK/platform-tools/adb
           APP=com.csarm.port
           # --- 1. pick a map that actually shipped in the staged content ---
-          MAPS=$("$ADB" -s emulator-5554 shell run-as $APP sh -c 'ls -s files/cstrike/maps/*.bsp' 2>/dev/null | tr -d '\r')
-          echo "bsp files on device: $(echo "$MAPS" | grep -c bsp)"
+          # NB: part 0 already enabled adb root (aosp_atd = userdebug) — the
+          # root shell reads the app sandbox directly. run-as stays as the
+          # fallback for non-rooted images (run #151: silent run-as failure
+          # under adb root made the first probe see 0 BSPs).
+          "$ADB" shell id | head -1 || true
+          echo "--- maps dir sample ---"
+          "$ADB" shell "ls /data/data/$APP/files/cstrike/maps 2>/dev/null | head -8" || true
+          MAPS=$("$ADB" shell "ls -s /data/data/$APP/files/cstrike/maps/*.bsp" 2>/dev/null | tr -d '\r')
+          [ -n "$MAPS" ] || MAPS=$("$ADB" shell run-as $APP sh -c 'ls -s files/cstrike/maps/*.bsp' 2>/dev/null | tr -d '\r')
+          echo "bsp count on device: $(echo "$MAPS" | grep -c bsp)"
           MAP=""
           for want in ar_dizzy ar_baggage de_lake de_dust2; do
             echo "$MAPS" | grep -q "/${want}\.bsp" && { MAP=$want; break; }
@@ -1054,9 +1062,12 @@ jobs:
           EOF
           sed -i 's/^          //' /tmp/csarm_probe.args
           "$ADB" -s emulator-5554 push /tmp/csarm_probe.args /data/local/tmp/csarm_probe.args
-          "$ADB" -s emulator-5554 shell run-as $APP sh -c 'cp /data/local/tmp/csarm_probe.args files/csarm.args && rm /data/local/tmp/csarm_probe.args'
+          "$ADB" shell "cp /data/local/tmp/csarm_probe.args /data/data/$APP/files/csarm.args && rm /data/local/tmp/csarm_probe.args" \
+            || "$ADB" shell run-as $APP sh -c 'cp /data/local/tmp/csarm_probe.args files/csarm.args && rm /data/local/tmp/csarm_probe.args'
+          APPUID=$("$ADB" shell dumpsys package $APP | sed -n 's/.*userId=\([0-9]*\).*/\1/p' | head -1 | tr -d '\r')
+          [ -n "$APPUID" ] && "$ADB" shell "chown $APPUID:$APPUID /data/data/$APP/files/csarm.args && chmod 644 /data/data/$APP/files/csarm.args && restorecon /data/data/$APP/files/csarm.args" || true
           echo "--- csarm.args on device ---"
-          "$ADB" -s emulator-5554 shell run-as $APP cat files/csarm.args || true
+          "$ADB" shell "cat /data/data/$APP/files/csarm.args" || true
           # --- 3. relaunch the engine on the probe args ---
           "$ADB" -s emulator-5554 shell am force-stop $APP || true
           sleep 3
