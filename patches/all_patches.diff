@@ -1188,9 +1188,9 @@ diff -ruN a/interfaces/interfaces.cpp b/interfaces/interfaces.cpp
  
  	bool bFound = false;
  	Assert( s_nRegistrationCount < ARRAYSIZE(s_pConnectionRegistration) );
-diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
---- a/launcher/launcher.cpp	2026-08-10 03:28:37.000000000 +0000
-+++ b/launcher/launcher.cpp	2026-11-02 19:49:15.405842137 +0000
+diff -ruN /tmp/patchwork/a/launcher/launcher.cpp /tmp/patchwork/b/launcher/launcher.cpp
+--- a/launcher/launcher.cpp	2026-11-03 22:27:09.689140255 +0000
++++ b/launcher/launcher.cpp	2026-11-03 22:27:26.453141836 +0000
 @@ -28,6 +28,7 @@
  #include "appframework/ilaunchermgr.h"
  #include <stdio.h>
@@ -1318,7 +1318,23 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  	// See if we're running panorama
  	bool bPanorama = false;
-@@ -941,14 +997,44 @@
+@@ -839,7 +895,14 @@
+ #endif
+ 
+ 	// Load Scaleform either if not running Panorama, or running hybrid client for debug
+-	if ( bScaleform )
++	// csARM: the Scaleform middleware is not part of the ported stack.  With
++	// PANORAMA_ENABLE forced off the 2019 launcher keeps bScaleform == true
++	// (the re-compute lives inside #ifdef PANORAMA_ENABLE), so the missing
++	// module failed AddSystems -> CREATION and the engine exited 309 ms in
++	// (run #154: Main() -> -1, stage=11).  Skip Scaleform entirely when its
++	// module is absent, like the 2018 port did via the compile-time
++	// INCLUDE_SCALEFORM gate.
++	if ( bScaleform && LoadModule( LAUNCHER_APPSYSTEM( "scaleformui" ) ) != APP_MODULE_INVALID )
+ 	{
+ 		// SF4 TODO
+ 		// Windows - See if we need to launch SF4 instead of SF3
+@@ -941,14 +1004,44 @@
  
  bool CSourceAppSystemGroup::PreInit()
  {
@@ -1363,7 +1379,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #ifdef _PS3
  	g_pVJobs = ( IVJobs* )factory( VJOBS_INTERFACE_VERSION, NULL );  // this is done only once; g_pVJobs doesn't change even after multiple reloads of VJobs.prx
-@@ -969,14 +1055,20 @@
+@@ -969,14 +1062,20 @@
  		}
  	}
  	if ( FileSystem_SetupSteamEnvironment( steamInfo ) != FS_OK )
@@ -1384,7 +1400,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #if defined( SUPPORT_VPK )
  	Msg( "start timing %f\n", Plat_FloatTime() );
-@@ -1025,11 +1117,13 @@
+@@ -1025,11 +1124,13 @@
  	info.m_pParentAppSystemGroup = this;
  	info.m_bTextMode = g_bTextMode;
  
@@ -1398,7 +1414,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  	return g_pEngineAPI->Run();
  }
  
-@@ -1955,6 +2049,7 @@
+@@ -1955,6 +2056,7 @@
  		int nRetval = ValveCocoaMain( &steamApplication ); 
  #else
  		int nRetval = steamApplication.Run();
