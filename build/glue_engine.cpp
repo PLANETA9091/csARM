@@ -126,3 +126,46 @@ void ShutdownMixerControls(void) {}
 
 /* [port] g_bReplayLoadedTools: the 2019 tree defines it itself in
  * engine/toolframework.cpp - no glue definition needed. */
+
+/* --- EmitJSONString (C++ linkage) ----------------------------------------- *
+ * game/client/cstrike15/uicomponents/uicomponent_common.cpp declares
+ * "extern void EmitJSONString( CUtlBuffer&, const char* )" ("Using this from
+ * webapi_response to reuse some code") but webapi_response.cpp is not part
+ * of the partner depot — the definition is missing from the 2019 tree
+ * entirely (run #146: libclient dlopen failed on
+ * _Z14EmitJSONStringR10CUtlBufferPKc).  Re-implement the obvious JSON
+ * string escaper on CUtlBuffer. */
+#include "tier1/utlbuffer.h"
+
+void EmitJSONString( CUtlBuffer &outputBuffer, const char *pchValue )
+{
+	if ( !pchValue )
+	{
+		outputBuffer.Put( "null", 4 );
+		return;
+	}
+	outputBuffer.PutChar( '"' );
+	for ( const char *p = pchValue; *p; ++p )
+	{
+		switch ( *p )
+		{
+			case '"':	outputBuffer.Put( "\\\"", 2 ); break;
+			case '\\':	outputBuffer.Put( "\\\\", 2 ); break;
+			case '\n':	outputBuffer.Put( "\\n", 2 ); break;
+			case '\r':	outputBuffer.Put( "\\r", 2 ); break;
+			case '\t':	outputBuffer.Put( "\\t", 2 ); break;
+			default:
+				if ( (unsigned char)*p < 0x20 )
+				{
+					char tmp[8];
+					V_snprintf( tmp, sizeof( tmp ), "\\u%04x", (unsigned char)*p );
+					outputBuffer.Put( tmp, 6 );
+				}
+				else
+				{
+					outputBuffer.PutChar( *p );
+				}
+		}
+	}
+	outputBuffer.PutChar( '"' );
+}

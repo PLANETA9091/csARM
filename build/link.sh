@@ -118,8 +118,14 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_fs.cpp.o" "$SCRIPT_DIR/glue_fs
 GLUE_ENG_O=""
 # -I c15/public: glue_engine.cpp includes <phonon/phonon.h> (2019 tree ships
 # the Steam Audio SDK header under public/phonon) to stub the ipl* API with
-# real signatures; the libphonon3d binary itself is never linked.
-$CC -c -fPIC -O1 -w -std=gnu++17 -I "$R/c15/public" -o "$OUTDIR/glue_engine.cpp.o" "$SCRIPT_DIR/glue_engine.cpp" 2>>"$LOG" && GLUE_ENG_O="$OUTDIR/glue_engine.cpp.o"
+# real signatures, and "tier1/utlbuffer.h" for the EmitJSONString definition
+# (webapi_response.cpp is absent from the 2019 depot).  The platform defines
+# mirror trybuild.sh's DEF — tier0/platform.h needs the POSIX branch (the
+# Windows branch includes <tchar.h>, absent on Linux).
+$CC -c -fPIC -O1 -w -std=gnu++17 -I "$R/c15/public" \
+  -DPOSIX -D_POSIX -DLINUX -D_LINUX -DLINUXALL -DGNUC -DCOMPILER_GCC \
+  -DPLATFORM_64BITS -DX64BITS \
+  -o "$OUTDIR/glue_engine.cpp.o" "$SCRIPT_DIR/glue_engine.cpp" 2>>"$LOG" && GLUE_ENG_O="$OUTDIR/glue_engine.cpp.o"
 # soundsystem glue (windows-only device factories)
 GLUE_SND_O=""
 $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_soundsystem.cpp.o" "$SCRIPT_DIR/glue_soundsystem.cpp" 2>>"$LOG" && GLUE_SND_O="$OUTDIR/glue_soundsystem.cpp.o"
