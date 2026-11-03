@@ -202,14 +202,22 @@ class Parser:
                         m = re.match(r'\s*\$Conditional\s+([A-Za-z0-9_]+)\s+"([^"]*)"', line2, re.IGNORECASE)
                         if m:
                             name, val = m.group(1), m.group(2)
-                            # [port] Middleware the Android build does not
-                            # ship: no Scaleform runtime (scaleformui.so is
-                            # absent, glue_stubs forces ScaleformUI()==false)
-                            # and no Panorama stack yet (phase 2 of the port).
-                            # Force the VPC variables to "0" so the file
-                            # gates AND the #if defined(...) call-site gates
-                            # stay consistent on the off side.
-                            if name in ('INCLUDE_SCALEFORM', 'PANORAMA_ENABLE'):
+                            # [port] PANORAMA_ENABLE: no Panorama stack in the
+                            # port yet (phase 2), and the 2019 partner CLIENT
+                            # already pins it to "0" on desktop — force "0"
+                            # for every module so neither panorama files nor
+                            # #if defined(PANORAMA_ENABLE) call sites compile.
+                            # INCLUDE_SCALEFORM stays at its VPC value ("1"):
+                            # the client's gameui integration (cdll_client_int
+                            # GameUI() registration, c_playerresource avatars)
+                            # is unguarded, and the sfhud elements only call
+                            # IScaleformUI through the g_pScaleformUI pointer
+                            # (virtual dispatch — no link-time middleware
+                            # deps, exactly how the 2018 port booted with
+                            # scaleformui.so absent; glue_stubs keeps
+                            # ScaleformUI()==false so the runtime path stays
+                            # on the standard GameUI).
+                            if name == 'PANORAMA_ENABLE':
                                 val = '0'
                             if val != '0':
                                 self.defines.add(name)
