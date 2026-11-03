@@ -674,7 +674,11 @@ link_so liblauncher.so "tier0 tier1 tier2 appframework SDL2" launcher || true
 
 # 4. Client / Server (game DLLs) — same EXCLUDE_RE filtering as link_so
 # responserules runtime (ResponseRules::*, SplitContext, rr_debugresponses)
-# is a neutral Valve lib used by BOTH game DLLs — compile once, link into both
+# 2019: server_base.vpc is the ONLY project with `$Lib responserules_runtime`
+# — the client does not link it and only the server defines the
+# IEngineEmulator::s_pSingleton host (game/server/ai_responsesystem.cpp).
+# Linking RR into libclient.so used to strand s_pSingleton as an
+# unresolvable DATA UND there (run #141: client dlopen failure).
 RR_OBJS=$(ls obj/responserules_runtime/*.o 2>/dev/null | tr '\n' ' ')
 [ -n "${RR_OBJS# }" ] && echo "[rr] responserules objs: $(ls obj/responserules_runtime/*.o 2>/dev/null | wc -l)" | tee -a "$LOG"
 for GAMEDLL in client server; do
@@ -688,13 +692,16 @@ for GAMEDLL in client server; do
     done
   done
   [ "$GTOTAL" -eq 0 ] && continue
+  # responserules runtime: server only (Valve's $Lib layout)
+  RR_THIS=""
+  [ "$GAMEDLL" = "server" ] && RR_THIS="$RR_OBJS"
   echo "[link] lib$GAMEDLL.so (tags: $TAGS) objs=$GTOTAL" | tee -a "$LOG"
-  $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS $RR_OBJS \
+  $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS $RR_THIS \
      $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $STEAM_O $GLUE_O $GLUE_ENG_O $GCS_O \
      -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 -lbzip2 \
      -ldl -llog -lm -lc -lz 2>>"$LOG" \
      && { echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/lib$GAMEDLL.so" || true; } || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
-  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_OBJS $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $STEAM_O $GLUE_O $GLUE_ENG_O $GCS_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
+  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_THIS $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $STEAM_O $GLUE_O $GLUE_ENG_O $GCS_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
 done
 
 # resolve every cross-lib reference into a real DT_NEEDED, then gate

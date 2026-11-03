@@ -5,6 +5,10 @@ DEFAULT_DEFINES = set([
     'POSIX', 'LINUX', 'LINUXALL', 'LINUX64', 'GNUC', '_LINUX',
     'PLATFORM_64BITS', 'X64BITS', 'COMPILER_GCC', 'CROSS_PLATFORM_VERSION',
     'SDL',  # android port builds with SDL (engine audio backends, sdlmgr, ...)
+    # NOTE: SURVIVAL_MODE_ENABLED / INCLUDE_SCALEFORM / PANORAMA_ENABLE are
+    # 2019 $Conditional VPC variables handled in parse() below — do not
+    # pre-define them here or the [$NAME] file gates and the C++ -D set
+    # will drift apart (that drift is what produced run #141's UND set).
 ])
 
 def cond_true(cond, defines):
@@ -137,6 +141,24 @@ class Parser:
                                 self.incs.append(rel)
                 pending_cond = True
                 continue
+            if line2.lstrip().startswith('$') and 'undefinepreprocessor' in ll:
+                # $UndefinePreprocessorDefinitions "NAME1;NAME2" [cond] —
+                # REMOVE the names from the emitted -D set.  This must be
+                # checked BEFORE the generic 'preprocessor' branch below:
+                # the generic one matches on the substring 'preprocessor'
+                # and would ADD the names instead (that is how run #141
+                # ended up with -DINCLUDE_SCALEFORM -DPANORAMA_ENABLE on
+                # the client while their defining files were gated off).
+                if eff:
+                    for s in self.tokenize_paths(line2):
+                        for part in re.split(r'[;,]', s):
+                            part = part.strip()
+                            if not part or part.startswith('$'):
+                                continue
+                            if part in self.ppdefs:
+                                self.ppdefs.remove(part)
+                pending_cond = True
+                continue
             if line2.lstrip().startswith('$') and 'preprocessor' in ll:
                 if eff:
                     for s in self.tokenize_paths(line2):
@@ -164,6 +186,39 @@ class Parser:
                             if name == 'SRCDIR':
                                 val = os.path.abspath(os.path.join(cur_dir, val.replace('\\', '/')))
                             self.macros[name] = val
+                    pending_cond = True
+                    continue
+                if ll.startswith('$conditional'):
+                    # $Conditional NAME "value" [cond] — the VPC variable
+                    # gates [$NAME] file conditions AND becomes a C++ macro
+                    # when its value is non-"0".  Real VPC emits no macro
+                    # for "0" (that is how the 2019 partner client keeps
+                    # PANORAMA_ENABLE call sites out while the 2019 source
+                    # base defaults it to "1"); the previous parser ignored
+                    # this line entirely, so [$INCLUDE_SCALEFORM] file gates
+                    # stayed false while the C++ macro leaked in through the
+                    # $Undefine bug — files off, call sites on, 228 UND.
+                    if eff:
+                        m = re.match(r'\s*\$Conditional\s+([A-Za-z0-9_]+)\s+"([^"]*)"', line2, re.IGNORECASE)
+                        if m:
+                            name, val = m.group(1), m.group(2)
+                            # [port] Middleware the Android build does not
+                            # ship: no Scaleform runtime (scaleformui.so is
+                            # absent, glue_stubs forces ScaleformUI()==false)
+                            # and no Panorama stack yet (phase 2 of the port).
+                            # Force the VPC variables to "0" so the file
+                            # gates AND the #if defined(...) call-site gates
+                            # stay consistent on the off side.
+                            if name in ('INCLUDE_SCALEFORM', 'PANORAMA_ENABLE'):
+                                val = '0'
+                            if val != '0':
+                                self.defines.add(name)
+                                if name not in self.ppdefs:
+                                    self.ppdefs.append(name)
+                            else:
+                                self.defines.discard(name)
+                                if name in self.ppdefs:
+                                    self.ppdefs.remove(name)
                     pending_cond = True
                     continue
                 if ll.lstrip().startswith('-$file'):
