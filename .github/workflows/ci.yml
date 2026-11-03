@@ -1029,6 +1029,88 @@ jobs:
             echo "::warning::no engine ticks under SwiftShader yet (inspect artifacts)"
           fi
 
+      - name: Map-load probe (real cstrike map, software GL)
+        if: needs.swiftshader.result == 'success'
+        run: |
+          SDK=${ANDROID_HOME:-/usr/local/lib/android/sdk}
+          ADB=$SDK/platform-tools/adb
+          APP=com.csarm.port
+          # --- 1. pick a map that actually shipped in the staged content ---
+          MAPS=$("$ADB" -s emulator-5554 shell run-as $APP sh -c 'ls -s files/cstrike/maps/*.bsp' 2>/dev/null | tr -d '\r')
+          echo "bsp files on device: $(echo "$MAPS" | grep -c bsp)"
+          MAP=""
+          for want in ar_dizzy ar_baggage de_lake de_dust2; do
+            echo "$MAPS" | grep -q "/${want}\.bsp" && { MAP=$want; break; }
+          done
+          [ -n "$MAP" ] || MAP=$(echo "$MAPS" | awk '/bsp$/{print $2}' | sed 's|.*/||;s|\.bsp$||' | sort | head -1)
+          if [ -z "$MAP" ]; then echo "::warning::no .bsp in staged content — probe skipped"; exit 0; fi
+          echo "probe map: $MAP"
+          # --- 2. feed csarm.args (readArgsFile: line-based, space-split) ---
+          cat > /tmp/csarm_probe.args <<EOF
+          -novid -windowed -w 1280 -h 720 -nobreakpad -nojoy -noshaderapi
+          -basedir /data/data/$APP/files -game cstrike
+          +host_thread_mode 2 +mat_queue_mode 2 +cl_threaded_bone_setup 1
+          +sv_lan 1 +map $MAP
+          EOF
+          sed -i 's/^          //' /tmp/csarm_probe.args
+          "$ADB" -s emulator-5554 push /tmp/csarm_probe.args /data/local/tmp/csarm_probe.args
+          "$ADB" -s emulator-5554 shell run-as $APP sh -c 'cp /data/local/tmp/csarm_probe.args files/csarm.args && rm /data/local/tmp/csarm_probe.args'
+          echo "--- csarm.args on device ---"
+          "$ADB" -s emulator-5554 shell run-as $APP cat files/csarm.args || true
+          # --- 3. relaunch the engine on the probe args ---
+          "$ADB" -s emulator-5554 shell am force-stop $APP || true
+          sleep 3
+          "$ADB" -s emulator-5554 logcat -c || true
+          "$ADB" -s emulator-5554 shell am start -n $APP/.CSARMActivity || true
+          # --- 4. wait for map progress / fail / death (diagnostic-first) ---
+          LIMIT=480; PROG=""
+          while [ $SECONDS -lt $LIMIT ]; do
+            "$ADB" -s emulator-5554 logcat -d > logcat_map.txt 2>/dev/null || true
+            if grep -q "CSARM_MAIN_FAIL" logcat_map.txt; then echo "MAIN_FAIL at t=${SECONDS}s"; break; fi
+            [ "$(grep -c CSARM_EXIT_HIT logcat_map.txt 2>/dev/null || echo 0)" -ge 6 ] && { echo "crash-loop at t=${SECONDS}s"; break; }
+            if ! "$ADB" -s emulator-5554 shell pidof $APP >/dev/null 2>&1; then echo "process died at t=${SECONDS}s"; break; fi
+            if grep -qaE 'Host_NewGame|Loading map|Spawning server' logcat_map.txt; then
+              if [ -z "$PROG" ]; then PROG=$SECONDS; echo "map spawn progress at t=${SECONDS}s — 60s capture window"; fi
+              [ $((SECONDS - PROG)) -ge 60 ] && break
+            fi
+            kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died during map probe"; break; }
+            sleep 5
+          done
+          sleep 6
+          "$ADB" -s emulator-5554 exec-out screencap -p > map1.png || true
+          sleep 6
+          "$ADB" -s emulator-5554 exec-out screencap -p > map2.png || true
+          "$ADB" -s emulator-5554 logcat -d > logcat_map.txt || true
+          "$ADB" -s emulator-5554 logcat -d -b crash > crash_map.txt || true
+          # --- 5. diagnostics + verdict ---
+          echo "=== map probe: load/args ==="
+          grep -E "CSARM_ARGS|CSARM_NATIVE_INIT|CSARM_IFACE_FILL|CSARM_LOAD_DONE" logcat_map.txt | head -6 || true
+          echo "=== map probe: engine spew around map ==="
+          grep -aE "Host_NewGame|Loading map|Spawning|Precach|GameRules|Gamerules|[Vv][Pp]hysics|Client [Cc]onnected|Client [Ss]pawn|Activate|Host_Activate|BEGIN|====|Finished|missing|Missing" logcat_map.txt | head -60 || true
+          echo "=== map probe: engine errors (top) ==="
+          grep -aE "CSARM_ENG" logcat_map.txt | grep -aiE "error|fatal|failed|unable|missing|not found" | sort | uniq -c | sort -rn | head -25 || true
+          echo "=== map probe: frames ==="
+          echo "CSARM_FRAME lines: $(grep -c CSARM_FRAME logcat_map.txt || true)"
+          echo "=== map probe: verdict ==="
+          fail=0
+          if grep -q "CSARM_MAIN_FAIL" logcat_map.txt; then
+            echo "::error::map probe: launcher failed"; grep CSARM_MAIN_FAIL logcat_map.txt | head -3; fail=1
+          fi
+          NEWGAME=$(grep -acE "Host_NewGame|Loading map|Spawning server" logcat_map.txt || true)
+          [ -n "$NEWGAME" ] || NEWGAME=0
+          if [ "$fail" = "0" ] && grep -qa "Fatal signal" crash_map.txt && [ "$NEWGAME" = "0" ]; then
+            echo "::error::map probe: tombstone before any map progress — frames:"
+            grep -E "Fatal signal|>>> $APP" crash_map.txt | head -3
+            grep -E "#0[0-6] pc " crash_map.txt | head -7
+            fail=1
+          fi
+          if [ "$fail" = "1" ]; then exit 1; fi
+          if [ "$NEWGAME" -gt 0 ]; then
+            echo "MAP PROBE: server-spawn path reached ($NEWGAME progress markers) — full spew in logcat_map.txt"
+          else
+            echo "::warning::map probe: no server-spawn markers — diagnostics in logcat_map.txt"
+          fi
+
       - name: Assert library load (x86_64)
         if: always()
         run: |
@@ -1088,13 +1170,16 @@ jobs:
             boot*.png
             arm64*.png
             sw*.png
+            map*.png
             logcat.txt
             logcat_boot.txt
             logcat_arm64*.txt
             logcat_sw.txt
+            logcat_map.txt
             logcat_stream.txt
             crash.txt
             crash_sw.txt
+            crash_map.txt
             emulator.log
           if-no-files-found: ignore
 
