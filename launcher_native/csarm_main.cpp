@@ -153,7 +153,7 @@ static const char *kModules[] = {
     "bzip2", "tier3", "dmxloader", "bitmap", "vtf", "shaderlib", "scenefilecache",
     "soundsystem", "soundsystem_lowlevel", "matsys_controls", "videocfg", "vpklib",
     "bonesetup", "choreo", "cryptopp", "quickhull", "localize",
-    "particles", "raytrace", "shaderapiempty", nullptr
+    "particles", "raytrace", "shaderapiempty", "matchmaking", nullptr
 };
 
 static std::string nativeLibDir()

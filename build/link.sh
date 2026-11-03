@@ -643,6 +643,21 @@ link_so libpng.so "" libpng || true
 # ("$Lib kv3lib"); the server's survival/ruleset code reads KV3 files through
 # it (run #144: KeyValues3::HasMetadata et al UND in libserver). Pure leaf.
 link_so libkv3.so "" kv3lib || true
+# matchmaking stub (round 22): the 2019 engine's CModAppSystemGroup::Create
+# Sys_Error()s (clean exit(0), run #155) when matchmaking.so is absent from
+# GAMEBIN.  Pure-glue leaf answering MATCHFRAMEWORK_001 with no-ops — see
+# glue_matchmaking.cpp.  Needs -I common (imatchframework.h ->
+# xbox/xboxstubs.h) and -ltier1 (ReconnectInterface).
+MMGLUE_O=""
+$CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing \
+  -DPOSIX -D_POSIX -DLINUX -D_LINUX -DLINUXALL -DGNUC -DCOMPILER_GCC \
+  -DPLATFORM_64BITS -DX64BITS -D__ANDROID__ -DANDROID \
+  -I "$R/c15/public" -I "$R/c15/public/tier0" -I "$R/c15/public/tier1" -I "$R/c15/common" \
+  -o "$OUTDIR/glue_matchmaking.cpp.o" "$SCRIPT_DIR/glue_matchmaking.cpp" 2>>"$LOG" && MMGLUE_O="$OUTDIR/glue_matchmaking.cpp.o"
+if [ -n "$MMGLUE_O" ]; then
+  $CC $LFLAGS -Wl,-soname,libmatchmaking.so -o "$OUTDIR/libmatchmaking.so" "$MMGLUE_O" -L"$OUTDIR" -ltier0 -ltier1 -ldl -llog -lm -lc 2>>"$LOG" \
+    && echo "[link] libmatchmaking.so (stub)" | tee -a "$LOG" || true
+fi
 link_so libfilesystem_stdio.so "tier0 tier1 vstdlib" filesystem_stdio vpklib || true
 link_so libtier3.so "tier0 tier1 vstdlib" tier3 || true
 link_so libdmxloader.so "tier0 tier1" dmxloader || true
