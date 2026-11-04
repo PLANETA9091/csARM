@@ -153,7 +153,10 @@ static const char *kModules[] = {
     "bzip2", "tier3", "dmxloader", "bitmap", "vtf", "shaderlib", "scenefilecache",
     "soundsystem", "soundsystem_lowlevel", "matsys_controls", "videocfg", "vpklib",
     "bonesetup", "choreo", "cryptopp", "quickhull", "localize",
-    "particles", "raytrace", "shaderapiempty", "matchmaking", nullptr
+    "particles", "raytrace", "shaderapiempty", "matchmaking",
+    // round 25: no-op vphysics stub (launcher AppSystemGroup loads
+    // "vphysics.so" via Sys_LoadModule <cwd>/bin — symlink required)
+    "vphysics", nullptr
 };
 
 static std::string nativeLibDir()

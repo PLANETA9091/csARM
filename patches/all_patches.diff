@@ -1268,17 +1268,15 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  	pFileSystem->InstallDirtyDiskReportFunc( ReportDirtyDiskNoMaterialSystem );
  
  #ifdef WIN32
-@@ -736,14 +773,25 @@
+@@ -736,14 +773,23 @@
  		{ LAUNCHER_APPSYSTEM( "filesystem_stdio" ),		XBOXINSTALLER_INTERFACE_VERSION },
  #endif
  		{ LAUNCHER_APPSYSTEM( "inputsystem" ),			INPUTSYSTEM_INTERFACE_VERSION },
 +		#ifdef __ANDROID__
-+		// csARM: the cstrike15 source mirror does not ship the vphysics
-+		// library; physics is map-load-time functionality, boot does not
-+		// need it.  Restore once vphysics is ported.
-+		#else
- 		{ LAUNCHER_APPSYSTEM( "vphysics" ),				VPHYSICS_INTERFACE_VERSION },
++		// csARM round 25: the no-op vphysics stub (build/glue_vphysics.cpp ->
++		// libvphysics.so, VPhysics031) ships in the APK - load it like Valve.
 +		#endif
+ 		{ LAUNCHER_APPSYSTEM( "vphysics" ),				VPHYSICS_INTERFACE_VERSION },
  		{ LAUNCHER_APPSYSTEM( "materialsystem" ),		MATERIAL_SYSTEM_INTERFACE_VERSION },
  		{ LAUNCHER_APPSYSTEM( "datacache" ),			DATACACHE_INTERFACE_VERSION },
  		{ LAUNCHER_APPSYSTEM( "datacache" ),			MDLCACHE_INTERFACE_VERSION },
@@ -1294,7 +1292,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  #ifdef WIN32
  		{ LAUNCHER_APPSYSTEM("soundsystem"),			SOUNDSYSTEM_INTERFACE_VERSION },
  #endif
-@@ -763,7 +811,11 @@
+@@ -763,7 +809,11 @@
  #endif
  		// NOTE: This has to occur before vgui2.dll so it replaces vgui2's surface implementation
  		{ LAUNCHER_APPSYSTEM( "vguimatsurface" ),		VGUI_SURFACE_INTERFACE_VERSION },
@@ -1306,7 +1304,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  		{ LAUNCHER_APPSYSTEM( "engine" ),				VENGINE_LAUNCHER_API_VERSION },
  
  		{ "", "" }					// Required to terminate the list
-@@ -776,7 +828,11 @@
+@@ -776,7 +826,11 @@
  #endif
  
  	if ( !AddSystems( appSystems ) ) 
@@ -1318,7 +1316,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  	// See if we're running panorama
  	bool bPanorama = false;
-@@ -839,7 +895,14 @@
+@@ -839,7 +893,14 @@
  #endif
  
  	// Load Scaleform either if not running Panorama, or running hybrid client for debug
@@ -1334,7 +1332,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  	{
  		// SF4 TODO
  		// Windows - See if we need to launch SF4 instead of SF3
-@@ -941,14 +1004,44 @@
+@@ -941,14 +1002,44 @@
  
  bool CSourceAppSystemGroup::PreInit()
  {
@@ -1379,7 +1377,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #ifdef _PS3
  	g_pVJobs = ( IVJobs* )factory( VJOBS_INTERFACE_VERSION, NULL );  // this is done only once; g_pVJobs doesn't change even after multiple reloads of VJobs.prx
-@@ -969,14 +1062,20 @@
+@@ -969,14 +1060,20 @@
  		}
  	}
  	if ( FileSystem_SetupSteamEnvironment( steamInfo ) != FS_OK )
@@ -1400,7 +1398,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  
  #if defined( SUPPORT_VPK )
  	Msg( "start timing %f\n", Plat_FloatTime() );
-@@ -1025,11 +1124,13 @@
+@@ -1025,11 +1122,13 @@
  	info.m_pParentAppSystemGroup = this;
  	info.m_bTextMode = g_bTextMode;
  
@@ -1414,7 +1412,7 @@ diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
  	return g_pEngineAPI->Run();
  }
  
-@@ -1955,6 +2056,7 @@
+@@ -1955,6 +2054,7 @@
  		int nRetval = ValveCocoaMain( &steamApplication ); 
  #else
  		int nRetval = steamApplication.Run();
