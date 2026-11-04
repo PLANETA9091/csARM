@@ -3509,3 +3509,21 @@ diff -ruN a/engine/net_ws.cpp b/engine/net_ws.cpp
  
  	// Go ahead and create steam datagram client, and start measuring pings to data centers
  	#ifndef DEDICATED
+diff -ruN a/game/client/cstrike15/gameui/cstrike15/cstrike15basepanel.cpp b/game/client/cstrike15/gameui/cstrike15/cstrike15basepanel.cpp
+--- a/game/client/cstrike15/gameui/cstrike15/cstrike15basepanel.cpp	2026-11-04 21:30:04.202141491 +0000
++++ b/game/client/cstrike15/gameui/cstrike15/cstrike15basepanel.cpp	2026-11-04 21:30:04.214141609 +0000
+@@ -1260,7 +1260,13 @@
+ 			ePos = k_EPositionBottomLeft;
+ 		else if ( !V_stricmp( ui_steam_overlay_notification_position.GetString(), "topleft" ) )
+ 			ePos = k_EPositionTopLeft;
+-		steamapicontext->SteamUtils()->SetOverlayNotificationPosition( ePos );
++		// csARM round 31: s_bSteamOverlayPositionNeedsToBeSet is a static true
++	// initializer, so the FIRST CCStrike15BasePanel::RunFrame reaches this
++	// deref; the steam_api stub keeps SteamUtils() NULL on Android and the
++	// unguarded SetOverlayNotificationPosition SIGSEGVs in the render loop
++	// before the first tick (run #166 tombstone, fault addr 0x0).
++		if ( steamapicontext && steamapicontext->SteamUtils() )
++			steamapicontext->SteamUtils()->SetOverlayNotificationPosition( ePos );
+ 	}
+ #endif
+ 
