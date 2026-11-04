@@ -3463,3 +3463,25 @@ diff -ruN a/game/client/game_controls/vguitextwindow.cpp b/game/client/game_cont
  	while ( char *pszReplace = strstr( chUrlBufferAfterPatternReplacements, fmtPattern.Access() ) )
  	{
  		size_t numBytes = Q_strlen( pszReplace + fmtPattern.Length() );
+diff -ruN a/engine/net_ws.cpp b/engine/net_ws.cpp
+--- a/engine/net_ws.cpp	2026-11-04 19:57:50.048505126 +0000
++++ b/engine/net_ws.cpp	2026-11-04 19:57:50.060505244 +0000
+@@ -4450,8 +4450,16 @@
+ 	// We are using SteamnetworkingSockets only for datagram transport (for the relays).
+ 	// We aren't using it for the reliability layer or fragmentation and reassembly.
+ 	// So make sure the rate limits don't kick in.
+-	::SteamNetworkingSockets()->SetConfigurationValue( k_ESteamNetworkingConfigurationValue_MinRate, 1024*1024 );
+-	::SteamNetworkingSockets()->SetConfigurationValue( k_ESteamNetworkingConfigurationValue_MaxRate, 1024*1024 );
++	// csARM round 29: the steam_api stub returns NULL from
++	// ::SteamNetworkingSockets() (no Steam client on Android), so the first
++	// _Host_RunFrame -> deferred NET_Init died right here at the unguarded
++	// SetConfigurationValue deref (run #164 tombstone, fault addr 0x0).
++	// The rate-limit tuning is irrelevant without the SDR transport.
++	if ( ::SteamNetworkingSockets() )
++	{
++		::SteamNetworkingSockets()->SetConfigurationValue( k_ESteamNetworkingConfigurationValue_MinRate, 1024*1024 );
++		::SteamNetworkingSockets()->SetConfigurationValue( k_ESteamNetworkingConfigurationValue_MaxRate, 1024*1024 );
++	}
+ 
+ 	// Go ahead and create steam datagram client, and start measuring pings to data centers
+ 	#ifndef DEDICATED
