@@ -3446,3 +3446,20 @@ diff -ruN a/game/client/hud.cpp b/game/client/hud.cpp
  }
  
  //-----------------------------------------------------------------------------
+diff -ruN a/game/client/game_controls/vguitextwindow.cpp b/game/client/game_controls/vguitextwindow.cpp
+--- a/game/client/game_controls/vguitextwindow.cpp	2026-11-04 19:11:25.365065269 +0000
++++ b/game/client/game_controls/vguitextwindow.cpp	2026-11-04 19:11:25.376065378 +0000
+@@ -237,7 +237,12 @@
+ 	CFmtStr fmtReplacement;
+ 
+ 	fmtPattern.Clear();			fmtPattern.AppendFormat( "%s", "%steamid%" );
+-	fmtReplacement.Clear();		fmtReplacement.AppendFormat( "%llu", steamapicontext->SteamUser()->GetSteamID().ConvertToUint64() );
++	// csARM round 28: with the steam_api stub (no Steam client on Android)
++	// SteamUser() returns NULL; the viewport scheme reload reaches
++	// CTextWindow::Update -> ShowURL("about:blank") on every boot and the
++	// upstream unconditional GetSteamID() deref SIGSEGVs (run #163
++	// tombstone, fault addr 0x0). Substitute the neutral 0 ID instead.
++	fmtReplacement.Clear();		fmtReplacement.AppendFormat( "%llu", ( steamapicontext && steamapicontext->SteamUser() ) ? steamapicontext->SteamUser()->GetSteamID().ConvertToUint64() : 0ull );
+ 	while ( char *pszReplace = strstr( chUrlBufferAfterPatternReplacements, fmtPattern.Access() ) )
+ 	{
+ 		size_t numBytes = Q_strlen( pszReplace + fmtPattern.Length() );
