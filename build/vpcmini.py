@@ -91,7 +91,17 @@ class Parser:
             cval = cond_true(cond, self.defines) if cond else True
             if not (parent_eff and cval):
                 continue
-            out.append(self.rel(self.abspath(cur_dir, path)))
+            full = self.abspath(cur_dir, path)
+            if not os.path.exists(full):
+                # A $File the VPC selects must exist on disk.  Silently
+                # skipping it shrinks the module's object set and surfaces
+                # later as UND symbols in the linked .so (run #158: a
+                # degraded arm64 source tree dropped 6 materialsystem files
+                # -> libmaterialsystem lost 8 exports -> und-gate failed).
+                # Emit the entry anyway so the compiler reports the truth.
+                print(f"vpcmini: WARNING $File missing on disk: {full}",
+                      file=sys.stderr)
+            out.append(self.rel(full))
         return out
 
     def parse(self, path, parent_eff=True):

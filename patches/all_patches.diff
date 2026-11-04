@@ -1188,7 +1188,7 @@ diff -ruN a/interfaces/interfaces.cpp b/interfaces/interfaces.cpp
  
  	bool bFound = false;
  	Assert( s_nRegistrationCount < ARRAYSIZE(s_pConnectionRegistration) );
-diff -ruN /tmp/patchwork/a/launcher/launcher.cpp /tmp/patchwork/b/launcher/launcher.cpp
+diff -ruN a/launcher/launcher.cpp b/launcher/launcher.cpp
 --- a/launcher/launcher.cpp	2026-11-03 22:27:09.689140255 +0000
 +++ b/launcher/launcher.cpp	2026-11-03 22:27:26.453141836 +0000
 @@ -28,6 +28,7 @@
