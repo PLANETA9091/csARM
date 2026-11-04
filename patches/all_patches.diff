@@ -3527,3 +3527,23 @@ diff -ruN a/game/client/cstrike15/gameui/cstrike15/cstrike15basepanel.cpp b/game
  	}
  #endif
  
+diff -ruN a/game/client/cstrike15/Scaleform/loadingscreen_scaleform.cpp b/game/client/cstrike15/Scaleform/loadingscreen_scaleform.cpp
+--- a/game/client/cstrike15/Scaleform/loadingscreen_scaleform.cpp	2026-11-04 22:21:06.554274963 +0000
++++ b/game/client/cstrike15/Scaleform/loadingscreen_scaleform.cpp	2026-11-04 22:21:06.567275090 +0000
+@@ -204,6 +204,16 @@
+ void CLoadingScreenScaleform::LoadDialog( void )
+ {
+ 	SFDevMsg( "CLoadingScreenScaleform::LoadDialog\n" );
++	// csARM round 32: the boot path is menu-free (-no_scaleform_menu_on_boot),
++	// but a +map launch hits CBaseModPanel::OnLevelLoadingStarted ->
++	// LoadDialogForKeyValues -> LoadDialog on every map load, and the
++	// SFUI_REQUEST_ELEMENT macro derefs the NULL g_pScaleformUI (no Scaleform
++	// runtime shipped on Android; run #167 map-probe tombstone, fault addr
++	// 0x0, zero map-progress markers). Without the runtime there is no
++	// loading screen to build - skip the dialog entirely; SetProgress* stay
++	// inert behind FlashAPIIsValid().
++	if ( !g_pScaleformUI )
++		return;
+ 	if ( !m_pInstance )
+ 	{
+ 		m_pInstance = new CLoadingScreenScaleform();
