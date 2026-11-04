@@ -653,6 +653,7 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing \
   -DPOSIX -D_POSIX -DLINUX -D_LINUX -DLINUXALL -DGNUC -DCOMPILER_GCC \
   -DPLATFORM_64BITS -DX64BITS -D__ANDROID__ -DANDROID \
   -I "$R/c15/public" -I "$R/c15/public/tier0" -I "$R/c15/public/tier1" -I "$R/c15/common" \
+  -I "$R/c15/thirdparty" -I "$R/c15/thirdparty/sse2neon" \
   -o "$OUTDIR/glue_matchmaking.cpp.o" "$SCRIPT_DIR/glue_matchmaking.cpp" 2>>"$LOG" && MMGLUE_O="$OUTDIR/glue_matchmaking.cpp.o"
 if [ -n "$MMGLUE_O" ]; then
   $CC $LFLAGS -Wl,-soname,libmatchmaking.so -o "$OUTDIR/libmatchmaking.so" "$MMGLUE_O" -L"$OUTDIR" -ltier0 -ltier1 -ldl -llog -lm -lc 2>>"$LOG" \
