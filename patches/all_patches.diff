@@ -1448,6 +1448,30 @@ diff -ruN /tmp/patchwork2/a/engine/cdll_engine_int.cpp /tmp/patchwork2/b/engine/
  	if ( !Host_AllowLoadModule( pszClientDll, "GAMEBIN", false ) )
  	{
 
+diff -ruN /tmp/patchwork3/a/game/client/cdll_client_int.cpp /tmp/patchwork3/b/game/client/cdll_client_int.cpp
+--- a/game/client/cdll_client_int.cpp	2026-11-04 02:47:54.237381956 +0000
++++ b/game/client/cdll_client_int.cpp	2026-11-04 02:47:54.239381957 +0000
+@@ -1460,10 +1460,20 @@
+ 
+ 	ClientSteamContext().Activate();
+ 
++#ifdef __ANDROID__
++	// csARM: there is no Steam client on Android and the steam_api stub keeps
++	// the context inert (logged on = 0), so this gate would always fire.
++	// Skip it - the same thing CSourceAppSystemGroup::PreInit already does
++	// for the engine-side Steam3Client identity gate (run #159: CHLClient::
++	// Connect Error()'d out here, 3 s after launch).  Steam-dependent paths
++	// (avatars, lobby UI, matchmaking) stay inert on their NULL interfaces.
++	if ( false )
++#else
+ 	if ( !ClientSteamContext().SteamFriends() || !ClientSteamContext().SteamUser() || !ClientSteamContext().SteamUtils() ||
+ 		!ClientSteamContext().SteamNetworking() || !ClientSteamContext().SteamMatchmaking() ||
+ 		!ClientSteamContext().SteamUser()->GetSteamID().IsValid()	// << this is catching the case when Steam client is running, but showing logon username/password screen
+ 		)
++#endif
+ 	{
+ 		fprintf( stderr, "FATAL ERROR: This game requires latest version of Steam to be running!\nYour Steam Client can be updated using Steam > Check for Steam Client Updates...\n" );
+ #if IS_WINDOWS_PC || ( defined ( LINUX ) && !defined ( DEDICATED ) )
 diff -ruN a/materialsystem/custom_material.cpp b/materialsystem/custom_material.cpp
 --- a/materialsystem/custom_material.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/materialsystem/custom_material.cpp	2026-11-02 19:22:40.764854264 +0000
