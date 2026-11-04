@@ -348,6 +348,15 @@ extern "C" int SDL_main(int argc, char *argv[])
         args.push_back("-nobreakpad");
         args.push_back("-nojoy");
         args.push_back("-noshaderapi");
+        // round 26: no Scaleform runtime is shipped (scaleformui.so absent),
+        // but the client is built with INCLUDE_SCALEFORM - at CEngineVGui::Init
+        // -> ActivateGameUI the client's CCStrike15BasePanel::ShowScaleformMainMenu
+        // would CCreateMainMenuScreenScaleform::LoadDialog() and SIGSEGV on the
+        // NULL g_pScaleformUI (run #161 tombstone, both GL paths).  This engine
+        // switch (BasePanel.cpp bNoScaleformFrontEnd) disables the start screen
+        // and the Scaleform main menu; the legacy VGUI ShowMainMenu visibility
+        // toggle (NULL-guarded, no dialogs) runs instead and the frame loop lives.
+        args.push_back("-no_scaleform_menu_on_boot");
         args.push_back("-basedir");
         args.push_back(filesDir);
         args.push_back("-game");

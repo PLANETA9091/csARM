@@ -108,6 +108,11 @@ public class CSARMActivity extends SDLActivity {
             // shaderapidx9 — without this CMaterialSystem dlopens shaderapidx9,
             // fails, and the engine silently hangs before the first tick
             sb.append("-noshaderapi\n");
+            // round 26: -no_scaleform_menu_on_boot — no Scaleform runtime is
+            // shipped; without the flag the client SIGSEGVs in
+            // CCreateMainMenuScreenScaleform::LoadDialog (NULL g_pScaleformUI)
+            // at CEngineVGui::Init -> ActivateGameUI (run #161 tombstone)
+            sb.append("-no_scaleform_menu_on_boot\n");
             sb.append("-basedir ").append(files.getAbsolutePath()).append("\n");
             sb.append("-game cstrike\n");
             sb.append("+host_thread_mode 2\n");

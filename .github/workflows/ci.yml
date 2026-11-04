@@ -1055,7 +1055,7 @@ jobs:
           echo "probe map: $MAP"
           # --- 2. feed csarm.args (readArgsFile: line-based, space-split) ---
           cat > /tmp/csarm_probe.args <<EOF
-          -novid -windowed -w 1280 -h 720 -nobreakpad -nojoy -noshaderapi
+          -novid -windowed -w 1280 -h 720 -nobreakpad -nojoy -noshaderapi -no_scaleform_menu_on_boot
           -basedir /data/data/$APP/files -game cstrike
           +host_thread_mode 2 +mat_queue_mode 2 +cl_threaded_bone_setup 1
           +sv_lan 1 +map $MAP
