@@ -1422,6 +1422,32 @@ diff -ruN /tmp/patchwork/a/launcher/launcher.cpp /tmp/patchwork/b/launcher/launc
  #endif		
  #if ENABLE_HARDWARE_PROFILER 
  		// Hack fix, causes memory leak, but prevents crash due to bad coding not doing proper teardown
+diff -ruN /tmp/patchwork2/a/engine/cdll_engine_int.cpp /tmp/patchwork2/b/engine/cdll_engine_int.cpp
+--- a/engine/cdll_engine_int.cpp	2026-11-04 01:10:16.750847936 +0000
++++ b/engine/cdll_engine_int.cpp	2026-11-04 01:10:16.752847935 +0000
+@@ -2777,6 +2777,13 @@
+ 
+ 	// Work out which client dll to load
+ 	// see: sys_dll2.cpp : 891 for which client version is used for crash dump reporting
++#ifdef __ANDROID__
++	// csARM: the port builds libclient.so (files/bin/client.so) and has no
++	// Panorama client; the 2019 engine defaults to the Panorama-client name
++	// and the -scaleform switch never survives the launcher's RemoveParm
++	// (run #157: ClientDLL_Load Sys_Error'd hunting client_panorama.so).
++	const char *pszClientDll = "client" DLL_EXT_STRING;
++#else
+ 	const char *pszClientDll = "client_panorama" DLL_EXT_STRING;
+ 	if ( CommandLine()->FindParm( "-scaleform" ) )
+ 	{
+@@ -2787,6 +2794,7 @@
+ 
+ 		pszClientDll = "client" DLL_EXT_STRING;
+ 	}
++#endif
+ 
+ 	if ( !Host_AllowLoadModule( pszClientDll, "GAMEBIN", false ) )
+ 	{
+
 diff -ruN a/materialsystem/custom_material.cpp b/materialsystem/custom_material.cpp
 --- a/materialsystem/custom_material.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/materialsystem/custom_material.cpp	2026-11-02 19:22:40.764854264 +0000
