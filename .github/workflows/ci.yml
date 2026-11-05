@@ -1062,6 +1062,7 @@ jobs:
           # "Spawning server") — without it the probe saw 0 progress markers
           # even though the engine was inside Host_NewGame (run #168)
           +developer 1
+          +net_showudp 1
           # round 39: engine console -> file (cstrike/console.log).  Engine
           # console output does NOT go to stdout, so Msg/Warning during map
           # load were invisible outside the emulator; the file is pulled in
@@ -1130,6 +1131,11 @@ jobs:
             "$ADB" shell "cat /proc/net/udp 2>/dev/null" | grep -aiE "69A7|69BD|69AC|local_address" | head -12 || true
             echo "=== map probe: ss -uln ==="
             "$ADB" shell "ss -uln 2>/dev/null | head -25" || true
+            echo "=== map probe: loopback tcpdump (6 packets, 8s cap) ==="
+            "$ADB" shell "timeout 8 tcpdump -i lo -nn -c 6 udp 2>/dev/null | head -10" || echo "(tcpdump unavailable or no packets)"
+            sleep 3
+            echo "=== map probe: ss -uln (repeat, watch Recv-Q) ==="
+            "$ADB" shell "ss -uln 2>/dev/null | grep -a 2701 | head -6" || true
             echo "=== map probe: engine ALIVE with no map progress - native backtraces (debuggerd -b) ==="
             "$ADB" -s emulator-5554 shell "debuggerd -b \$(pidof $APP)" 2>/dev/null | grep -a "pid:\|#00 pc\|#0[1-9] pc\|#1[0-9] pc\|#2[0-9] pc\|#3[0-9] pc" | head -400 || true
           fi
