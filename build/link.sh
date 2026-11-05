@@ -678,10 +678,21 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing \
   -I "$R/c15/public" -I "$R/c15/public/tier0" -I "$R/c15/public/tier1" -I "$R/c15/common" \
   -I "$R/c15/thirdparty" -I "$R/c15/thirdparty/sse2neon" \
   -o "$OUTDIR/glue_vphysics.cpp.o" "$SCRIPT_DIR/glue_vphysics.cpp" 2>>"$LOG" && VPGLUE_O="$OUTDIR/glue_vphysics.cpp.o"
-if [ -n "$VPGLUE_O" ]; then
-  $CC $LFLAGS -Wl,-soname,libvphysics.so -o "$OUTDIR/libvphysics.so" "$VPGLUE_O" -L"$OUTDIR" -ltier0 -ltier1 -ldl -llog -lm -lc 2>>"$LOG" \
-    && echo "[link] libvphysics.so (stub)" | tee -a "$LOG" || true
+# csARM round 35: fail LOUD.  The compile above is the whole point of the
+# module (boot hard-fails at CModelLoader::Init without VPhysicsCollision007),
+# and a silent skip ships an APK with no vphysics at all: run #171 built
+# green, but the emulator never had libvphysics.so (glue_vphysics.cpp used
+# sizeof(*trace_t) while vphysics_interface.h only forward-declares
+# CGameTrace) and the map probe silently regressed to "Unable to load
+# interface VPhysics031".
+if [ -z "$VPGLUE_O" ]; then
+  echo "::error::glue_vphysics.cpp failed to compile - libvphysics.so missing from APK"
+  grep -a "error:" "$LOG" | tail -8 || true
+  exit 1
 fi
+$CC $LFLAGS -Wl,-soname,libvphysics.so -o "$OUTDIR/libvphysics.so" "$VPGLUE_O" -L"$OUTDIR" -ltier0 -ltier1 -ldl -llog -lm -lc 2>>"$LOG" \
+  || { echo "::error::libvphysics.so link failed"; grep -a "error:" "$LOG" | tail -8 || true; exit 1; }
+echo "[link] libvphysics.so (stub)" | tee -a "$LOG"
 link_so libfilesystem_stdio.so "tier0 tier1 vstdlib" filesystem_stdio vpklib || true
 link_so libtier3.so "tier0 tier1 vstdlib" tier3 || true
 link_so libdmxloader.so "tier0 tier1" dmxloader || true
