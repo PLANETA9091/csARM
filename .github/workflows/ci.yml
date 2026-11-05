@@ -1124,6 +1124,12 @@ jobs:
           # tombstone appears.  debuggerd -b prints native backtraces of every
           # thread of the LIVE process; the runner is root on the ATD image) ---
           if [ -z "$PROG" ] && "$ADB" -s emulator-5554 shell "pidof $APP" >/dev/null 2>&1; then
+            # round 42: is the server REALLY listening?  27015=0x69A7,
+            # 27005=0x69BD, 27020=0x69AC in /proc/net/udp local_address
+            echo "=== map probe: UDP sockets (proc) ==="
+            "$ADB" shell "cat /proc/net/udp 2>/dev/null" | grep -aiE "69A7|69BD|69AC|local_address" | head -12 || true
+            echo "=== map probe: ss -uln ==="
+            "$ADB" shell "ss -uln 2>/dev/null | head -25" || true
             echo "=== map probe: engine ALIVE with no map progress - native backtraces (debuggerd -b) ==="
             "$ADB" -s emulator-5554 shell "debuggerd -b \$(pidof $APP)" 2>/dev/null | grep -a "pid:\|#00 pc\|#0[1-9] pc\|#1[0-9] pc\|#2[0-9] pc\|#3[0-9] pc" | head -400 || true
           fi
