@@ -349,11 +349,16 @@ class CStub_IVPhysicsKeyParser : public IVPhysicsKeyParser
 {
 public:
         virtual const char * GetCurrentBlockName( void )
-        {  return ""; }
+        {  return "solid"; }
         virtual bool Finished( void )
-        {  return (bool)0; }
+        {  return (bool)1; }
+        // csARM round 37: "no keyvalues data" - the stub parser must report the
+        // end of the stream immediately; returning false made every
+        // while(!Finished()) loop in the engine spin forever (run #172/#173
+        // hang: CStaticProp::CreateVPhysics -> VPhysicsKeyParserCreate ->
+        // GetCurrentBlockName/SkipBlock -> Finished never became true)
         virtual void ParseSolid( solid_t *pSolid, IVPhysicsKeyHandler *unknownKeyHandler )
-        {  }
+        {  if ( pSolid ) memset( pSolid, 0, sizeof( *pSolid ) ); }
         virtual void ParseFluid( fluid_t *pFluid, IVPhysicsKeyHandler *unknownKeyHandler )
         {  }
         virtual void ParseRagdollConstraint( constraint_ragdollparams_t *pConstraint, IVPhysicsKeyHandler *unknownKeyHandler )
