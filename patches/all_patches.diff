@@ -3490,7 +3490,30 @@ diff -ruN a/engine/net_ws.cpp b/engine/net_ws.cpp
  	 SourceSteamNetworkingSocketsCallbacks callbacks;
  	 SteamNetworkingSocketsGameServer()->RunCallbacks( &callbacks );
  }
-@@ -4450,8 +4461,16 @@
+@@ -3488,12 +3499,20 @@
+ 				break;
+ 		}
+ 
+ 		if ( !*handle )
+ 		{
+ 			Warning( "Couldn't allocate any %s IP port, tried %d addresses %s", pName, vecBindableAddresses.Count(),
+ 				( vecBindableAddresses.Count() ? vecBindableAddresses.Head().Get() : "(none)" ) );
+-			Plat_ExitProcess( 0 );	// cause a silent exit without writing a core dump
+-			return;
++			// csARM round 33: a listen server on Android has no usable UDP
++			// transport (socket()/bind() fail inside the app sandbox), but real
++			// sockets are only needed for LAN/Internet traffic - single-player
++			// runs on the internal loopback channel (net_usesocketsforloopback
++			// 0), so hand out a fake handle exactly like the
++			// OnlyUseSteamSockets() branch above instead of killing the process
++			// (run #168 map probe: Host_NewGame -> NET_Config ->
++			// NET_OpenSockets -> OpenSocketInternal("server") ->
++			// Plat_ExitProcess(0) before the first CSARM_FRAME).
++			*handle = ++g_nFakeSocketHandle;
+ 		}
+ 
+ 		net_sockets[nModule].nPort = port;
+@@ -4450,8 +4468,16 @@
  	// We are using SteamnetworkingSockets only for datagram transport (for the relays).
  	// We aren't using it for the reliability layer or fragmentation and reassembly.
  	// So make sure the rate limits don't kick in.

@@ -1058,6 +1058,10 @@ jobs:
           -novid -windowed -w 1280 -h 720 -nobreakpad -nojoy -noshaderapi -no_scaleform_menu_on_boot
           -basedir /data/data/$APP/files -game cstrike
           +host_thread_mode 2 +mat_queue_mode 2 +cl_threaded_bone_setup 1
+          # round 33: +developer 1 unmutes ConDMsg ("Loading map", "Host_NewGame",
+          # "Spawning server") — without it the probe saw 0 progress markers
+          # even though the engine was inside Host_NewGame (run #168)
+          +developer 1
           +sv_lan 1 +map $MAP
           EOF
           sed -i 's/^          //' /tmp/csarm_probe.args
@@ -1107,9 +1111,11 @@ jobs:
           echo "=== map probe: load/args ==="
           grep -E "CSARM_ARGS|CSARM_NATIVE_INIT|CSARM_IFACE_FILL|CSARM_LOAD_DONE" logcat_map.txt | head -6 || true
           echo "=== map probe: engine spew around map ==="
-          grep -aE "Host_NewGame|Loading map|Spawning|Precach|GameRules|Gamerules|[Vv][Pp]hysics|Client [Cc]onnected|Client [Ss]pawn|Activate|Host_Activate|BEGIN|====|Finished|missing|Missing" logcat_map.txt | head -60 || true
+          grep -aE "Host_NewGame|Loading map|Spawning|Precach|GameRules|Gamerules|[Vv][Pp]hysics|physics|Client [Cc]onnected|Client [Ss]pawn|Activate|Host_Activate|BEGIN|====|Finished|missing|Missing|NET_|Sys_Error|Host_Error|Can't|Couldn't" logcat_map.txt | head -60 || true
           echo "=== map probe: engine errors (top) ==="
-          grep -aE "CSARM_ENG" logcat_map.txt | grep -aiE "error|fatal|failed|unable|missing|not found" | sort | uniq -c | sort -rn | head -25 || true
+          grep -aE "CSARM_ENG" logcat_map.txt | grep -aiE "error|fatal|failed|unable|missing|not found|exited|exit" | sort | uniq -c | sort -rn | head -25 || true
+          echo "=== map probe: final engine spew (last 25 lines before death) ==="
+          grep -a "CSARM_ENG" logcat_map.txt | tail -25 || true
           echo "=== map probe: frames ==="
           echo "CSARM_FRAME lines: $(grep -c CSARM_FRAME logcat_map.txt || true)"
           echo "=== map probe: verdict ==="
