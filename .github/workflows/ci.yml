@@ -1098,6 +1098,12 @@ jobs:
               if [ -z "$PROG" ]; then PROG=$SECONDS; echo "map spawn progress at t=${SECONDS}s — 60s capture window"; fi
               [ $((SECONDS - PROG)) -ge 60 ] && break
             fi
+            # round 38: rolling snapshot - the final logcat -d only shows the
+            # LAST buffer contents; a console-flood or a silent hang needs the
+            # state right after the engine stops logging
+            if [ $((SECONDS % 60)) -eq 0 ]; then
+              "$ADB" -s emulator-5554 logcat -d -t 400 > logcat_snap.txt 2>/dev/null || true
+            fi
             kill -0 "$(cat emu.pid)" 2>/dev/null || { echo "::error::emulator died during map probe"; break; }
             sleep 5
           done
@@ -1114,7 +1120,7 @@ jobs:
           # thread of the LIVE process; the runner is root on the ATD image) ---
           if [ -z "$PROG" ] && "$ADB" -s emulator-5554 shell "pidof $APP" >/dev/null 2>&1; then
             echo "=== map probe: engine ALIVE with no map progress - native backtraces (debuggerd -b) ==="
-            "$ADB" -s emulator-5554 shell "debuggerd -b \$(pidof $APP)" 2>/dev/null | grep -a "pid\|#0[0-9] pc" | head -220 || true
+            "$ADB" -s emulator-5554 shell "debuggerd -b \$(pidof $APP)" 2>/dev/null | grep -a "pid:\|#00 pc\|#0[1-9] pc\|#1[0-9] pc\|#2[0-9] pc\|#3[0-9] pc" | head -400 || true
           fi
           # --- 5. diagnostics + verdict ---
           echo "=== map probe: load/args ==="
@@ -1125,6 +1131,8 @@ jobs:
           grep -aE "CSARM_ENG" logcat_map.txt | grep -aiE "error|fatal|failed|unable|missing|not found|exited|exit" | sort | uniq -c | sort -rn | head -25 || true
           echo "=== map probe: final engine spew (last 25 lines before death) ==="
           grep -a "CSARM_ENG" logcat_map.txt | tail -25 || true
+          echo "=== map probe: last rolling logcat snapshot ==="
+          [ -f logcat_snap.txt ] && grep -a "CSARM" logcat_snap.txt | tail -35 || echo "(no snapshot)"
           echo "=== map probe: frames ==="
           echo "CSARM_FRAME lines: $(grep -c CSARM_FRAME logcat_map.txt || true)"
           echo "=== map probe: verdict ==="
