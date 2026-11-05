@@ -1062,6 +1062,11 @@ jobs:
           # "Spawning server") — without it the probe saw 0 progress markers
           # even though the engine was inside Host_NewGame (run #168)
           +developer 1
+          # round 39: engine console -> file (cstrike/console.log).  Engine
+          # console output does NOT go to stdout, so Msg/Warning during map
+          # load were invisible outside the emulator; the file is pulled in
+          # step 5b and printed with the verdict.
+          +con_logfile console.log
           +sv_lan 1 +map $MAP
           EOF
           sed -i 's/^          //' /tmp/csarm_probe.args
@@ -1131,6 +1136,14 @@ jobs:
           grep -aE "CSARM_ENG" logcat_map.txt | grep -aiE "error|fatal|failed|unable|missing|not found|exited|exit" | sort | uniq -c | sort -rn | head -25 || true
           echo "=== map probe: final engine spew (last 25 lines before death) ==="
           grep -a "CSARM_ENG" logcat_map.txt | tail -25 || true
+          # --- 5b. engine console log (con_logfile) ------------------------
+          "$ADB" -s emulator-5554 shell "cat /data/data/$APP/files/cstrike/console.log 2>/dev/null" > engine_console.log || true
+          if [ -s engine_console.log ]; then
+            echo "=== map probe: engine console.log tail (last 80 lines) ==="
+            tail -80 engine_console.log
+          else
+            echo "=== map probe: engine console.log missing/empty ==="
+          fi
           echo "=== map probe: last rolling logcat snapshot ==="
           [ -f logcat_snap.txt ] && grep -a "CSARM" logcat_snap.txt | tail -35 || echo "(no snapshot)"
           echo "=== map probe: frames ==="
@@ -1225,6 +1238,8 @@ jobs:
             crash_sw.txt
             crash_map.txt
             emulator.log
+            engine_console.log
+            logcat_snap.txt
           if-no-files-found: ignore
 
   # Job 3: aarch64 math/unit tests under qemu (validates NEON math patches)
