@@ -19,6 +19,8 @@
 //   VPhysics031, VPhysicsSurfaceProps001, VPhysicsCollision007
 //   (public/interfaces/interfaces.h:282 + vphysics_interface.h:134,1045)
 #include <string.h>
+#include <stdlib.h>
+#include <new>
 
 #include "tier0/platform.h"
 #include "tier1/interface.h"
@@ -38,6 +40,22 @@ static char s_DummyConvex[16];
 static char s_DummyCollide[16];
 static char s_DummySoup[16];
 static surfacedata_t g_ZeroSurfaceData;
+
+// csARM round 34: fill a trace_t with the canonical "no hit" answer (fraction
+// 1.0, no solid flags, no entity).  The stub traces used to leave *ptr
+// untouched - once entities spawn the server sim reads the stack garbage and
+// can branch arbitrarily.  World/brush collision still goes through the BSP
+// (CM_ClipBoxToBrush), so gameplay ground traces are unaffected either way.
+static void StubNoHitTrace( trace_t *ptr )
+{
+    if ( !ptr )
+        return;
+    memset( ptr, 0, sizeof( *ptr ) );
+    ptr->fraction = 1.0f;
+    ptr->fractionleftsolid = 0.0f;
+    ptr->allsolid = false;
+    ptr->startsolid = false;
+}
 
 class CStub_IPhysics;
 class CStub_IPhysicsCollision;
@@ -174,19 +192,45 @@ public:
 	virtual int GetConvexesUsedInCollideable( const CPhysCollide *pCollideable, CPhysConvex **pOutputArray, int iOutputArrayLimit )
 	{  return (int)0; }
 	virtual void TraceBox( const Vector &start, const Vector &end, const Vector &mins, const Vector &maxs, const CPhysCollide *pCollide, const Vector &collideOrigin, const QAngle &collideAngles, trace_t *ptr )
-	{  }
+	{ StubNoHitTrace( ptr ); }
 	virtual void TraceBox( const Ray_t &ray, const CPhysCollide *pCollide, const Vector &collideOrigin, const QAngle &collideAngles, trace_t *ptr )
-	{  }
+	{ StubNoHitTrace( ptr ); }
 	virtual void TraceBox( const Ray_t &ray, unsigned int contentsMask, IConvexInfo *pConvexInfo, const CPhysCollide *pCollide, const Vector &collideOrigin, const QAngle &collideAngles, trace_t *ptr )
-	{  }
+	{ StubNoHitTrace( ptr ); }
 	virtual void TraceCollide( const Vector &start, const Vector &end, const CPhysCollide *pSweepCollide, const QAngle &sweepAngles, const CPhysCollide *pCollide, const Vector &collideOrigin, const QAngle &collideAngles, trace_t *ptr )
-	{  }
+	{ StubNoHitTrace( ptr ); }
 	virtual bool IsBoxIntersectingCone( const Vector &boxAbsMins, const Vector &boxAbsMaxs, const truncatedcone_t &cone )
 	{  return (bool)0; }
 	virtual void VCollideLoad( vcollide_t *pOutput, int solidCount, const char *pBuffer, int size, bool swap = false )
-	{ if ( pOutput ) memset( pOutput, 0, sizeof( *pOutput ) ); }
+	{
+	    if ( !pOutput )
+	        return;
+	    memset( pOutput, 0, sizeof( *pOutput ) );
+	    // csARM round 34: report the phy lump as parsed.  The old memset-only
+	    // stub left solidCount == 0, so CollisionBSPData_LoadPhysics hit
+	    // Sys_Error "No physics for world in map" (run #169 wall).  Hand out
+	    // one dummy collide per solid (all stub traces answer "no hit") plus
+	    // a valid empty keyvalues string; VCollideUnload frees both.  solidCount
+	    // is a 15-bit bitfield in vcollide_t (public/vcollide.h).
+	    if ( solidCount <= 0 )
+	        return;
+	    CPhysCollide **solids = new CPhysCollide *[solidCount];
+	    for ( int i = 0; i < solidCount; ++i )
+	        solids[i] = (CPhysCollide *)&s_DummyCollide;
+	    pOutput->solids = solids;
+	    pOutput->solidCount = solidCount > 0x7FFF ? 0x7FFF : (unsigned short)solidCount;
+	    pOutput->descSize = 0;
+	    pOutput->pKeyValues = strdup( "" );
+	    pOutput->pUserData = NULL;
+	}
 	virtual void VCollideUnload( vcollide_t *pVCollide )
-	{  }
+	{
+	    if ( !pVCollide )
+	        return;
+	    delete[] pVCollide->solids;
+	    free( pVCollide->pKeyValues );
+	    memset( pVCollide, 0, sizeof( *pVCollide ) );
+	}
 	virtual IVPhysicsKeyParser * VPhysicsKeyParserCreate( const char *pKeyData )
 	{  return (IVPhysicsKeyParser *)g_ParserStub; }
 	virtual IVPhysicsKeyParser * VPhysicsKeyParserCreate( vcollide_t *pVCollide )
@@ -220,13 +264,31 @@ public:
 	virtual float CollideGetRadius( const CPhysCollide *pCollide )
 	{  return (float)0; }
 	virtual void * VCollideAllocUserData( vcollide_t *pVCollide, size_t userDataSize )
-	{  }
+	{
+	    // csARM round 34: allocate for real - the engine reads
+	    // pVCollide->pUserData after this call; a no-op left it NULL and
+	    // callers would dereference it.
+	    if ( !pVCollide )
+	        return NULL;
+	    if ( pVCollide->pUserData )
+	        return pVCollide->pUserData;
+	    pVCollide->pUserData = malloc( userDataSize ? userDataSize : 1 );
+	    if ( pVCollide->pUserData )
+	        memset( pVCollide->pUserData, 0, userDataSize ? userDataSize : 1 );
+	    return pVCollide->pUserData;
+	}
 	virtual void VCollideFreeUserData( vcollide_t *pVCollide )
-	{  }
+	{
+	    if ( pVCollide && pVCollide->pUserData )
+	    {
+	        free( pVCollide->pUserData );
+	        pVCollide->pUserData = NULL;
+	    }
+	}
 	virtual void VCollideCheck( vcollide_t *pVCollide, const char *pName )
 	{  }
 	virtual bool TraceBoxAA( const Ray_t &ray, const CPhysCollide *pCollide, trace_t *ptr )
-	{  return (bool)0; }
+	{ StubNoHitTrace( ptr ); return (bool)0; }
 	virtual void DuplicateAndScale( vcollide_t *pOut, const vcollide_t *pIn, float flScale )
 	{  }
 };
@@ -416,9 +478,9 @@ public:
 	virtual bool IsCollisionModelUsed( CPhysCollide *pCollide ) const
 	{  return (bool)0; }
 	virtual void TraceRay( const Ray_t &ray, unsigned int fMask, IPhysicsTraceFilter *pTraceFilter, trace_t *pTrace )
-	{  }
+	{ StubNoHitTrace( pTrace ); }
 	virtual void SweepCollideable( const CPhysCollide *pCollide, const Vector &vecAbsStart, const Vector &vecAbsEnd, const QAngle &vecAngles, unsigned int fMask, IPhysicsTraceFilter *pTraceFilter, trace_t *pTrace )
-	{  }
+	{ StubNoHitTrace( pTrace ); }
 	virtual void GetPerformanceSettings( physics_performanceparams_t *pOutput ) const
 	{  }
 	virtual void SetPerformanceSettings( const physics_performanceparams_t *pSettings )
