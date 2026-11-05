@@ -3570,3 +3570,67 @@ diff -ruN a/game/client/cstrike15/Scaleform/loadingscreen_scaleform.cpp b/game/c
  	if ( !m_pInstance )
  	{
  		m_pInstance = new CLoadingScreenScaleform();
+diff -ruN a/engine/audio/private/snd_wave_data.cpp b/engine/audio/private/snd_wave_data.cpp
+--- a/engine/audio/private/snd_wave_data.cpp	2026-11-05 00:00:00.000000000 +0000
++++ b/engine/audio/private/snd_wave_data.cpp	2026-11-05 00:00:00.000000000 +0000
+@@ -3816,27 +3816,35 @@
+ 	void SetupPhononContext()
+ 	{
+ 		if (g_phononContext)
+ 		{
+ 			return;
+ 		}
++		// csARM round 40: no phonon runtime on Android (ipl* stubs return
++		// IPL_STATUS_FAILURE); SetupPhononContext() runs on every S_Update_
++		// (snd_hrtf_async 0 -> synchronous path), so a plain retry printed
++		// ~120 "Failed to init phonon" DevMsgs per second and never stops
++		// (run #176: 56867 lines).  Memoize the failure after the first one.
++		static bool s_bPhononInitFailed = false;
++		if ( s_bPhononInitFailed )
++		{
++			return;
++		}
+ 
+ 		IPLContext iplContext;
+ 		memset(&iplContext, 0, sizeof(iplContext));
+ 		iplContext.logCallback = nullptr;
+ 
+ 		IPLRenderingSettings dspParams;
+ 		dspParams.samplingRate = 44100;
+ 		dspParams.frameSize = PHONON_FRAME_SIZE;
+ 
+ 		IPLHrtfParams hrtfParams;
+ 		hrtfParams.type = IPL_HRTFDATABASETYPE_DEFAULT;
+ 		hrtfParams.hrtfData = nullptr;
+ 
+ 		IPLerror phononError = iplCreateBinauralRenderer(iplContext, dspParams, hrtfParams, &g_phononContext);
+ 		if (phononError != IPL_STATUS_SUCCESS)
+ 		{
++			s_bPhononInitFailed = true;
+-			DevMsg( "Failed to init phonon: %d\n", (int)phononError );
+-			snd_hwcompat.SetValue( true );
+-			return;
+ 		}
+ 
+diff -ruN a/engine/EngineSoundServer.cpp b/engine/EngineSoundServer.cpp
+--- a/engine/EngineSoundServer.cpp	2026-11-05 00:00:00.000000000 +0000
++++ b/engine/EngineSoundServer.cpp	2026-11-05 00:00:00.000000000 +0000
+@@ -225,10 +225,16 @@
+ 	// add the sound to the precache list
+ 	// Start at 1, since 0 is used to indicate an error in the sound precache
+ 	i = SV_FindOrAddSound( pSample, bPreload );
+ 	if ( i >= 0 )
+ 		return true;
+ 
+-	Host_Error( "CEngineSoundServer::PrecacheSound: '%s' overflow", pSample );
+-	return false;
++	// csARM round 40: the sound-precache string table can overflow
++	// (10 casual bots preload their whole VO sets on top of the map
++	// sounds); audio is a no-op stub on Android, so killing the map
++	// session with Host_Error is pure loss.  Skip the sample instead
++	// (run #176: 'Table soundprecache is full' -> Host_Error tore the
++	// ar_dizzy session down right after CloseLoadingScreen).
++	DevMsg( "CEngineSoundServer::PrecacheSound: '%s' overflow ignored\n", pSample );
++	return false;
+ }
+ 
