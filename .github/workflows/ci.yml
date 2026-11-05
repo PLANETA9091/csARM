@@ -1107,6 +1107,15 @@ jobs:
           "$ADB" -s emulator-5554 exec-out screencap -p > map2.png || true
           "$ADB" -s emulator-5554 logcat -d > logcat_map.txt || true
           "$ADB" -s emulator-5554 logcat -d -b crash > crash_map.txt || true
+          # --- 4b. live-engine stack dump (run #172: the engine hung silently
+          # for the whole 480s window right after NET_Init, before any map
+          # marker or frame - the pidof death check cannot see a hang, and no
+          # tombstone appears.  debuggerd -b prints native backtraces of every
+          # thread of the LIVE process; the runner is root on the ATD image) ---
+          if [ -z "$PROG" ] && "$ADB" -s emulator-5554 shell "pidof $APP" >/dev/null 2>&1; then
+            echo "=== map probe: engine ALIVE with no map progress - native backtraces (debuggerd -b) ==="
+            "$ADB" -s emulator-5554 shell "debuggerd -b \$(pidof $APP)" 2>/dev/null | grep -a "pid\|#0[0-9] pc" | head -220 || true
+          fi
           # --- 5. diagnostics + verdict ---
           echo "=== map probe: load/args ==="
           grep -E "CSARM_ARGS|CSARM_NATIVE_INIT|CSARM_IFACE_FILL|CSARM_LOAD_DONE" logcat_map.txt | head -6 || true
