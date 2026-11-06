@@ -3762,3 +3762,63 @@ diff -ruN a/public/scaleformui/scaleformui.h b/public/scaleformui/scaleformui.h
  		pScaleformUI->RequestElement( slot, #uiname, reinterpret_cast<ScaleformUIFunctionHandlerObject*>( pinstance ), SFUI_OBJ_PTR_NAME( classname, uiname ) );
  
  /***************************************************************
+diff -ruN a/game/client/c_playerresource.cpp b/game/client/c_playerresource.cpp
+--- a/game/client/c_playerresource.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/client/c_playerresource.cpp	2026-11-06 16:00:00.000000000 +0000
+@@ -110,6 +110,18 @@ C_PlayerResource::C_PlayerResource()
+ 	g_PR = this;
+ 
+ #if defined( INCLUDE_SCALEFORM )
++	// csARM round 49: g_pScaleformUI is NULL on Android (no Scaleform
++	// runtime; INCLUDE_SCALEFORM must stay 1 for the unguarded gameui
++	// integration, see build/vpcmini.py), so the direct derefs in the
++	// player-resource lifecycle crash: run #186 died in
++	// C_PlayerResource::C_PlayerResource()+319 (fault 0x0) the instant the
++	// first snapshot created the CS_PlayerResource entity via
++	// CL_CopyNewEntity.  Guard every direct deref in this file the same way
++	// the SFUI_REQUEST_ELEMENT macro is guarded since round 48: no runtime ->
++	// no device-dependent registration and no avatar image refs; the boolean
++	// avatar-ref plumbing degrades to 'not added', which the callers already
++	// handle (m_Xuids stays INVALID_XUID).
++	if ( g_pScaleformUI )
+ 	g_pScaleformUI->AddDeviceDependentObject( this );
+ #endif
+ }
+@@ -126,6 +138,7 @@ C_PlayerResource::~C_PlayerResource()
+ 		if ( m_Xuids[i] != INVALID_XUID )
+ 		{
+ #if defined( INCLUDE_SCALEFORM )
++			if ( g_pScaleformUI )
+ 			g_pScaleformUI->AvatarImageRelease( m_Xuids[ i ] );
+ #endif
+ 		}
+@@ -134,6 +147,7 @@ C_PlayerResource::~C_PlayerResource()
+ 	g_PR = NULL;
+ 
+ #if defined( INCLUDE_SCALEFORM )
++	if ( g_pScaleformUI )
+ 	g_pScaleformUI->RemoveDeviceDependentObject( this );
+ #endif
+ }
+@@ -184,11 +198,13 @@ void C_PlayerResource::UpdateXuids( void )
+ 
+ 			if ( m_Xuids[i] != INVALID_XUID )
+ 			{
++				if ( g_pScaleformUI )
+ 				g_pScaleformUI->AvatarImageRelease( m_Xuids[ i ] );
+ 			}
+ 
+ 			if ( newXuid != INVALID_XUID )
+ 			{
++				if ( g_pScaleformUI )
+ 				bAddRefSuccess = g_pScaleformUI->AvatarImageAddRef( newXuid );
+ 			}
+ 
+@@ -764,6 +780,7 @@ void C_PlayerResource::DeviceLost( void )
+ 		if ( m_Xuids[i] != INVALID_XUID )
+ 		{
+ #if defined( INCLUDE_SCALEFORM )
++			if ( g_pScaleformUI )
+ 			g_pScaleformUI->AvatarImageRelease( m_Xuids[ i ] );
+ #endif
+ 			m_Xuids[i] = INVALID_XUID;
