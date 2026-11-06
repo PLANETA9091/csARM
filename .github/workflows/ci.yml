@@ -1164,10 +1164,10 @@ jobs:
           # --- 2. feed csarm.args (readArgsFile: line-based, space-split) ---
           cat > /tmp/csarm_probe.args <<EOF
           # round 56b: NO -noshaderapi here — the map probe boots the REAL renderer
-# (gl4es libGL over bundled SwiftShader; togl/shaderapidx9/stdshader_dx9 all
-# live).  The fast-boot stages keep their -noshaderapi defaults, so a green
-# probe ladder and a green boot ladder coexist in one run.
--novid -windowed -w 1280 -h 720 -nobreakpad -nojoy -no_scaleform_menu_on_boot
+          # (gl4es libGL over bundled SwiftShader; togl/shaderapidx9/stdshader_dx9
+          # all live).  The fast-boot stages keep their -noshaderapi defaults, so
+          # a green probe ladder and a green boot ladder coexist in one run.
+          -novid -windowed -w 1280 -h 720 -nobreakpad -nojoy -no_scaleform_menu_on_boot
           -basedir /data/data/$APP/files -game cstrike
           +host_thread_mode 2 +mat_queue_mode 2 +cl_threaded_bone_setup 1
           # round 33: +developer 1 unmutes ConDMsg ("Loading map", "Host_NewGame",
