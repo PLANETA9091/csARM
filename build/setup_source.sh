@@ -136,8 +136,18 @@ else
   # untracked BY DESIGN (copied from the 2018 mirror, not part of the 2019
   # git tree) — exclude it from the clean and re-copy it fresh so the diff
   # always applies onto the exact thirdparty revision it was generated with.
-  git checkout -q -- . 2>/dev/null || true
+  # run #181 lesson: `git checkout -q -- . 2>/dev/null || true` can silently
+  # no-op on a stale blobless-clone cache (missing pristine blobs), leaving
+  # patched content in the worktree; the forward apply then fails for every
+  # hunk whose context touches line 1 and the failure is opaque.  Force the
+  # checkout, VERIFY pristine-ness, and fall back to a fresh sparse re-clone
+  # instead of a confusing "patch does not apply" cascade.
+  git checkout -q -f -- . || git checkout -q -f HEAD -- . || true
   git clean -fdq -e thirdparty
+  if [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    echo "c15 not pristine after reset (stale partial-clone cache) -> fresh re-clone"
+    do_clone
+  fi
   for d in $TP_DIRS; do
     rm -rf "thirdparty/$d"
     cp -r "$TPCACHE/thirdparty/$d" "thirdparty/$d"
