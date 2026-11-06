@@ -3659,3 +3659,33 @@ diff -ruN a/engine/baseserver.cpp b/engine/baseserver.cpp
  				break;
  #endif
  			ReplyChallenge( packet->from, msg );
+diff -ruN a/engine/gl_matsysiface.cpp b/engine/gl_matsysiface.cpp
+--- a/engine/gl_matsysiface.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/gl_matsysiface.cpp	2026-11-06 12:00:00.000000000 +0000
+@@ -491,8 +491,25 @@
+ int __cdecl SortMapCompareFunc( const void *pElem0, const void *pElem1 )
+ {
+ 	const sortmap_t *pMap0 = (const sortmap_t *)pElem0;
+ 	const sortmap_t *pMap1 = (const sortmap_t *)pElem1;
++	// csARM round 45: CMatLightmaps::GetSortInfo can leave trailing sort IDs
++	// with material == NULL (m_numSortIDs outruns the entries ComputeSortInfo/
++	// ComputeWhiteLightmappedSortInfo fill from the material dict; with the
++	// Android render stack some materials never claim their sort IDs).  qsort
++	// then handed the NULL straight into CMatRenderContext::CompareMaterial-
++	// Combos, whose first virtual call (GetRealTimeVersion) dereferenced
++	// NULL+0x30 -- run #182 tombstone in SDLThread, right after signon entered
++	// CClientState::FinishSignonState_New -> R_LevelInit -> R_LoadWorldGeometry.
++	// Sort NULL combos first with a CONSISTENT total order (nulls before real
++	// materials, real ones keep the engine comparison), so qsort stays well-
++	// defined and the remap below keeps working.
+-	return pSortMapRenderContext->CompareMaterialCombos( pMap0->info.material, pMap1->info.material, pMap0->info.lightmapPageID, pMap1->info.lightmapPageID );
++	if ( !pMap0->info.material || !pMap1->info.material )
++	{
++		if ( pMap0->info.material == pMap1->info.material )
++			return 0;
++		return pMap0->info.material ? 1 : -1;
++	}
++	return pSortMapRenderContext->CompareMaterialCombos( pMap0->info.material, pMap1->info.material, pMap0->info.lightmapPageID, pMap1->info.lightmapPageID );
+ }
+ 
+ //-----------------------------------------------------------------------------
