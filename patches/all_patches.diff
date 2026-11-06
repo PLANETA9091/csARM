@@ -3822,3 +3822,28 @@ diff -ruN a/game/client/c_playerresource.cpp b/game/client/c_playerresource.cpp
  			g_pScaleformUI->AvatarImageRelease( m_Xuids[ i ] );
  #endif
  			m_Xuids[i] = INVALID_XUID;
+diff -ruN a/engine/cl_main.cpp b/engine/cl_main.cpp
+--- a/engine/cl_main.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/cl_main.cpp	2026-11-06 17:00:00.000000000 +0000
+@@ -1860,8 +1860,20 @@ void CL_FullyConnected( void )
+ 
+ #ifndef DEDICATED
+ 	// Register a listener that will be uploading our own avatar data to the game server
++	// csARM round 50: CL_FullyConnected() instantiates a static
++	// CEngineReliableAvatarCallback_t whose constructor chains
++	// Steam3Client().SteamUser()->GetSteamID() -- with the steam_api stub
++	// SteamUser() returns NULL and the avatar-listener ctor faulted at 0x0
++	// the moment signon reached FULLY CONNECTED (run #187 tombstone:
++	// CEngineReliableAvatarCallback_t()+176 <- CL_FullyConnected+1683).
++	// The whole listener exists to upload the local player's Steam avatar:
++	// without a Steam user there is nothing to listen for or upload, so
++	// skip both the registration and the initial upload.
++	if ( Steam3Client().SteamUser() )
++	{
+ 	static CEngineReliableAvatarCallback_t s_EngineReliableAvatarCallback;
+-	s_EngineReliableAvatarCallback.UploadMyOwnAvatarToGameServer();
++		s_EngineReliableAvatarCallback.UploadMyOwnAvatarToGameServer();
++	}
+ #endif
+ }
+ 
