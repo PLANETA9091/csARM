@@ -3739,3 +3739,26 @@ diff -ruN a/materialsystem/cmatrendercontext.cpp b/materialsystem/cmatrendercont
  	int dPass = pState2->m_pSnapshots->m_nPassCount - pState1->m_pSnapshots->m_nPassCount;
  	if ( dPass )
  		return dPass;
+diff -ruN a/public/scaleformui/scaleformui.h b/public/scaleformui/scaleformui.h
+--- a/public/scaleformui/scaleformui.h	2026-08-10 03:28:37.000000000 +0000
++++ b/public/scaleformui/scaleformui.h	2026-11-06 15:00:00.000000000 +0000
+@@ -257,8 +257,19 @@ inline ScaleformUIFunctionHandler ToScaleformUIFunctionHandler(void (T::*method)
+ 	static FunctionCallbackDefTable<classname> SFUI_OBJ_NAME( classname, uiname );\
+ 	IScaleformUIFunctionHandlerDefinitionTable* SFUI_OBJ_PTR_NAME( classname, uiname ) = &SFUI_OBJ_NAME( classname, uiname )
+ 
++// csARM round 48: g_pScaleformUI stays NULL on Android (no Scaleform
++// runtime shipped with the port), and every SFUI_REQUEST_ELEMENT call
++// site expands to pScaleformUI->RequestElement(...) -- an unguarded deref
++// of that NULL.  Run #185 proved the round-31/32 per-site guards do not
++// scale: the client reached CHLClient::LevelInitPreEntity and crashed at
++// SFMapOverview::LevelInit+33 (fault 0x0, SDLThread) the moment signon
++// ran client level init.  Guard the macro itself (29 call sites, all
++// plain statements, no dangling-else usage) so the ~30 Scaleform HUD /
++// menu elements behind it become inert the same way the round-32 loading
++// screen is, instead of one tombstone per element per boot path.
+ #define SFUI_REQUEST_ELEMENT( slot, pScaleformUI, classname, pinstance, uiname )\
+ 		extern IScaleformUIFunctionHandlerDefinitionTable* SFUI_OBJ_PTR_NAME( classname, uiname );\
++	if ( pScaleformUI )\
+ 		pScaleformUI->RequestElement( slot, #uiname, reinterpret_cast<ScaleformUIFunctionHandlerObject*>( pinstance ), SFUI_OBJ_PTR_NAME( classname, uiname ) );
+ 
+ /***************************************************************
