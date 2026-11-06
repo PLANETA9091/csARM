@@ -830,7 +830,7 @@ diff -ruN a/game/server/ai_movesolver.cpp b/game/server/ai_movesolver.cpp
 --- a/game/server/ai_movesolver.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/server/ai_movesolver.cpp	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose:
@@ -850,7 +850,7 @@ diff -ruN a/game/server/entitylist.h b/game/server/entitylist.h
 --- a/game/server/entitylist.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/server/entitylist.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
@@ -931,7 +931,7 @@ diff -ruN a/game/shared/baseviewmodel_shared.h b/game/shared/baseviewmodel_share
 --- a/game/shared/baseviewmodel_shared.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/shared/baseviewmodel_shared.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+-//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
 +//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
  //
  // Purpose: 
@@ -972,7 +972,7 @@ diff -ruN a/game/shared/sharedvar.h b/game/shared/sharedvar.h
 --- a/game/shared/sharedvar.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/shared/sharedvar.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
@@ -1084,7 +1084,7 @@ diff -ruN a/game/shared/util_shared.h b/game/shared/util_shared.h
 --- a/game/shared/util_shared.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/shared/util_shared.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: Shared util code between client and server.
@@ -1528,7 +1528,7 @@ diff -ruN a/public/basehandle.h b/public/basehandle.h
 --- a/public/basehandle.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/basehandle.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
@@ -1899,7 +1899,7 @@ diff -ruN a/public/gcsdk/msgprotobuf.h b/public/gcsdk/msgprotobuf.h
 --- a/public/gcsdk/msgprotobuf.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/gcsdk/msgprotobuf.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
--//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
+-//====== Copyright ï¿½ 1996-2004, Valve Corporation, All rights reserved. =======
 +//====== Copyright ï¿½ 1996-2004, Valve Corporation, All rights reserved. =======
  //
  // Purpose: 
@@ -1953,7 +1953,7 @@ diff -ruN a/public/mathlib/math_pfns.h b/public/mathlib/math_pfns.h
 --- a/public/mathlib/math_pfns.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/mathlib/math_pfns.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
@@ -2049,7 +2049,7 @@ diff -ruN a/public/mathlib/mathlib.h b/public/mathlib/mathlib.h
  // Fast compare
  // maxUlps is the maximum error in terms of Units in the Last Place. This 
  // specifies how big an error we are willing to accept in terms of the value
--// of the least significant digit of the floating point number’s 
+-// of the least significant digit of the floating point numberï¿½s 
 +// of the least significant digit of the floating point numberï¿½s 
  // representation. maxUlps can also be interpreted in terms of how many 
  // representable floats we are willing to accept between A and B. 
@@ -2544,7 +2544,7 @@ diff -ruN a/public/tier1/byteswap.h b/public/tier1/byteswap.h
 --- a/public/tier1/byteswap.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/tier1/byteswap.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2006, Valve LLC, All rights reserved. ============
+-//========= Copyright ï¿½ 1996-2006, Valve LLC, All rights reserved. ============
 +//========= Copyright ï¿½ 1996-2006, Valve LLC, All rights reserved. ============
  //
  // Purpose: Low level byte swapping routines.
@@ -2570,7 +2570,7 @@ diff -ruN a/public/tier1/tokenset.h b/public/tier1/tokenset.h
 --- a/public/tier1/tokenset.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/tier1/tokenset.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 2008, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 2008, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 2008, Valve Corporation, All rights reserved. ============//
  
  #ifndef __TOKENSET_H
@@ -2912,7 +2912,7 @@ diff -ruN a/tier1/processor_detect_linux.cpp b/tier1/processor_detect_linux.cpp
 --- a/tier1/processor_detect_linux.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/tier1/processor_detect_linux.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
 +//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: linux dependant ASM code for CPU capability detection
@@ -3069,7 +3069,7 @@ diff -ruN a/utils/common/bsplib.cpp b/utils/common/bsplib.cpp
 --- a/utils/common/bsplib.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/utils/common/bsplib.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -1,4 +1,4 @@
--//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+-//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
 +//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
  //
  // Purpose: 
@@ -3634,3 +3634,28 @@ diff -ruN a/engine/EngineSoundServer.cpp b/engine/EngineSoundServer.cpp
 +	return false;
  }
  
+diff -ruN a/engine/baseserver.cpp b/engine/baseserver.cpp
+--- a/engine/baseserver.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/baseserver.cpp	2026-11-06 10:00:00.000000000 +0000
+@@ -969,7 +969,20 @@
+ #if !defined(NO_STEAM)
+ 			// Drop packet if we don't yet have our Steam ID
+ 			// because we're still logging on
++			// csARM round 44: Android has no Steam client (the steam_api stub's
++			// init functions return false, its accessors return NULL), so neither
++			// OnLogonSuccess nor OnLogonFailure ever fires and m_bLogOnResult
++			// stays false forever.  Every A2S_GETCHALLENGE was therefore silently
++			// dropped: the loopback client printed 'Sending connect to public
++			// address 127.0.0.1:27015 via UDP' 30 times and died with 'Connection
++			// failed after 30 retries' (run #180).  Nothing on the wire is CORRECT
++			// here - 127.0.0.1 rides the in-process loopback channel
++			// (net_usesocketsforloopback 0), the packet never left the process.
++			// In eServerModeNoAuthentication (the only mode reachable with the
++			// stub; 'Unable to load Steam support library' -> LAN-only) there is
++			// nothing to log on to: let the challenge through, exactly like the
++			// NO_STEAM builds which ship without this gate at all.
+-			if ( !Steam3Server().BHasLogonResult() )
++			if ( !Steam3Server().BHasLogonResult() && !Steam3Server().BLanOnly() )
+ 				break;
+ #endif
+ 			ReplyChallenge( packet->from, msg );

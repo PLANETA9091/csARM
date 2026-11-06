@@ -1063,6 +1063,13 @@ jobs:
           # even though the engine was inside Host_NewGame (run #168)
           +developer 1
           +net_showudp 1
+          # round 44: net_showudp alone spews NOTHING for the connect handshake
+          # — getchallenge/connect are connectionless (OOB) packets and that
+          # path is gated by net_showudp_oob (default 0), which left run #180
+          # blind on exactly the traffic it was built to watch.  With OOB on,
+          # 'UDP ->/-< 127.0.0.1:27015 ... OOB 0x.. ' lines prove each hop of
+          # the loopback handshake (client request, server challenge reply).
+          +net_showudp_oob 1
           # round 39: engine console -> file (cstrike/console.log).  Engine
           # console output does NOT go to stdout, so Msg/Warning during map
           # load were invisible outside the emulator; the file is pulled in
