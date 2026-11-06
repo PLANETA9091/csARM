@@ -3689,3 +3689,22 @@ diff -ruN a/engine/gl_matsysiface.cpp b/engine/gl_matsysiface.cpp
  }
  
  //-----------------------------------------------------------------------------
+diff -ruN a/engine/gl_matsysiface.cpp b/engine/gl_matsysiface.cpp
+--- a/engine/gl_matsysiface.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/engine/gl_matsysiface.cpp	2026-11-06 13:00:00.000000000 +0000
+@@ -503,6 +503,15 @@
+ 	Assert( !materialSortInfoArray );
+ 
+ 	int nSortIDs = materials->GetNumSortIDs();
+ 	materialSortInfoArray = ( MaterialSystem_SortInfo_t * )new MaterialSystem_SortInfo_t[ nSortIDs ];
++	// csARM round 46: run #183 proved the tail entries are NOT NULL -- they are
++	// UNINITIALIZED GARBAGE: new MaterialSystem_SortInfo_t[] does not zero, and
++	// CMatLightmaps::GetSortInfo only fills the sort IDs the material dict
++	// currently claims (m_numSortIDs outruns it on the Android stack).  The
++	// round-45 NULL guard therefore never fired: qsort dereferenced a garbage
++	// pointer (fault addr 0x30 = the garbage value itself) at exactly the same
++	// CompareMaterialCombos+327.  Zero the array right after allocation so the
++	// unused tail is NULL and the round-45 comparator order handles it.
++	Q_memset( materialSortInfoArray, 0, sizeof( MaterialSystem_SortInfo_t ) * nSortIDs );
+ 	Assert( materialSortInfoArray );
+ 	materials->GetSortInfo( materialSortInfoArray );
