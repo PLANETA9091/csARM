@@ -160,7 +160,14 @@ static const char *kModules[] = {
     // round 55: the real render stack — compiled + linked, dlopen-smoked in
     // CI; the engine still boots with -noshaderapi until the desktop-GL
     // driver question is settled (SwiftShader bundle is ES/EGL-only)
-    "togl", "shaderapidx9", "stdshader_dx9", nullptr
+    // round 56a: stdshader_dx9 gets NO bin/ symlink while the engine runs
+    // shaderapiempty: CShaderSystem::LoadShaderDLL("stdshader_dx9") searches
+    // this exact path and would register the real BEGIN_VS_SHADER classes;
+    // materialsystem then initializes them (particles precache ->
+    // Spritecard::OnInitShaderParams) against the stub shader API and SEGVs
+    // (run #193 tombstone).  togl/shaderapidx9 carry no shader classes and
+    // stay symlinked for the round-56 flip.
+    "togl", "shaderapidx9", nullptr
 };
 
 static std::string nativeLibDir()

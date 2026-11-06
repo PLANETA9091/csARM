@@ -38,8 +38,14 @@ public class CSARMActivity extends SDLActivity {
         "bzip2", "tier3", "dmxloader", "bitmap", "vtf", "shaderlib", "scenefilecache",
         "filesystem_stdio",
         // round 55: real render stack (togl must precede shaderapidx9 —
-        // DT_NEEDED would load it anyway, but the smoke order documents it)
-        "togl", "shaderapidx9", "stdshader_dx9"
+        // DT_NEEDED would load it anyway, but the smoke order documents it).
+        // round 56a: stdshader_dx9 is NOT dlopened while the engine runs
+        // -noshaderapi — its static initializers register the real shader
+        // classes into shaderlib's CShaderDLL and materialsystem initializes
+        // them against the stub API (Spritecard SEGV, run #193 SwiftShader
+        // tombstone).  The lib stays packed in the APK; run #193 already
+        // proved it dlopens cleanly on both ABIs (ok=33).
+        "togl", "shaderapidx9"
     };
 
     static int loadErrors = 0;
