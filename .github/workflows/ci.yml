@@ -1062,7 +1062,10 @@ jobs:
           # "Spawning server") — without it the probe saw 0 progress markers
           # even though the engine was inside Host_NewGame (run #168)
           +developer 1
-          +net_showudp 1
+          # round 53: +net_showudp 1 is GONE for the long probe — the in-band
+          # keepalive spew (~60 lines/s) drowned the console.log (9.5 MB in run
+          # #189) and hid everything between FULLY CONNECTED and the overflow.
+          # The loopback handshake it was built to prove is settled (runs #181+).
           # round 44: net_showudp alone spews NOTHING for the connect handshake
           # — getchallenge/connect are connectionless (OOB) packets and that
           # path is gated by net_showudp_oob (default 0), which left run #180
@@ -1112,9 +1115,17 @@ jobs:
             # map, played round events and music while NEWGAME stayed 0 and
             # the probe misreported "no server-spawn markers".  Watch both.
             "$ADB" -s emulator-5554 shell "cat /data/data/$APP/files/cstrike/console.log 2>/dev/null" > console_live.txt 2>/dev/null || true
+            # round 53: the engine self-exits SILENTLY on CUtlLinkedList
+            # overflow (tier0 Error() -> Plat_ExitProcess(100)); catch the
+            # marker live instead of polling to the window end
+            if grep -qa "CUtlLinkedList overflow" console_live.txt logcat_map.txt 2>/dev/null; then
+              echo "engine self-exit: CUtlLinkedList overflow at t=${SECONDS}s (CSARM_EXIT_BT frames in logcat)"; break
+            fi
             if grep -qaE 'Host_NewGame|Loading map|Spawning server' logcat_map.txt console_live.txt 2>/dev/null; then
-              if [ -z "$PROG" ]; then PROG=$SECONDS; echo "map spawn progress at t=${SECONDS}s — 60s capture window"; fi
-              [ $((SECONDS - PROG)) -ge 60 ] && break
+              if [ -z "$PROG" ]; then PROG=$SECONDS; echo "map spawn progress at t=${SECONDS}s — 360s capture window"; fi
+              # round 53: 60s never reached the t=287s overflow (runs #189/#190);
+              # watch the full post-spawn stretch out to ~5.5 engine minutes
+              [ $((SECONDS - PROG)) -ge 360 ] && break
             fi
             # round 38: rolling snapshot - the final logcat -d only shows the
             # LAST buffer contents; a console-flood or a silent hang needs the
@@ -1202,6 +1213,16 @@ jobs:
             grep -E "#0[0-6] pc " crash_map.txt | head -7
             fail=1
           fi
+          # round 53: run #189 went 26/26 green while the engine had exited
+          # itself at t=287s (CUtlLinkedList overflow -> tier0 Error() ->
+          # Plat_ExitProcess).  Any engine exit inside the probe window or the
+          # overflow marker itself is now a hard failure with the frames.
+          if grep -qa "CUtlLinkedList overflow" engine_console.log console_live.txt logcat_map.txt 2>/dev/null; then
+            echo "::error::map probe: CUtlLinkedList overflow — engine self-exited"; fail=1
+          fi
+          if grep -qa "CSARM_EXIT_HIT" logcat_map.txt; then
+            echo "::error::map probe: engine process exited during the probe window"; grep -a "CSARM_EXIT_HIT" logcat_map.txt | head -4; grep -a "CSARM_EXIT_BT" logcat_map.txt | head -14; fail=1
+          fi
           if [ "$fail" = "1" ]; then exit 1; fi
           if [ "$NEWGAME" -gt 0 ]; then
             echo "MAP PROBE: server-spawn path reached ($NEWGAME progress markers) — full spew in logcat_map.txt"
@@ -1234,6 +1255,11 @@ jobs:
           grep -q "CSARM_LAUNCHER_CALL" $L || { echo "::error::LauncherMain was never called"; fail=1; }
           if [ "$fail" = "1" ]; then echo "--- tail ---"; tail -80 $L; exit 1; fi
           echo "LauncherMain reached: Valve CSourceAppSystemGroup host is live"
+          # round 53: the boot window can also see the overflow self-exit;
+          # never call a self-exited engine a stable launcher
+          if grep -qa "CUtlLinkedList overflow" logcat_boot.txt 2>/dev/null; then
+            echo "::error::CUtlLinkedList overflow during boot window — engine self-exited"; grep -a "CSARM_EXIT_BT" logcat_boot.txt | head -14; exit 1
+          fi
           if grep -q "CSARM_MAIN_FAIL" $L; then
             echo "::error::launcher failed: $(grep CSARM_MAIN_FAIL $L | head -2)"; exit 1
           fi

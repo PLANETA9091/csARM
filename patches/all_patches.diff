@@ -783,6 +783,35 @@ diff -ruN a/game/client/cstrike15/c_cs_player.cpp b/game/client/cstrike15/c_cs_p
  	}
  
  	return true;
+@@ -2093,14 +2093,28 @@
+ void C_CSPlayer::CreateClientEffectModels( void )
+ {
+ 	if ( !m_hMuzzleFlashShape.Get() )
+ 	{
+ 		C_BaseAnimating *pMuzzleFlashShape = new C_BaseAnimating;
+ 		if ( pMuzzleFlashShape->InitializeAsClientEntity( "models/weapons/w_muzzlefireshape.mdl", false ) )
+ 		{
+ 			pMuzzleFlashShape->AddEffects( EF_NODRAW );
+ 			m_hMuzzleFlashShape.Set( pMuzzleFlashShape );
+ 		}
++		else
++		{
++			// csARM (run #189): the foot-contact-shadow branches below
++			// Release() on failure, this branch did not.  With
++			// w_muzzlefireshape.mdl absent from the staged content pack,
++			// InitializeAsClientEntity returned false on EVERY
++			// C_CSPlayer::ClientThink of EVERY player, and every attempt
++			// leaked a slot in the 65535-entry
++			// CUtlLinkedList<C_BaseEntity*, unsigned short> g_EntityLists
++			// until AllocInternal Error()'d "CUtlLinkedList overflow!
++			// (exhausted memory allocator)" and Plat_ExitProcess ended the
++			// engine at t=287s.  Mirror the shadow branches.
++			pMuzzleFlashShape->Release();
++		}
+ 	}
+ 
+ 	if ( !m_hContactShadowLeft.Get() )
+ 	{
 @@ -5221,7 +5221,7 @@
  				pOrigin = &pEvent->m_SoundOrigin;
  			}
