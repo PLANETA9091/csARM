@@ -3708,3 +3708,34 @@ diff -ruN a/engine/gl_matsysiface.cpp b/engine/gl_matsysiface.cpp
 +	Q_memset( materialSortInfoArray, 0, sizeof( MaterialSystem_SortInfo_t ) * nSortIDs );
  	Assert( materialSortInfoArray );
  	materials->GetSortInfo( materialSortInfoArray );
+diff -ruN a/materialsystem/cmatrendercontext.cpp b/materialsystem/cmatrendercontext.cpp
+--- a/materialsystem/cmatrendercontext.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/materialsystem/cmatrendercontext.cpp	2026-11-06 14:00:00.000000000 +0000
+@@ -2209,6 +2209,27 @@ int CMatRenderContext::CompareMaterialCombos( IMaterial *pMaterial1, IMaterial *
+ 	IMaterialInternal *pMat2 = (IMaterialInternal *)pMaterial2;
+ 	ShaderRenderState_t *pState1 = pMat1->GetRenderState();
+ 	ShaderRenderState_t *pState2 = pMat2->GetRenderState();
++	// csARM round 47: run #184 still faulted at CompareMaterialCombos+327
++	// (fault 0x30) even with the sort-info tail zeroed -- the disassembly
++	// pinpointed it to 'mov 0x30(%r14),%rdi' where %r14 came from the
++	// virtual GetShaderParams() call: a material inside the sort array is
++	// VALID but UNINITIALIZED on the Android render stack (no shader params
++	// bound yet), so pParams1[BASETEXTURE] dereferenced NULL.  Rank any
++	// material that lacks a render state, snapshots, or shader params AFTER
++	// fully initialized ones (ties broken by real-time pointer), keeping a
++	// consistent total order so qsort never derefs a half-built material.
++	bool bReady1 = pState1 && pState1->m_pSnapshots && pMat1->GetShaderParams();
++	bool bReady2 = pState2 && pState2->m_pSnapshots && pMat2->GetShaderParams();
++	if ( bReady1 != bReady2 )
++		return bReady1 ? -1 : 1;
++	if ( !bReady1 )
++	{
++		if ( pMat1 > pMat2 )
++			return 1;
++		if ( pMat1 < pMat2 )
++			return -1;
++		return 0;
++	}
+ 	int dPass = pState2->m_pSnapshots->m_nPassCount - pState1->m_pSnapshots->m_nPassCount;
+ 	if ( dPass )
+ 		return dPass;
