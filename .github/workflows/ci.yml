@@ -59,6 +59,16 @@ jobs:
             tag: render
             modules: "materialsystem/materialsystem.vpc materialsystem/shaderlib/shaderlib.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc particles/particles.vpc raytrace/raytrace.vpc"
             defs: ""
+          # round 55: the real render stack — togl (D3D9->GLM), shaderapidx9
+          # (IShaderDevice/IShaderAPI over togl), stdshader_dx9 (the standard
+          # shader library).  Raw .txt lists (see build/trybuild.sh for the
+          # per-tag include dirs); the engine still boots with -noshaderapi —
+          # dropping that flag is the NEXT round, after the desktop-GL driver
+          # question (SwiftShader bundle is ES/EGL-only) is settled.
+          - abi: arm64-v8a
+            tag: shaders
+            modules: "lists/togl.txt lists/shaderapidx9.txt lists/stdshader_dx9.txt"
+            defs: ""
           - abi: arm64-v8a
             tag: vgui
             modules: "vgui2/src/vgui_dll.vpc vgui2/vgui_controls/vgui_controls.vpc vgui2/vgui_surfacelib/vgui_surfacelib.vpc"
@@ -98,6 +108,11 @@ jobs:
           - abi: x86_64
             tag: render
             modules: "materialsystem/materialsystem.vpc materialsystem/shaderlib/shaderlib.vpc studiorender/studiorender.vpc vguimatsurface/vguimatsurface.vpc particles/particles.vpc raytrace/raytrace.vpc"
+            defs: ""
+          # round 55: see the arm64 shaders entry above
+          - abi: x86_64
+            tag: shaders
+            modules: "lists/togl.txt lists/shaderapidx9.txt lists/stdshader_dx9.txt"
             defs: ""
           - abi: x86_64
             tag: vgui
@@ -391,7 +406,8 @@ jobs:
                     out/libfilesystem_stdio.so out/libinputsystem.so \
                     out/libmaterialsystem.so out/libdatacache.so \
                     out/libstudiorender.so out/libsoundemittersystem.so \
-                    out/libvguimatsurface.so out/libvgui.so out/libshaderapiempty.so; do
+                    out/libvguimatsurface.so out/libvgui.so out/libshaderapiempty.so \
+                    out/libshaderapidx9.so out/libstdshader_dx9.so; do
             [ -e "$so" ] || continue
             if ! $NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -W --dyn-syms "$so" \
                  | awk '$7!="UND" && $8=="CreateInterface" {found=1} END{exit !found}'; then

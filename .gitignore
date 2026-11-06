@@ -13,3 +13,8 @@ tests/out/
 thirdparty/protobuf-src/
 thirdparty/abseil-cpp/
 __pycache__/
+
+# csARM local secrets (NEVER COMMIT — GH PAT)
+env.sh
+worklog.md
+.cache/

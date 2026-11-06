@@ -280,9 +280,42 @@ window — first HONEST green.
 - Content pack on the emulator is partial (draft release 'game-content'):
   music/VO/models missing -> failed loads are tolerated by design.
 
+### Round 55: the render stack compiles (runs #193+)
+The whole Valve render layer is now a set of linked, dlopen-smoked libraries
+on BOTH ABIs — the engine still boots with `-noshaderapi`, but the code that
+will replace it ships in the APK:
+
+| lib | sources | role |
+|-----|---------|------|
+| `libtogl.so` | togl/*.cpp (12 objs: dxabstract, glmgr, glmgrbasics, cglmtex/fbo/program/buffer/query, dx9asmtogl2, glentrypoints) | D3D9 -> GLM translation; owns the `gGL` entry-point struct resolved through SDL_GL_GetProcAddress |
+| `libshaderapidx9.so` | materialsystem/shaderapidx9 (19 objs: shaderapidx8, shaderdevicedx8, shadershadowdx8, meshdx8, texturedx8, TransitionTable, hardwareconfig, vertexdecl, vertexshaderdx8, ...) | IShaderDevice/IShaderAPI/IShaderShadow; defines `g_pHardwareConfig` |
+| `libstdshader_dx9.so` | materialsystem/stdshaders (120 objs) + the 482 in-tree fxctmp9/vshtmp9 generated combo headers | every BEGIN_VS_SHADER class, ONE lib under the POSIX/macOS name `stdshader_dx9` that CShaderSystem::LoadShaderDLL looks for |
+
+Porting notes (all landed in all_patches.diff / glshim):
+- **bionic `time.h` clobbers `TM_ZONE`**: NDK r27d time.h:100 does
+  `#define TM_ZONE tm_zone` (struct-tm field compat) with NO feature gate;
+  any `<time.h>` after vprof.h kills Valve's no-op telemetry stub, and the
+  call sites compile into calls to the struct field.  Fixed with
+  `#undef TM_ZONE` + stub re-def after memdbgon in glmgr.cpp, glmgrbasics.cpp,
+  meshdx8.cpp, shaderapidx8.cpp, texturedx8.cpp.
+- **GLX**: glentrypoints.cpp includes `<GL/glx.h>` on _LINUX for two
+  function-pointer types that resolve to NULL and are NULL-guarded at
+  runtime -> type-only `build/glshim/GL/glx.h` shim.
+- **sysctl**: glmgrbasics includes `<sys/sysctl.h>` outside its `#ifdef OSX`
+  (the sysctl() call itself is macOS-only) -> empty glshim stub.
+- **64-bit**: `pVendorID > 0` (pointer-vs-int 32-bit-ism) in
+  shaderdevicedx8.cpp ComputeCapsFromD3D -> `pVendorID[0] != '\0'`.
+- togl defines 51 `D3DX*` helpers (dxabstract.cpp) that satisfy
+  shaderapidx9's D3DX UND set through DT_NEEDED; runtime GL is resolved via
+  SDL_GL_GetProcAddress so nothing links -lGL.
+- `togl/` entered the sparse checkout + NEEDED_DIRS completeness gate (a
+  stale obj cache re-materializes it lazily).
+
 ### Next
-1. Real rendering: drop `-noshaderapi`, bring up shaderapidx9 (ToGL /
-   DX_TO_GL_ABSTRACTION) over the bundled SwiftShader GL — the biggest
-   remaining wall; until then the visual output is a black surface.
+1. Desktop-GL driver for the GLM layer: the bundled SwiftShader is ES/EGL
+   only; ToGL needs GL 2.1 (GLSL 120, FBO, VBO).  Candidates: Mesa
+   surfaceless/llvmpipe for the emulator, or an ES3-backed desktop-GL shim.
+   Then drop `-noshaderapi` and boot shaderapidx9 for real (sdlmgr already
+   implements the ILauncherMgr side: MakeContextCurrent/ShowPixels).
 2. Longer-horizon leak watch: probe window is at 480s post-progress.
 3. Arm64 on-device smoke (the APK ships; CI exercises x86_64 + arm64-translation).

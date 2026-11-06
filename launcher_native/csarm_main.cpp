@@ -156,7 +156,11 @@ static const char *kModules[] = {
     "particles", "raytrace", "shaderapiempty", "matchmaking",
     // round 25: no-op vphysics stub (launcher AppSystemGroup loads
     // "vphysics.so" via Sys_LoadModule <cwd>/bin — symlink required)
-    "vphysics", nullptr
+    "vphysics",
+    // round 55: the real render stack — compiled + linked, dlopen-smoked in
+    // CI; the engine still boots with -noshaderapi until the desktop-GL
+    // driver question is settled (SwiftShader bundle is ES/EGL-only)
+    "togl", "shaderapidx9", "stdshader_dx9", nullptr
 };
 
 static std::string nativeLibDir()

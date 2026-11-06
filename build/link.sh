@@ -282,6 +282,9 @@ lib_rank() {
     libengine.so) echo 7 ;;
     libclient.so|libserver.so) echo 8 ;;
     libparticles.so|libraytrace.so|libshaderapiempty.so) echo 6 ;;
+    libtogl.so) echo 4 ;;
+    libshaderapidx9.so) echo 6 ;;
+    libstdshader_dx9.so) echo 6 ;;
     *) echo 6 ;;
   esac
 }
@@ -554,7 +557,8 @@ link_so() {
   case "$name" in
     libfilesystem_stdio.so|libinputsystem.so|libmaterialsystem.so|libdatacache.so|\
     libstudiorender.so|libsoundemittersystem.so|libvguimatsurface.so|libvgui.so|\
-    libvstdlib.so|liblocalize.so|libshaderapiempty.so)
+    libvstdlib.so|liblocalize.so|libshaderapiempty.so|\
+    libshaderapidx9.so|libstdshader_dx9.so)
       [ -n "$IFACE_OBJ" ] && { objs+=("$IFACE_OBJ"); total=$((total+1)); } ;;
   esac
   # Steamworks / platform glue only where the sources actually reference it
@@ -718,6 +722,23 @@ link_so libraytrace.so "tier0 tier1 mathlib" raytrace || true
 # shader device mgr interfaces as stubs so materialsystem Connect() passes on
 # the boot path until the real ToGL renderer is ported
 link_so libshaderapiempty.so "tier0 tier1 mathlib vstdlib tier2" shaderapiempty || true
+
+# ----------------------------------------------------------------------------
+# round 55: the REAL render stack, compiled but not yet wired at runtime (the
+# engine still boots with -noshaderapi; the boot job's dlopen smoke is the CI
+# gate for this round).  Runtime GL resolves through SDL_GL_GetProcAddress
+# (togl's gGL entry-point struct), so nothing links -lGL here.
+#   libtogl.so        — dxabstract/glmgr/cglm*/dx9asmtogl2 (D3D9 -> GLM)
+#   libshaderapidx9.so— IShaderDevice/IShaderAPI/IShaderShadow over togl;
+#                       Valve's vpc also links bitmap/vtf (VTF texture load
+#                       path) — videocfg ships as its own lib above
+#   libstdshader_dx9.so — all BEGIN_VS_SHADER classes in ONE lib under the
+#                       macOS-style POSIX name shadersystem::LoadShaderDLL
+#                       looks for ("stdshader_dx9" + DLL_EXT_STRING)
+# ----------------------------------------------------------------------------
+link_so libtogl.so "tier0 tier1 vstdlib mathlib tier2" togl || true
+link_so libshaderapidx9.so "tier0 tier1 vstdlib mathlib tier2 bzip2 bitmap vtf togl" shaderapidx9 || true
+link_so libstdshader_dx9.so "tier0 tier1 mathlib vstdlib shaderlib" stdshader_dx9 || true
 
 # 3. Engine (+ protobuf messages + SDL2)
 GENPROTO_OBJS=$(ls obj/genproto/*.o 2>/dev/null)

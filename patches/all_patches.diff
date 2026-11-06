@@ -3976,3 +3976,116 @@ diff -ruN a/engine/networkstringtable.cpp b/engine/networkstringtable.cpp
  				return INVALID_STRING_INDEX;
  			}
  
+
+diff --git a/togl/glmgr.cpp b/togl/glmgr.cpp
+index 0ab7ee4..7880adf 100644
+--- a/togl/glmgr.cpp
++++ b/togl/glmgr.cpp
+@@ -25,6 +25,14 @@
+ // memdbgon -must- be the last include file in a .cpp file.
+ #include "tier0/memdbgon.h"
+ 
++// csARM: bionic's <time.h> (NDK r27d) unconditionally does
++// `#define TM_ZONE tm_zone` (struct tm field compat, time.h:100).  Any
++// <time.h> pulled in after vprof.h (telemetry stub defines TM_ZONE as a
++// no-op) clobbers it, and the two TM_ZONE call sites below then compile
++// into calls to the struct-tm field identifier.  Restore the stub.
++#undef TM_ZONE
++#define TM_ZONE( ... )
++
+ 
+ // Whether the code should use gl_arb_debug_output. This causes error messages to be streamed, via callback, to the application. 
+ // It is much friendlier to the MTGL driver. 
+diff --git a/togl/glmgrbasics.cpp b/togl/glmgrbasics.cpp
+index 768b418..d03b857 100644
+--- a/togl/glmgrbasics.cpp
++++ b/togl/glmgrbasics.cpp
+@@ -22,6 +22,11 @@
+ // memdbgon -must- be the last include file in a .cpp file.
+ #include "tier0/memdbgon.h"
+ 
++// csARM: bionic <time.h> clobbers Valve's TM_ZONE stub with the struct-tm
++// field name (time.h:100).  Restore the no-op telemetry macro.
++#undef TM_ZONE
++#define TM_ZONE( ... )
++
+ //===============================================================================
+ // decoding tables for debug
+ 
+
+diff --git a/materialsystem/shaderapidx9/meshdx8.cpp b/materialsystem/shaderapidx9/meshdx8.cpp
+index 6bf2d18..7d600d4 100644
+--- a/materialsystem/shaderapidx9/meshdx8.cpp
++++ b/materialsystem/shaderapidx9/meshdx8.cpp
+@@ -44,6 +44,11 @@
+ // memdbgon must be the last include file in a .cpp file!!!
+ #include "tier0/memdbgon.h"
+ 
++// csARM: bionic <time.h> clobbers Valve's TM_ZONE stub with the struct-tm
++// field name (time.h:100).  Restore the no-op telemetry macro.
++#undef TM_ZONE
++#define TM_ZONE( ... )
++
+ #ifdef _GAMECONSOLE
+ 
+ #define MAX_TEMP_BUFFER 3
+@@ -294,6 +299,11 @@ public:
+ 
+ #include "tier0/memdbgon.h"
+ 
++// csARM: bionic <time.h> clobbers Valve's TM_ZONE stub with the struct-tm
++// field name (time.h:100).  Restore the no-op telemetry macro.
++#undef TM_ZONE
++#define TM_ZONE( ... )
++
+ #endif // _GAMECONSOLE
+ 
+ //-----------------------------------------------------------------------------
+diff --git a/materialsystem/shaderapidx9/shaderapidx8.cpp b/materialsystem/shaderapidx9/shaderapidx8.cpp
+index ec3fd9c..664d11d 100644
+--- a/materialsystem/shaderapidx9/shaderapidx8.cpp
++++ b/materialsystem/shaderapidx9/shaderapidx8.cpp
+@@ -129,6 +129,11 @@ mat_fullbright 1 doesn't work properly on alpha materials in testroom_standards
+ // memdbgon must be the last include file in a .cpp file!!!
+ #include "tier0/memdbgon.h"
+ 
++// csARM: bionic <time.h> clobbers Valve's TM_ZONE stub with the struct-tm
++// field name (time.h:100).  Restore the no-op telemetry macro.
++#undef TM_ZONE
++#define TM_ZONE( ... )
++
+ #ifdef _WIN32
+ #pragma warning (disable:4189)
+ #endif
+diff --git a/materialsystem/shaderapidx9/shaderdevicedx8.cpp b/materialsystem/shaderapidx9/shaderdevicedx8.cpp
+index cc08bf0..180d3ce 100644
+--- a/materialsystem/shaderapidx9/shaderdevicedx8.cpp
++++ b/materialsystem/shaderapidx9/shaderdevicedx8.cpp
+@@ -753,7 +753,9 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
+ 		if ( pVendorID )
+ 		{
+ 			int nVendorID = V_atoi( pVendorID );	// use V_atoi for hex support
+-			if ( pVendorID > 0 )
++			// csARM: pVendorID is a pointer; the original `> 0` was a
++			// 32-bit-ism.  Intent: only use a non-empty string.
++			if ( pVendorID[0] != '\0' )
+ 			{
+ 				ident.VendorId = nVendorID;
+ 			}
+diff --git a/materialsystem/shaderapidx9/texturedx8.cpp b/materialsystem/shaderapidx9/texturedx8.cpp
+index d0ce5c0..72dcb80 100644
+--- a/materialsystem/shaderapidx9/texturedx8.cpp
++++ b/materialsystem/shaderapidx9/texturedx8.cpp
+@@ -25,6 +25,11 @@
+ 
+ #include "tier0/memdbgon.h"
+ 
++// csARM: bionic <time.h> clobbers Valve's TM_ZONE stub with the struct-tm
++// field name (time.h:100).  Restore the no-op telemetry macro.
++#undef TM_ZONE
++#define TM_ZONE( ... )
++
+ #ifdef _WIN32
+ #pragma warning (disable:4189 4701)
+ #endif
+

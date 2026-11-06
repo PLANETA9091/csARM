@@ -1,0 +1,12 @@
+public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
+togl/dx9asmtogl2.cpp
+togl/dxabstract.cpp
+togl/glentrypoints.cpp
+togl/glmgr.cpp
+togl/glmgrbasics.cpp
+togl/cglmtex.cpp
+togl/cglmfbo.cpp
+togl/cglmprogram.cpp
+togl/cglmbuffer.cpp
+togl/cglmquery.cpp

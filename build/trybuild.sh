@@ -74,6 +74,24 @@ case "$TAG" in
   *)       INC="-I c15/engine $INC" ;;
 esac
 
+# Round 55 render stack (raw .txt lists — trybuild's vpcmini VINC only runs
+# for .vpc projects, so these carry their Valve-vpc include dirs explicitly):
+#   togl         — needs nothing beyond the global set (glshim carries the
+#                  GL/glx.h + sys/sysctl.h shims; c15/public covers public/togl)
+#   shaderapidx9 — IHardwareConfigInternal.h + imaterialsystem headers live
+#                  one level up (shaderapidx9.vpc: $AdditionalIncludeDirectories
+#                  "$BASE;..\")
+#   stdshader_dx9— the generated per-combo headers (fxctmp9/vshtmp9) plus the
+#                  materialsystem root (stdshader_dx9.vpc:
+#                  "$BASE;fxctmp9;vshtmp9;" and "$BASE;..") and its two
+#                  project defines
+case "$TAG" in
+  shaderapidx9) INC="$INC -I c15/materialsystem" ;;
+  stdshader_dx9)
+    INC="$INC -I c15/materialsystem -I c15/materialsystem/stdshaders/fxctmp9 -I c15/materialsystem/stdshaders/vshtmp9"
+    DEF="$DEF -DSTDSHADER_DX9_DLL_EXPORT -DFAST_MATERIALVAR_ACCESS" ;;
+esac
+
 export R CC INC DEF OUT ERR OPT
 build_one() {
   local F="$1"

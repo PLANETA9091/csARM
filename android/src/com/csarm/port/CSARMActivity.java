@@ -36,7 +36,10 @@ public class CSARMActivity extends SDLActivity {
         "vguimatsurface", "vgui", "vgui_controls", "materialsystem",
         "inputsystem", "engine", "png", "kv3", "client", "server", "launcher",
         "bzip2", "tier3", "dmxloader", "bitmap", "vtf", "shaderlib", "scenefilecache",
-        "filesystem_stdio"
+        "filesystem_stdio",
+        // round 55: real render stack (togl must precede shaderapidx9 —
+        // DT_NEEDED would load it anyway, but the smoke order documents it)
+        "togl", "shaderapidx9", "stdshader_dx9"
     };
 
     static int loadErrors = 0;

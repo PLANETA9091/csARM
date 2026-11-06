@@ -34,7 +34,7 @@ TP_DIRS="SDL2 libpng-1.5.2 protobuf-2.5.0 zlib-1.2.5 quickhull telemetry JSON_pa
 # `git checkout -q HEAD -- <dirs>` silently did nothing.
 # NOTE: thirdparty/* is NOT part of the 2019 git tree (copied from the 2018
 # mirror below), so the post-clone gate only covers the main tree.
-NEEDED_DIRS="particles raytrace resourcefile appframework bitmap bonesetup common datacache dmxloader engine external filesystem gcsdk inputsystem interfaces launcher materialsystem mathlib public responserules localize scaleformui scenefilecache soundemittersystem soundsystem studiorender tier0 tier1 tier2 tier3 vgui2 vguimatsurface vstdlib videocfg vpc_scripts vpklib game/client game/server game/shared utils/bzip2"
+NEEDED_DIRS="particles raytrace resourcefile appframework bitmap bonesetup common datacache dmxloader engine external filesystem gcsdk inputsystem interfaces launcher materialsystem mathlib public responserules localize scaleformui scenefilecache soundemittersystem soundsystem studiorender tier0 tier1 tier2 tier3 togl vgui2 vguimatsurface vstdlib videocfg vpc_scripts vpklib game/client game/server game/shared utils/bzip2"
 NEEDED_TP_DIRS="thirdparty/SDL2 thirdparty/protobuf-2.5.0 thirdparty/telemetry thirdparty/quickhull"
 
 check_complete() {
