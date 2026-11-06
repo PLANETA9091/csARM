@@ -3644,7 +3644,15 @@ diff -ruN a/engine/audio/private/snd_wave_data.cpp b/engine/audio/private/snd_wa
 diff -ruN a/engine/EngineSoundServer.cpp b/engine/EngineSoundServer.cpp
 --- a/engine/EngineSoundServer.cpp	2026-11-05 00:00:00.000000000 +0000
 +++ b/engine/EngineSoundServer.cpp	2026-11-05 00:00:00.000000000 +0000
-@@ -225,10 +225,16 @@
+@@ -12,6 +12,7 @@
+ #include "server.h"
+ #include "sv_main.h"
+ #include "edict.h"
++#include "tier1/UtlStringMap.h"
+ #include "sound.h"
+ #include "host.h"
+ #include "vengineserver_impl.h"
+@@ -225,10 +226,26 @@
  	// add the sound to the precache list
  	// Start at 1, since 0 is used to indicate an error in the sound precache
  	i = SV_FindOrAddSound( pSample, bPreload );
@@ -3659,7 +3667,17 @@ diff -ruN a/engine/EngineSoundServer.cpp b/engine/EngineSoundServer.cpp
 +	// session with Host_Error is pure loss.  Skip the sample instead
 +	// (run #176: 'Table soundprecache is full' -> Host_Error tore the
 +	// ar_dizzy session down right after CloseLoadingScreen).
-+	DevMsg( "CEngineSoundServer::PrecacheSound: '%s' overflow ignored\n", pSample );
++	// csARM round 54: bots re-emit the same missing VO lines every
++	// ClientThink, so the per-call DevMsg alone still spewed ~1000
++	// lines into every probe console (runs #189-#191).  Warn once per
++	// sample name; the lookup itself still runs every call, so a
++	// fresh table on the next map precaches these normally.
++	static CUtlStringMap<bool> s_IgnoredSoundPrecache;
++	if ( !s_IgnoredSoundPrecache.Defined( pSample ) )
++	{
++		s_IgnoredSoundPrecache[ pSample ] = true;
++		DevMsg( "CEngineSoundServer::PrecacheSound: '%s' overflow ignored\n", pSample );
++	}
 +	return false;
  }
  
@@ -3904,3 +3922,57 @@ diff -ruN a/game/shared/cstrike15/cs_gamerules.cpp b/game/shared/cstrike15/cs_ga
  
  	}
  	
+diff -ruN a/engine/networkstringtable.cpp b/engine/networkstringtable.cpp
+--- a/engine/networkstringtable.cpp
++++ b/engine/networkstringtable.cpp
+@@ -23,6 +23,7 @@
+ #include "tier0/icommandline.h"
+ #include "tier1/lzmaDecoder.h"
+ #include "tier1/utlhashtable.h"
++#include "tier1/UtlStringMap.h"
+ #include "server.h"
+ #include "eiface.h"
+ #include "cdll_engine_int.h"
+@@ -30,6 +31,24 @@
+ // memdbgon must be the last include file in a .cpp file!!!
+ #include "tier0/memdbgon.h"
+ 
++// csARM round 54: a full table (soundprecache/Scenes with bots reloading
++// their whole VO/scene lists every ClientThink) used to ConMsg on EVERY
++// AddString attempt - ~600+ identical warnings per session (runs
++// #189-#191).  Warn once per (table, string) instead; the attempt itself
++// still runs every call, so a fresh table on the next map works normally.
++static CUtlStringMap<bool> s_FullTableWarned;
++static void WarnTableFullOnce( const char *pTableName, const char *pString )
++{
++	char szKey[1024];
++	Q_snprintf( szKey, sizeof( szKey ), "%s|%s", pTableName, pString );
++	if ( !s_FullTableWarned.Defined( szKey ) )
++	{
++		s_FullTableWarned[ szKey ] = true;
++		ConMsg( "Warning:  Table %s is full, can't add %s\n", pTableName, pString );
++	}
++}
++
++
+ ConVar sv_dumpstringtables( "sv_dumpstringtables", "0", FCVAR_CHEAT );
+ 
+ #define BSPPACK_STRINGTABLE_DICTIONARY "stringtable_dictionary.dct"
+@@ -1401,7 +1420,7 @@
+ 			if ( m_pItemsClientSide->Count() >= (unsigned int)GetMaxStrings() )
+ 			{
+ 				// Too many strings, FIXME: Print warning message
+-				ConMsg( "Warning:  Table %s is full, can't add %s\n", GetTableName(), string );
++				WarnTableFullOnce( GetTableName(), string );
+ 				return INVALID_STRING_INDEX;
+ 			}
+ 
+@@ -1461,7 +1480,7 @@
+ 			if ( m_pItems->Count() >= (unsigned int)GetMaxStrings() )
+ 			{
+ 				// Too many strings, FIXME: Print warning message
+-				ConMsg( "Warning:  Table %s is full, can't add %s\n", GetTableName(), string );
++				WarnTableFullOnce( GetTableName(), string );
+ 				return INVALID_STRING_INDEX;
+ 			}
+ 

@@ -229,3 +229,60 @@ one-shot job `boot/emulator-fast`:
    content; menu + map load on device.
 3. Measure -O2+ThinLTO size/perf deltas; consider PGO-style profile hints.
 
+
+## Runtime: live loopback session (rounds 26-54, runs #161-#192)
+
+The port is PAST boot entirely: a full client+server session runs in one
+process on the API-30 x86_64 emulator (KVM), on the SwiftShader software-GL
+stack, with `-noshaderapi` (shaderapiempty):
+
+```
+LauncherMain -> CSourceAppSystemGroup -> IEngineAPI::Run -> frame loop
+  -> +map ar_dizzy: BSP load, vphysics stub link, entity spawn
+  -> server listens 0.0.0.0:27015, loopback client connects (round 44 LAN gate)
+  -> signon completes, FULLY CONNECTED, Host_NewGame, round events fire
+  -> round-tense music path (guarded steamapicontact derefs, round 51)
+  -> round cycles + map/round transitions survive (round 53+)
+```
+
+Ladder of fixed tombstones/self-exits (one commit each, runs #161-#191):
+CEngineVGui::Init (Scaleform menu) -> LoadHudTextures -> %steamid% MOTD ->
+NET_Init SDR rate-limit -> Steam overlay notification -> Scaleform loading
+screen -> fake-socket loopback -> vphysics vcollide -> LAN challenge gate ->
+CompareMaterialCombos (sortinfo) -> SFUI_REQUEST_ELEMENT -> player-resource
+Scaleform -> Steam avatar listener -> music-kit inventory ->
+**CUtlLinkedList overflow at t=287s (round 53)**.
+
+### Round 53: the CUtlLinkedList overflow (the silent green-killer)
+Run #189 was 26/26 green while the engine had EXITED at t=287s:
+2019-tier0 `Error()` prints then `Plat_ExitProcess(100)`s the process; the
+map probe only counted progress markers. Evidence chain: console.log ends
+with `CUtlLinkedList overflow! (exhausted memory allocator)`; the glue_exit
+interposer had logged `CSARM_EXIT_HIT _exit depth=48` with frames; addr2line
+over the unstripped x86_64 so-libs artifact resolved:
+`SCR_UpdateScreen -> SimulateEntities -> OnRenderStart ->
+CClientThinkList::PerformThinkFunctions -> C_CSPlayer::ClientThink ->
+CreateClientEffectModels -> C_BaseAnimating ctor -> AddToEntityList ->
+CUtlLinkedList<C_BaseEntity*, unsigned short>::AllocInternal` (65535 slots).
+Root cause: the muzzleflash branch of `C_CSPlayer::CreateClientEffectModels`
+lacks the else-`Release()` both foot-contact-shadow branches have;
+`w_muzzlefireshape.mdl` is absent from the staged content pack, so every
+ClientThink of every player leaked one entity-list slot. Fix mirrors the
+shadow branches. Probe hardening: 360s post-progress capture, +net_showudp
+dropped (60 lines/s flood), overflow marker + any `CSARM_EXIT_HIT` inside
+the probe window are hard failures. Run #191: 26/26 green through the full
+window — first HONEST green.
+
+### Known noise (benign, silenced round 54)
+- `Table soundprecache is full` / `Table Scenes is full` ConMsg churn
+  (~600+/session) and the per-call `PrecacheSound: '... overflow ignored'
+  DevMsg — both now warn once per (table|string) / per sample name.
+- Content pack on the emulator is partial (draft release 'game-content'):
+  music/VO/models missing -> failed loads are tolerated by design.
+
+### Next
+1. Real rendering: drop `-noshaderapi`, bring up shaderapidx9 (ToGL /
+   DX_TO_GL_ABSTRACTION) over the bundled SwiftShader GL — the biggest
+   remaining wall; until then the visual output is a black surface.
+2. Longer-horizon leak watch: probe window is at 480s post-progress.
+3. Arm64 on-device smoke (the APK ships; CI exercises x86_64 + arm64-translation).

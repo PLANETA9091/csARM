@@ -1096,7 +1096,7 @@ jobs:
           "$ADB" -s emulator-5554 logcat -c || true
           "$ADB" -s emulator-5554 shell am start -n $APP/.CSARMActivity || true
           # --- 4. wait for map progress / fail / death (diagnostic-first) ---
-          LIMIT=480; PROG=""; LAUNCH_S=""
+          LIMIT=700; PROG=""; LAUNCH_S=""
           while [ $SECONDS -lt $LIMIT ]; do
             "$ADB" -s emulator-5554 logcat -d > logcat_map.txt 2>/dev/null || true
             if grep -q "CSARM_MAIN_FAIL" logcat_map.txt; then echo "MAIN_FAIL at t=${SECONDS}s"; break; fi
@@ -1122,10 +1122,11 @@ jobs:
               echo "engine self-exit: CUtlLinkedList overflow at t=${SECONDS}s (CSARM_EXIT_BT frames in logcat)"; break
             fi
             if grep -qaE 'Host_NewGame|Loading map|Spawning server' logcat_map.txt console_live.txt 2>/dev/null; then
-              if [ -z "$PROG" ]; then PROG=$SECONDS; echo "map spawn progress at t=${SECONDS}s — 360s capture window"; fi
-              # round 53: 60s never reached the t=287s overflow (runs #189/#190);
-              # watch the full post-spawn stretch out to ~5.5 engine minutes
-              [ $((SECONDS - PROG)) -ge 360 ] && break
+              if [ -z "$PROG" ]; then PROG=$SECONDS; echo "map spawn progress at t=${SECONDS}s — 480s capture window"; fi
+              # round 54: 360s proved the muzzleflash fix (#191); 480s keeps
+              # the session alive through 3-4 ar_dizzy round cycles so later
+              # content-path leaks surface here instead of on a device
+              [ $((SECONDS - PROG)) -ge 480 ] && break
             fi
             # round 38: rolling snapshot - the final logcat -d only shows the
             # LAST buffer contents; a console-flood or a silent hang needs the
