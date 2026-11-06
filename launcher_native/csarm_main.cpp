@@ -182,7 +182,19 @@ static std::string nativeLibDir()
     return std::string(APP_DATA_DIR) + "/lib";
 }
 
-static void makeModuleLinks(const std::string &filesDir, const std::string &libDir)
+// round 56b: the real render stack (gl4es libGL + shaderapidx9 + togl) is
+// only live when the engine is NOT told to run shaderapiempty; in that mode
+// stdshader_dx9 becomes reachable via bin/ (CShaderSystem::LoadShaderDLL
+// searches <cwd>/bin) — see the run #193 Spritecard tombstone for why it
+// must stay absent in -noshaderapi mode.
+static bool realRendererMode(const std::vector<std::string> &args)
+{
+    for (size_t i = 0; i < args.size(); i++)
+        if (args[i] == "-noshaderapi") return false;
+    return true;
+}
+
+static void makeModuleLinks(const std::string &filesDir, const std::string &libDir, bool realRender)
 {
     std::string bin = filesDir + "/bin";
     mkdir(bin.c_str(), 0755);
@@ -192,6 +204,10 @@ static void makeModuleLinks(const std::string &filesDir, const std::string &libD
     int made = 0;
     for (int i = 0; kModules[i]; i++)
     {
+        // round 56b: in -noshaderapi mode these two carry the real shader
+        // device/API factories that must NOT shadow shaderapiempty's
+        if (!realRender && strcmp(kModules[i], "shaderapidx9") == 0) continue;
+        if (!realRender && strcmp(kModules[i], "togl") == 0) continue;
         std::string real = libDir + "/lib" + kModules[i] + ".so";
         struct stat st;
         if (stat(real.c_str(), &st) != 0) continue;              // module absent: skip
@@ -207,7 +223,23 @@ static void makeModuleLinks(const std::string &filesDir, const std::string &libD
         unlink(link3.c_str());
         symlink(real.c_str(), link3.c_str());
     }
-    LOGI("CSARM_BIN_LINKS made=%d dir=%s", made, bin.c_str());
+    // round 56b: stdshader_dx9 only exists as a bin/ link in real-renderer
+    // mode (it is not in kModules at all, unlike togl/shaderapidx9)
+    if (realRender)
+    {
+        std::string ss = libDir + "/libstdshader_dx9.so";
+        struct stat st;
+        if (stat(ss.c_str(), &st) == 0)
+        {
+            for (const char *sub : { "", "linux64/" })
+            {
+                std::string link = bin + "/" + sub + "stdshader_dx9.so";
+                unlink(link.c_str());
+                if (symlink(ss.c_str(), link.c_str()) == 0) made++;
+            }
+        }
+    }
+    LOGI("CSARM_BIN_LINKS made=%d dir=%s realRender=%d", made, bin.c_str(), realRender ? 1 : 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -403,7 +435,7 @@ extern "C" int SDL_main(int argc, char *argv[])
     setenv("USRLOCALCSGO", filesDir.c_str(), 1);
     setenv("USRLOCALVPCGAMECAPS", filesDir.c_str(), 1);
 
-    makeModuleLinks(filesDir, nativeLibDir());
+    makeModuleLinks(filesDir, nativeLibDir(), realRendererMode(args));
 
     // --- fill every module's private interfaces.cpp registry ---------------
     fillInterfaceRegistries();

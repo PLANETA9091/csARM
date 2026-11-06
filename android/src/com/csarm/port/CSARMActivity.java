@@ -48,6 +48,33 @@ public class CSARMActivity extends SDLActivity {
         "togl", "shaderapidx9"
     };
 
+    // round 56b: the real renderer is active when the effective args do NOT
+    // carry -noshaderapi (intent extra > staged csarm.args > built-in
+    // defaults, the same precedence prepareArgsAndContent implements).
+    // stdshader_dx9 may only be dlopened in that mode — its static
+    // initializers register the real shader classes (run #193).
+    private boolean realRendererMode() {
+        Intent in = getIntent();
+        String extra = in != null ? in.getStringExtra("args") : null;
+        if (extra != null && !extra.trim().isEmpty()) {
+            return !extra.contains("-noshaderapi");
+        }
+        File f = new File(getFilesDir(), "csarm.args");
+        if (f.exists()) {
+            try {
+                java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(f));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line).append('\n');
+                r.close();
+                return !sb.toString().contains("-noshaderapi");
+            } catch (Throwable t) {
+                Log.w(TAG, "CSARM_ARGS read failed: " + t);
+            }
+        }
+        return false; // built-in defaults carry -noshaderapi
+    }
+
     static int loadErrors = 0;
     static int loadOk = 0;
 
@@ -60,14 +87,22 @@ public class CSARMActivity extends SDLActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        loadPortLibraries();
+        boolean realRender = realRendererMode();
+        Log.i(TAG, "CSARM_REAL_RENDER " + realRender);
+        loadPortLibraries(realRender);
         prepareArgsAndContent();
         super.onCreate(savedInstanceState);
     }
 
-    private void loadPortLibraries() {
+    private void loadPortLibraries(boolean realRender) {
         StringBuilder report = new StringBuilder();
-        for (String lib : LIBS) {
+        java.util.ArrayList<String> libs = new java.util.ArrayList<>(java.util.Arrays.asList(LIBS));
+        if (realRender) {
+            // togl/shaderapidx9 are already in LIBS; stdshader_dx9 joins only
+            // when the real renderer will consume it
+            if (!libs.contains("stdshader_dx9")) libs.add("stdshader_dx9");
+        }
+        for (String lib : libs) {
             try {
                 System.loadLibrary(lib);
                 loadOk++;

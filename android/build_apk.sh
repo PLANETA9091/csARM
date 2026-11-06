@@ -96,6 +96,13 @@ for ABI in arm64-v8a x86_64; do
         echo "ERROR: swiftshader requested but no libs for $ABI in $A/libs-swiftshader/$ABI"; exit 1
       fi
     fi
+    # optional gl4es bundle (desktop-GL 2.x over the ES stack — the ToGL/GLM
+    # driver; togl resolves its entry points through dlsym("libGL.so") first,
+    # round 56b).  Auto-detected: packed whenever libs-gl4es/<abi> exists.
+    if ls "$A"/libs-gl4es/$ABI/libGL.so >/dev/null 2>&1; then
+      cp "$A"/libs-gl4es/$ABI/libGL.so "$A/lib/$ABI/libGL.so"
+      echo "gl4es($ABI): libGL.so bundled"
+    fi
     NLIB=$(ls "$A/lib/$ABI"/*.so 2>/dev/null | wc -l)
     echo "native libs [$ABI]: $NLIB"
     [ "$NLIB" -ge 21 ] || { echo "ERROR: expected >=21 native libs for $ABI (20 port libs incl. main/SDL2/launcher/inputsystem + libc++_shared), got $NLIB"; exit 1; }

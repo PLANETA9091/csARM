@@ -559,6 +559,77 @@ jobs:
           path: bundle/${{ matrix.abi }}/*.so
           retention-days: 7
 
+
+  # Job 2a-2: gl4es — desktop-GL (2.x fixed-function + GLSL) over the
+  # bundled SwiftShader ES stack.  ToGL (dxabstract/glmgr) speaks desktop GL
+  # 2.1 and the Android emulator has no desktop driver; gl4es bridges it
+  # (same class of shim as the SwiftShader bundle itself).  togl's entry
+  # points are routed through dlsym(libGL.so) FIRST (round 56b patch in
+  # togl/glentrypoints.cpp), with the SDL callback as fallback.  Pinned rev;
+  # cache like the SwiftShader bundle.  NDK r27 dropped standalone
+  # libatomic.a -> override CMAKE_C_STANDARD_LIBRARIES.
+  gl4es:
+    name: gl4es/${{ matrix.abi }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: x86_64
+          - abi: arm64-v8a
+    steps:
+      - name: Cache gl4es libGL (pinned commit)
+        uses: actions/cache@v4
+        with:
+          path: bundle
+          key: gl4es-libs-${{ matrix.abi }}-bc4314d
+
+      - name: Clone + build gl4es (NDK r27d)
+        run: |
+          B=bundle/${{ matrix.abi }}
+          if [ -f "$B/libGL.so" ]; then
+            echo "gl4es cache hit ($B) — skip build"
+            exit 0
+          fi
+          if [ -d "$ANDROID_NDK_LATEST_HOME" ]; then
+            NDKROOT="$ANDROID_NDK_LATEST_HOME"
+          else
+            R27=$(ls -d "$ANDROID_HOME"/ndk/27* 2>/dev/null | head -1 || true)
+            if [ -n "$R27" ]; then NDKROOT="$R27"; else
+              curl -sL -o /tmp/ndk.zip https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+              unzip -q /tmp/ndk.zip -d $HOME
+              NDKROOT="$HOME/android-ndk-r27d"
+            fi
+          fi
+          echo "using NDK $NDKROOT"
+          git init -q gl4es && cd gl4es
+          git remote add origin https://github.com/ptitSeb/gl4es.git
+          git fetch -q --depth 1 origin bc4314d8369f169d3fa81c5ed1b46b3dba4e74a5
+          git checkout -q FETCH_HEAD
+          git rev-parse HEAD | tee ../gl4es_commit.txt
+          pip install -q cmake ninja || true
+          export PATH="$HOME/.local/bin:$PATH"
+          cmake -S . -B out -G Ninja \
+            -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
+            -DCMAKE_TOOLCHAIN_FILE="$NDKROOT/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_STANDARD_LIBRARIES="-lm"
+          cmake --build out --parallel $(nproc)
+          mkdir -p "$B"
+          found=$(find out /tmp/gl4es/lib lib -name "libGL.so*" 2>/dev/null | head -1)
+          [ -n "$found" ] || { echo "::error::gl4es libGL.so not produced"; find . -name "*.so*" | head; exit 1; }
+          cp "$found" "$B/libGL.so"
+          $NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -W --dyn-syms "$B/libGL.so" | grep -c "glGenFramebuffersEXT\|glShaderSource" || true
+
+      - name: Upload gl4es libGL
+        uses: actions/upload-artifact@v4
+        with:
+          name: gl4es-${{ matrix.abi }}
+          path: bundle/${{ matrix.abi }}/libGL.so
+          retention-days: 7
+
   # Job 2b: FULL ENGINE BOOT TEST — custom fast emulator runner.
   # Replaces: (a) the old macos-14 arm64 job that always exploded with
   # "HVF error: HV_UNSUPPORTED" (GitHub macOS runners have no nested virt)
@@ -574,7 +645,7 @@ jobs:
   # The arm64 target is covered by tests/qemu-aarch64 + arm64 APK artifacts.
   boot-test:
     name: boot/emulator-fast
-    needs: [ link, swiftshader ]
+    needs: [ link, swiftshader, gl4es ]
     if: ${{ always() && !cancelled() && needs.link.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -620,6 +691,27 @@ jobs:
           for a in x86_64 arm64-v8a; do
             echo "swiftshader $a: $(ls android/libs-swiftshader/$a/*.so 2>/dev/null | wc -l) so"
             [ -f android/libs-swiftshader/$a/libEGL.so ] || echo "::warning::no bundled libEGL.so for $a"
+          done
+
+      - name: Download gl4es libGL
+        if: needs.gl4es.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gl4es-*
+          path: android/libs-gl4es
+
+      - name: Flatten gl4es dirs
+        if: needs.gl4es.result == 'success'
+        run: |
+          for d in android/libs-gl4es/gl4es-*/; do
+            [ -d "$d" ] || continue
+            abi=$(basename "$d" | sed 's/^gl4es-//')
+            mkdir -p "android/libs-gl4es/$abi"
+            mv "$d"* "android/libs-gl4es/$abi/" 2>/dev/null || true
+          done
+          rm -rf android/libs-gl4es/gl4es-*
+          for a in x86_64 arm64-v8a; do
+            echo "gl4es $a: $(ls android/libs-gl4es/$a/libGL.so 2>/dev/null || echo MISSING)"
           done
 
       # Game content comes from the DRAFT release 'game-content' (collaborator-
@@ -1071,7 +1163,11 @@ jobs:
           echo "probe map: $MAP"
           # --- 2. feed csarm.args (readArgsFile: line-based, space-split) ---
           cat > /tmp/csarm_probe.args <<EOF
-          -novid -windowed -w 1280 -h 720 -nobreakpad -nojoy -noshaderapi -no_scaleform_menu_on_boot
+          # round 56b: NO -noshaderapi here — the map probe boots the REAL renderer
+# (gl4es libGL over bundled SwiftShader; togl/shaderapidx9/stdshader_dx9 all
+# live).  The fast-boot stages keep their -noshaderapi defaults, so a green
+# probe ladder and a green boot ladder coexist in one run.
+-novid -windowed -w 1280 -h 720 -nobreakpad -nojoy -no_scaleform_menu_on_boot
           -basedir /data/data/$APP/files -game cstrike
           +host_thread_mode 2 +mat_queue_mode 2 +cl_threaded_bone_setup 1
           # round 33: +developer 1 unmutes ConDMsg ("Loading map", "Host_NewGame",

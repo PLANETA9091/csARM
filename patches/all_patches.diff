@@ -110,67 +110,6 @@ diff -ruN a/appframework/posixapp.cpp b/appframework/posixapp.cpp
  	AddSystem( cvarModule, CVAR_INTERFACE_VERSION );	
  
  	AppModule_t fileSystemModule = LoadModule( pFileSystemDLL );
-diff -ruN a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
---- a/appframework/sdlmgr.cpp	2026-08-10 03:28:37.000000000 +0000
-+++ b/appframework/sdlmgr.cpp	2026-11-02 19:27:32.787649907 +0000
-@@ -15,6 +15,8 @@
- #include "tier0/fasttimer.h"
- 
- 
-+#include "common/csarm_log.h"
-+
- // NOTE: This has to be the last file included! (turned off below, since this is included like a header)
- #include "tier0/memdbgon.h"
- 
-@@ -568,6 +570,11 @@
- 
- 	m_pixelFormatAttribCount = (attCursor - &m_pixelFormatAttribs[0]) / 2;
- 
-+	#ifdef __ANDROID__
-+	// csARM: the hidden GL window needs a Java-side surface that SDL 2.0.2
-+	// cannot wire up from this thread; the boot path does not present frames.
-+	CSARM_LOGI( "SDLMgr: skip hidden game window (Android)" );
-+	#else
- 	// we need a GL context before we dig down further, since we're calling
- 	//  GL entry points, but the game hasn't made a window yet. So it's time
- 	//  to make a window! We make a 640x480 one here, and later, when asked
-@@ -577,6 +584,7 @@
- 
- 	if ( !m_bTextMode )
- 		SDL_HideWindow( m_Window );
-+	#endif
- 
- 	return INIT_OK;
- }
-@@ -751,7 +759,13 @@
- 		SDL_SetWindowFullscreen(m_Window, SDL_TRUE);
- 	}
- 
--#if defined( DX_TO_GL_ABSTRACTION )
-+#if defined( DX_TO_GL_ABSTRACTION ) && !defined( __ANDROID__ )
-+	// csARM run 41405448535: the GLES context created here has no desktop-GL
-+	// compatibility profile (whichProfile=0) and the COpenGLEntryPoints
-+	// resolution leaves gGL unusable -> SEGV at gGL->glGenFramebuffersEXT
-+	// (fault 0x3d8) before the first tick.  Boot does not present frames:
-+	// skip the context + entry-point + clear/swap tail (m_GLContext stays
-+	// NULL from the ctor; shaderapiempty never dereferences it).
- 	m_GLContext = SDL_GL_CreateContext(m_Window);
- 	if (m_GLContext == NULL)
- 		Error( "Failed to create GL context: %s", SDL_GetError() );
-@@ -1430,7 +1444,12 @@
- 	SDL_SetWindowSize(m_Window, width, tall);
- 	PumpEvents();
- 
--#if defined( DX_TO_GL_ABSTRACTION )
-+#if defined( DX_TO_GL_ABSTRACTION ) && !defined( __ANDROID__ )
-+	// csARM run 41422299535 (SW boot): AdjustWindow->SizeWindow fires before
-+	// any real GL context exists on Android, gGL is NULL and the entry-point
-+	// struct deref SEGVs at gGL->glViewport (fault 0x338).  Same tail the
-+	// SetWindowFullScreen path already skips above (fault 0x3d8 there).
-+	// Boot does not present frames: skip the glViewport/glScissor calls.
- 	gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
- 	gGL->glScissor( 0,0, (GLsizei) width, (GLsizei) tall );
- #endif
 diff -ruN a/common/csarm_log.h b/common/csarm_log.h
 --- a/common/csarm_log.h	1970-01-01 00:00:00.000000000 +0000
 +++ b/common/csarm_log.h	2026-11-02 19:27:24.976655158 +0000
@@ -4088,4 +4027,132 @@ index d0ce5c0..72dcb80 100644
  #ifdef _WIN32
  #pragma warning (disable:4189 4701)
  #endif
+
+diff --git a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
+index ed040ff..b574b3f 100644
+--- a/appframework/sdlmgr.cpp
++++ b/appframework/sdlmgr.cpp
+@@ -15,6 +15,8 @@
+ #include "tier0/fasttimer.h"
+ 
+ 
++#include "common/csarm_log.h"
++
+ // NOTE: This has to be the last file included! (turned off below, since this is included like a header)
+ #include "tier0/memdbgon.h"
+ 
+@@ -568,6 +570,25 @@ InitReturnVal_t CSDLMgr::Init()
+ 
+ 	m_pixelFormatAttribCount = (attCursor - &m_pixelFormatAttribs[0]) / 2;
+ 
++	#ifdef __ANDROID__
++	// csARM round 56b: runtime-gated on -noshaderapi.  shaderapiempty mode
++	// keeps the old skip (the hidden GL window needs a Java-side surface
++	// SDL 2.0.2 cannot wire up from this thread, and the boot path does not
++	// present frames); the real renderer (gl4es libGL over the bundled
++	// SwiftShader) needs the window + context before togl digs in.
++	if ( CommandLine()->FindParm( "-noshaderapi" ) )
++	{
++		CSARM_LOGI( "SDLMgr: skip hidden game window (Android, -noshaderapi)" );
++	}
++	else
++	{
++		if ( !CreateHiddenGameWindow( "", true, 640, 480 ) )
++			Error( "CreateGameWindow failed" );
++
++		if ( !m_bTextMode )
++			SDL_HideWindow( m_Window );
++	}
++	#else
+ 	// we need a GL context before we dig down further, since we're calling
+ 	//  GL entry points, but the game hasn't made a window yet. So it's time
+ 	//  to make a window! We make a 640x480 one here, and later, when asked
+@@ -577,6 +598,7 @@ InitReturnVal_t CSDLMgr::Init()
+ 
+ 	if ( !m_bTextMode )
+ 		SDL_HideWindow( m_Window );
++	#endif
+ 
+ 	return INIT_OK;
+ }
+@@ -752,6 +774,14 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
+ 	}
+ 
+ #if defined( DX_TO_GL_ABSTRACTION )
++	// csARM round 56b: this block is runtime-gated on -noshaderapi.  In
++	// shaderapiempty mode the old skip stands (runs 41405448535/41422299535:
++	// a bare GLES context left gGL unusable -> SEGV in the tails; boot does
++	// not present frames).  The real renderer goes through gl4es' libGL.so
++	// (togl's entry-point lookup dlsyms it first, round 56b), so the
++	// context + entry points + clear/swap tail run for it.
++	if ( CommandLine()->FindParm( "-noshaderapi" ) == 0 )
++	{
+ 	m_GLContext = SDL_GL_CreateContext(m_Window);
+ 	if (m_GLContext == NULL)
+ 		Error( "Failed to create GL context: %s", SDL_GetError() );
+@@ -819,6 +849,7 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
+ 	SDL_GL_SwapWindow(m_Window);
+ 	gGL->glClear(GL_COLOR_BUFFER_BIT);
+ 	SDL_GL_SwapWindow(m_Window);
++	} // csARM round 56b: end of the -noshaderapi runtime gate
+ #endif // DX_TO_GL_ABSTRACTION
+ 
+ 	m_WindowWidth = width;
+@@ -1431,8 +1462,16 @@ void CSDLMgr::SizeWindow( int width, int tall )
+ 	PumpEvents();
+ 
+ #if defined( DX_TO_GL_ABSTRACTION )
+-	gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
+-	gGL->glScissor( 0,0, (GLsizei) width, (GLsizei) tall );
++	// csARM run 41422299535 (SW boot): AdjustWindow->SizeWindow fires before
++	// any real GL context exists on Android, gGL is NULL and the entry-point
++	// struct deref SEGVs at gGL->glViewport (fault 0x338).  Round 56b: the
++	// tail runs only for the real renderer (gl4es libGL); shaderapiempty
++	// mode keeps the skip at runtime.
++	if ( CommandLine()->FindParm( "-noshaderapi" ) == 0 )
++	{
++		gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
++		gGL->glScissor( 0,0, (GLsizei) width, (GLsizei) tall );
++	}
+ #endif
+ }
+ 
+diff --git a/togl/glentrypoints.cpp b/togl/glentrypoints.cpp
+index 2d7e0f4..256c913 100644
+--- a/togl/glentrypoints.cpp
++++ b/togl/glentrypoints.cpp
+@@ -23,6 +23,8 @@
+ 
+ #ifdef _LINUX
+ #include <GL/glx.h>
++// csARM round 56b: dlopen/dlsym for the bundled gl4es libGL.so
++#include <dlfcn.h>
+ #endif
+ // NOTE: This has to be the last file included!
+ #include "tier0/memdbgon.h"
+@@ -112,6 +114,24 @@ void *VoidFnPtrLookup_GlMgr( const char *libname, const char *fn, bool &okay, co
+ 		return NULL;
+ 	// The SDL path would work on all these platforms, if we were using SDL there, too...
+ #if defined( LINUX ) || defined( WIN32 )
++	// csARM round 56b: resolve desktop-GL entry points from the bundled
++	// gl4es libGL.so FIRST (GL 2.x fixed-function + GLSL over the ES-only
++	// SwiftShader bundle; the APK ships libGL.so in nativeLibraryDir, which
++	// is on the app's LD_LIBRARY_PATH, and gl4es itself pulls the bundled
++	// libEGL/libGLESv2).  Everything gl4es does not export falls through to
++	// the SDL callback below exactly like before.
++	{
++		static void *s_hGl4es = dlopen( "libGL.so", RTLD_NOW | RTLD_GLOBAL );
++		if ( s_hGl4es )
++		{
++			void *sym = dlsym( s_hGl4es, fn );
++			if ( sym )
++			{
++				okay = true;
++				return sym;
++			}
++		}
++	}
+ 	// SDL does the right thing, so we never need to use tier0 in this case.
+ 	retval = (*gGL_GetProcAddressCallback)( libname, fn, okay, bRequired, fallback); //SDL_GL_GetProcAddress(fn);
+ 	//printf("CDynamicFunctionOpenGL: SDL_GL_GetProcAddress(\"%s\") returned %p\n", fn, retval);
 
