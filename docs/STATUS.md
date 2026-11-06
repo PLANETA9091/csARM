@@ -311,11 +311,37 @@ Porting notes (all landed in all_patches.diff / glshim):
 - `togl/` entered the sparse checkout + NEEDED_DIRS completeness gate (a
   stale obj cache re-materializes it lazily).
 
+### Round 56a: the render stack ships DORMANT (run #194 green)
+Run #193 proved the stack builds (26/26, new `shaders` matrix tag on both
+ABIs), links (und-gate green; auto-dep added videocfg -> shaderapidx9 and
+materialsystem -> stdshader_dx9) and dlopens on both ABIs (ok=33, 0 errors)
+— and then gave the next tombstone: the x86_64 native + SwiftShader boot
+stages died at the particles precache,
+`libparticles CParticleSystemDefinition::Precache -> CMaterial::HasProxy ->
+InitializeShader -> CBaseShader::InitShaderParams ->
+Spritecard::OnInitShaderParams SEGV @ 0x0`.
+Mechanism: dlopening libstdshader_dx9 runs its static initializers, which
+register every real BEGIN_VS_SHADER class into shaderlib's CShaderDLL;
+materialsystem then resolved the Spritecard material to the REAL shader and
+initialized it against the shaderapiempty stub -> NULL deref.  With
+`-noshaderapi` the shader DLL must be unreachable entirely: round 56a keeps
+it packed in the APK but OUT of the dlopen smoke and OUT of the launcher's
+bin/ symlinks (CShaderSystem::LoadShaderDLL("stdshader_dx9") searches
+exactly that).  togl + shaderapidx9 carry no shader classes, stay loaded and
+were proven harmless end-to-end.  Run #194: full pipeline green, map probe
+at server-spawn with the render stack resident.
+
 ### Next
 1. Desktop-GL driver for the GLM layer: the bundled SwiftShader is ES/EGL
-   only; ToGL needs GL 2.1 (GLSL 120, FBO, VBO).  Candidates: Mesa
-   surfaceless/llvmpipe for the emulator, or an ES3-backed desktop-GL shim.
-   Then drop `-noshaderapi` and boot shaderapidx9 for real (sdlmgr already
-   implements the ILauncherMgr side: MakeContextCurrent/ShowPixels).
+   only; ToGL needs GL 2.1 (GLSL 120, FBO, VBO).  Candidate selected: gl4es
+   (GL2.x fixed-function + GLSL-100/120 over GLES3) — builds clean with NDK
+   r27d for x86_64 (only fix: no -latomic, NDK r27 dropped it) and exports
+   1233 desktop-GL symbols including every EXT alias togl resolves.
+   Wiring plan: bundle libGL.so next to SwiftShader; route togl's proc
+   lookup through dlsym(libGL.so) with SDL_GL_GetProcAddress fallback;
+   un-gate sdlmgr's two __ANDROID__ skips (window + SDL_GL_CreateContext +
+   glViewport tail); make stdshader_dx9/symlink/smoke presence conditional
+   on `-noshaderapi` in the effective args so the -noshaderapi stages stay
+   green while the map probe boots the real renderer.
 2. Longer-horizon leak watch: probe window is at 480s post-progress.
 3. Arm64 on-device smoke (the APK ships; CI exercises x86_64 + arm64-translation).
