@@ -1107,7 +1107,12 @@ jobs:
             if [ -n "$LAUNCH_S" ] && ! "$ADB" -s emulator-5554 shell pidof $APP >/dev/null 2>&1; then
               echo "engine process died after LauncherMain at t=${SECONDS}s"; break
             fi
-            if grep -qaE 'Host_NewGame|Loading map|Spawning server' logcat_map.txt; then
+            # round 52: Host_NewGame & friends go to the ENGINE console
+            # (con_logfile console.log), not to logcat -- run #189 loaded the
+            # map, played round events and music while NEWGAME stayed 0 and
+            # the probe misreported "no server-spawn markers".  Watch both.
+            "$ADB" -s emulator-5554 shell "cat /data/data/$APP/files/cstrike/console.log 2>/dev/null" > console_live.txt 2>/dev/null || true
+            if grep -qaE 'Host_NewGame|Loading map|Spawning server' logcat_map.txt console_live.txt 2>/dev/null; then
               if [ -z "$PROG" ]; then PROG=$SECONDS; echo "map spawn progress at t=${SECONDS}s — 60s capture window"; fi
               [ $((SECONDS - PROG)) -ge 60 ] && break
             fi
@@ -1131,6 +1136,10 @@ jobs:
           # marker or frame - the pidof death check cannot see a hang, and no
           # tombstone appears.  debuggerd -b prints native backtraces of every
           # thread of the LIVE process; the runner is root on the ATD image) ---
+          # round 52: dump live stacks whenever the probe saw no map progress
+          # (PROG unset) -- the run #189 hang (silent after CUtlLinkedList
+          # overflow) reached this branch only through the logcat marker path
+          # and then produced no backtraces because pidof lost its subshell.
           if [ -z "$PROG" ] && "$ADB" -s emulator-5554 shell "pidof $APP" >/dev/null 2>&1; then
             # round 42: is the server REALLY listening?  27015=0x69A7,
             # 27005=0x69BD, 27020=0x69AC in /proc/net/udp local_address
@@ -1144,7 +1153,11 @@ jobs:
             echo "=== map probe: ss -uln (repeat, watch Recv-Q) ==="
             "$ADB" shell "ss -uln 2>/dev/null | grep -a 2701 | head -6" || true
             echo "=== map probe: engine ALIVE with no map progress - native backtraces (debuggerd -b) ==="
-            "$ADB" -s emulator-5554 shell "debuggerd -b \$(pidof $APP)" 2>/dev/null | grep -a "pid:\|#00 pc\|#0[1-9] pc\|#1[0-9] pc\|#2[0-9] pc\|#3[0-9] pc" | head -400 || true
+            # round 52: run #189 lost this dump to a swallowed error -- pidof
+            # ran in a subshell whose empty output turned into 'debuggerd -b'
+            # with no pid and the whole pipe errored out under || true.
+            echo "engine pid: $("$ADB" -s emulator-5554 shell pidof $APP)"
+            "$ADB" -s emulator-5554 shell "debuggerd -b \$(pidof $APP)" 2>&1 | grep -a "pid:\|#00 pc\|#0[1-9] pc\|#1[0-9] pc\|#2[0-9] pc\|#3[0-9] pc\|CSARM" | head -400 || true
           fi
           # --- 5. diagnostics + verdict ---
           echo "=== map probe: load/args ==="
@@ -1158,11 +1171,19 @@ jobs:
           # --- 5b. engine console log (con_logfile) ------------------------
           "$ADB" -s emulator-5554 shell "cat /data/data/$APP/files/cstrike/console.log 2>/dev/null" > engine_console.log || true
           if [ -s engine_console.log ]; then
-            echo "=== map probe: engine console.log tail (last 80 lines) ==="
-            tail -80 engine_console.log
+            echo "=== map probe: engine console.log channel-reset census ==="
+            echo "seq-reset lines: $(grep -ac 'seq=    0 ack=' engine_console.log || true)"
+            echo "OOB sends: $(grep -ac 'OOB' engine_console.log || true); connect retries: $(grep -ac 'Sending connect' engine_console.log || true); connfail: $(grep -ac 'Connection failed' engine_console.log || true)"
+            echo "=== map probe: engine console.log tail (last 250 lines) ==="
+            tail -250 engine_console.log
           else
             echo "=== map probe: engine console.log missing/empty ==="
           fi
+          # round 52: persist the full engine + system logs as build artifacts
+          # so hang analysis is not limited to the inline tail
+          mkdir -p probe_logs
+          cp -f engine_console.log probe_logs/ 2>/dev/null || true
+          cp -f logcat_map.txt logcat_snap.txt crash_map.txt map2.png probe_logs/ 2>/dev/null || true
           echo "=== map probe: last rolling logcat snapshot ==="
           [ -f logcat_snap.txt ] && grep -a "CSARM" logcat_snap.txt | tail -35 || echo "(no snapshot)"
           echo "=== map probe: frames ==="
@@ -1172,7 +1193,8 @@ jobs:
           if grep -q "CSARM_MAIN_FAIL" logcat_map.txt; then
             echo "::error::map probe: launcher failed"; grep CSARM_MAIN_FAIL logcat_map.txt | head -3; fail=1
           fi
-          NEWGAME=$(grep -acE "Host_NewGame|Loading map|Spawning server" logcat_map.txt || true)
+          NEWGAME=$(grep -ahcE "Host_NewGame|Loading map|Spawning server" logcat_map.txt console_live.txt 2>/dev/null | paste -sd+ | bc 2>/dev/null || grep -acE "Host_NewGame|Loading map|Spawning server" logcat_map.txt console_live.txt 2>/dev/null || echo 0)
+          echo "NEWGAME markers: $NEWGAME"
           [ -n "$NEWGAME" ] || NEWGAME=0
           if [ "$fail" = "0" ] && grep -qa "Fatal signal" crash_map.txt && [ "$NEWGAME" = "0" ]; then
             echo "::error::map probe: tombstone before any map progress — frames:"
@@ -1258,6 +1280,7 @@ jobs:
             crash_map.txt
             emulator.log
             engine_console.log
+            console_live.txt
             logcat_snap.txt
           if-no-files-found: ignore
 
