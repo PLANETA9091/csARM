@@ -3847,3 +3847,31 @@ diff -ruN a/engine/cl_main.cpp b/engine/cl_main.cpp
  #endif
  }
  
+diff -ruN a/game/shared/cstrike15/cs_gamerules.cpp b/game/shared/cstrike15/cs_gamerules.cpp
+--- a/game/shared/cstrike15/cs_gamerules.cpp	2026-08-10 03:28:37.000000000 +0000
++++ b/game/shared/cstrike15/cs_gamerules.cpp	2026-11-06 18:00:00.000000000 +0000
+@@ -19957,6 +19957,16 @@ void PlayMusicSelection( IRecipientFilter& filter, CsMusicType_t nMusicType , in
+ 				pMusicExtension = pMusicDef->GetName();
+ 		}
+ 		else if( bLocalPlayer )
++		{
++		// csARM round 51: steamapicontext->SteamUser() is NULL with the
++		// steam_api stub (SteamAPI_Init() == false on Android), and
++		// PlayMusicSelection() fires from ClientModeCSNormal::FireGameEvent on
++		// the first round events right after FULLY CONNECTED -- run #188
++		// tombstone faulted at 0x0 (+739) on this exact GetSteamID() chain.
++		// The block only resolves the local player's equipped music kit;
++		// without a Steam user there is no inventory to query, so keep the
++		// default 'valve_csgo_NN' extension and skip the lookup entirely.
++		if ( steamapicontext && steamapicontext->SteamUser() )
+ 		{
+ 			CSteamID steamIDForPlayer = steamapicontext->SteamUser()->GetSteamID();
+ 
+@@ -19973,6 +19983,7 @@ void PlayMusicSelection( IRecipientFilter& filter, CsMusicType_t nMusicType , in
+ 				}
+ 			}
+ 		}
++		}
+ 
+ 	}
+ 	
