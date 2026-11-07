@@ -40,6 +40,22 @@ fi
 sed -i 's/#define SDL_DYNAMIC_API 1/#define SDL_DYNAMIC_API 0/' "$SRCDIR/src/dynapi/SDL_dynapi.h"
 grep -q "#define SDL_DYNAMIC_API 0" "$SRCDIR/src/dynapi/SDL_dynapi.h" || { echo "dynapi patch failed"; exit 1; }
 
+# csARM round 62: SDL 2.0.2 SDL_EGL_LoadLibrary probes the egl library with
+# SDL_LoadFunction(dll_handle, "eglChooseConfig") BEFORE consulting
+# SDL_VIDEO_EGL_DRIVER, and with dll_handle==NULL SDL_LoadFunction falls
+# through to dlsym(NULL) - which resolves against the GLOBAL namespace and
+# finds the SYSTEM libEGL.so (goldfish emulation on the emulator; it SEGVs
+# in createNativeSync on every eglSwapBuffers, run #202/#203).  The
+# SDL_VIDEO_EGL_DRIVER branch is therefore dead code for every app that
+# does not pass an explicit egl_path.  Force the env-var probe FIRST so the
+# bundled SwiftShader libEGL.so (csarm_main pins it by absolute path) wins.
+# Cache key of the link-toolchain cache includes this script, so the SDL
+# rebuild happens automatically.
+if ! grep -q "csARM round 62" "$SRCDIR/src/video/SDL_egl.c"; then
+  sed -i 's#if (SDL_LoadFunction(dll_handle, "eglChooseConfig") == NULL) {#/* csARM round 62: env-var probe before dlsym(NULL) (see setup_sdl2.sh) */\n    if (SDL_getenv("SDL_VIDEO_EGL_DRIVER") != NULL || SDL_LoadFunction(dll_handle, "eglChooseConfig") == NULL) {#' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "csARM round 62" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c env-var probe patch failed"; exit 1; }
+fi
+
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 CC=${CC:-aarch64-linux-android24-clang}   # x86_64 link jobs pass x86_64-linux-android24-clang
 

@@ -4029,7 +4029,7 @@ index d0ce5c0..72dcb80 100644
  #endif
 
 diff --git a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
-index ed040ff..f03f18a 100644
+index ed040ff..90ad86f 100644
 --- a/appframework/sdlmgr.cpp
 +++ b/appframework/sdlmgr.cpp
 @@ -15,6 +15,10 @@
@@ -4178,17 +4178,23 @@ index ed040ff..f03f18a 100644
  	m_GLContext = SDL_GL_CreateContext(m_Window);
  	if (m_GLContext == NULL)
  		Error( "Failed to create GL context: %s", SDL_GetError() );
-@@ -816,9 +920,18 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
+@@ -813,12 +917,24 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
+ 	// Blank out the initial window, so we're not looking at uninitialized
+ 	//  video RAM trash until we start proper drawing.
+ 	gGL->glClearColor(0,0,0,0);
++#ifndef __ANDROID__
++	// csARM round 61/62: the desktop priming swap/clear pairs are off on
++	// Android.  Run #202: the goldfish emulation EGL SEGV'd in
++	// createNativeSync on the first of them (ATD image, no native sync
++	// fences); run #203 proved the pristine tail has THREE pairs and the
++	// round-61 gate left the first one live (CSDLMgr::CreateHiddenGameWindow
++	//+856 -> SDL_GL_SwapWindow@plt).  On Android the hidden context exists
++	// only so the entry-point lookup has a handle - gGL fills from gl4es
++	// dlsym with no context dependency, and the engine presents on the real
++	// game window later, not on this hidden one.
  	gGL->glClear(GL_COLOR_BUFFER_BIT);
  	SDL_GL_SwapWindow(m_Window);
  	gGL->glClear(GL_COLOR_BUFFER_BIT);
-+#ifndef __ANDROID__
-+	// csARM round 61: the desktop priming swap is off on Android.  Run #202:
-+    // the goldfish emulation EGL SEGV'd in createNativeSync on this very
-+    // swap (ATD image, no native sync fences), and on Android the context
-+    // exists only so the entry-point lookup has a handle - gGL fills from
-+    // gl4es dlsym with no context dependency, and the engine presents on
-+    // the real game window later, not on this hidden one.
  	SDL_GL_SwapWindow(m_Window);
  	gGL->glClear(GL_COLOR_BUFFER_BIT);
  	SDL_GL_SwapWindow(m_Window);
@@ -4197,7 +4203,7 @@ index ed040ff..f03f18a 100644
  #endif // DX_TO_GL_ABSTRACTION
  
  	m_WindowWidth = width;
-@@ -1431,8 +1544,16 @@ void CSDLMgr::SizeWindow( int width, int tall )
+@@ -1431,8 +1547,16 @@ void CSDLMgr::SizeWindow( int width, int tall )
  	PumpEvents();
  
  #if defined( DX_TO_GL_ABSTRACTION )
