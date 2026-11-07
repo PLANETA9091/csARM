@@ -4223,7 +4223,7 @@ index ed040ff..90ad86f 100644
  }
  
 diff --git a/togl/glentrypoints.cpp b/togl/glentrypoints.cpp
-index 2d7e0f4..3a291b5 100644
+index 2d7e0f4..87bab56 100644
 --- a/togl/glentrypoints.cpp
 +++ b/togl/glentrypoints.cpp
 @@ -23,6 +23,19 @@
@@ -4323,7 +4323,35 @@ index 2d7e0f4..3a291b5 100644
  		}
  #endif
  
-@@ -359,13 +428,41 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
+@@ -319,6 +388,27 @@ static bool CheckOpenGLExtension(const char *libname, const char *ext, const int
+ 	return retval;
+ }
+ 
++#if defined( __ANDROID__ )
++// csARM round 63: gl4es advertises GL_EXT_draw_buffers2 in its extension
++// string but exports neither glColorMaskIndexedEXT nor a glColorMaski
++// alias (audited: plain glColorMask only).  GLM's
++// GLStateArray<GLColorMaskMultiple_t,8> Flush/Default path calls
++// gGL->glColorMaskIndexedEXT UNCONDITIONALLY (glmgr.h GLContextSetIndexed
++// has no m_bHave_ gate), so a NULL slot SEGVs inside the GLMContext ctor
++// (run #204: GLStateArray<GLColorMaskMultiple_t,8>::Default -> pc 0x0).
++// The ctor Force()s this shim into the slot when the real lookup came
++// back NULL: slot 0 forwards to glColorMask (the only draw buffer gl4es
++// has), slots 1-7 are honest no-ops.
++static void ( APIENTRY *s_pCsarmGlColorMask )( GLboolean, GLboolean, GLboolean, GLboolean ) = NULL;
++static void APIENTRY csarm_glColorMaskIndexedEXT_shim( GLuint buf, GLboolean r, GLboolean g, GLboolean b, GLboolean a )
++{
++	if ( ( buf == 0 ) && ( s_pCsarmGlColorMask != NULL ) )
++	{
++		s_pCsarmGlColorMask( r, g, b, a );
++	}
++}
++#endif // __ANDROID__
++
+ // The GL context you want entry points for must be current when you hit this constructor!
+ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
+ 	: m_nTotalGLCycles(0)
+@@ -359,13 +449,52 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
  	pszString = ( const char * )glGetString(GL_EXTENSIONS);
  	m_pGLDriverStrings[cGLExtensionsString] = strdup( pszString ? pszString : "" );
  
@@ -4342,6 +4370,17 @@ index 2d7e0f4..3a291b5 100644
 +		if ( V_stristr( ext, "framebuffer_object" ) == NULL )
 +			CSARM_GLM_LOG( "extension string has NO framebuffer_object, first 220: [%.220s]", ext );
 +	}
++
++#if defined( __ANDROID__ )
++	// csARM round 63: see the shim comment above - fill the NULL
++	// glColorMaskIndexedEXT slot before any GLStateArray Flush can hit it.
++	if ( glColorMaskIndexedEXT.Pointer() == NULL )
++	{
++		s_pCsarmGlColorMask = glColorMask.Pointer();
++		glColorMaskIndexedEXT.Force( &csarm_glColorMaskIndexedEXT_shim );
++		CSARM_GLM_LOG( "glColorMaskIndexedEXT absent from gl4es - shim installed (slot 0 -> glColorMask)" );
++	}
++#endif // __ANDROID__
 +
  	// !!! FIXME: Alfred says the original GL_APPLE_fence code only exists to
  	// !!! FIXME:  hint Apple's drivers and not because we rely on the
@@ -4365,7 +4404,7 @@ index 2d7e0f4..3a291b5 100644
   	}
  
  	// same extension, different name.
-@@ -462,7 +559,17 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
+@@ -462,7 +591,17 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
  #ifndef OSX
  	if ( !m_bHave_GL_EXT_texture_sRGB_decode )
   	{
