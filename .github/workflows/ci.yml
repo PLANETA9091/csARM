@@ -627,7 +627,12 @@ jobs:
           # ANDROID: the default state skips the queries (sane defaults pre-set),
           # and per-context NewGLState(shared!=NULL) still queries with a live
           # context.
-          sed -i 's|#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__)|#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__) || defined(ANDROID)|' src/gl/glstate.c
+          # round 67: delimiter is @, NOT | - the pattern itself contains ||
+          # (sed -e #1 char 28 "unknown option to s" in run #211, both gl4es
+          # jobs died before building anything, no libEGLgl4es.so artifact,
+          # the map probe then pinned plain SwiftShader libEGL and togl got
+          # "OpenGL 0.0.0" / missing glGetError -> Sys_Error -> _exit(0)).
+          sed -i 's@#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__)@#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__) || defined(ANDROID)@' src/gl/glstate.c
           [ "$(grep -c "defined(ANDROID)" src/gl/glstate.c)" -ge 6 ] || { echo "::error::glstate.c contextless-query guard patch failed"; exit 1; }
           pip install -q cmake ninja || true
           export PATH="$HOME/.local/bin:$PATH"
@@ -1235,6 +1240,16 @@ jobs:
           [ -n "$APPUID" ] && "$ADB" shell "chown $APPUID:$APPUID /data/data/$APP/files/csarm.args && chmod 644 /data/data/$APP/files/csarm.args && restorecon /data/data/$APP/files/csarm.args" || true
           echo "--- csarm.args on device ---"
           "$ADB" shell "cat /data/data/$APP/files/csarm.args" || true
+          # --- 2b. round 67: fail fast BEFORE burning the 700s probe window
+          # when the gl4es wrapper never made it into the installed APK
+          # (run #211: both gl4es jobs died on a sed-delimiter bug, the probe
+          # then pinned plain SwiftShader libEGL and togl exited with the
+          # opaque "OpenGL 0.0.0 / missing glGetError" Sys_Error 1s in).
+          if ! "$ADB" -s emulator-5554 shell "ls /data/app/*/com.csarm.port-*/lib/x86_64/libEGLgl4es.so 2>/dev/null" | grep -q libEGLgl4es.so; then
+            echo "::error::map probe: libEGLgl4es.so is NOT in the installed APK - gl4es jobs failed; real renderer cannot start"
+            exit 1
+          fi
+          echo "gl4es wrapper present in APK - real renderer path is armed"
           # --- 3. relaunch the engine on the probe args ---
           # (CSARMActivity now KEEPS a staged csarm.args instead of clobbering
           # it with defaults — run #152 lost +map ar_dizzy exactly there)
