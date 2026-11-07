@@ -4029,7 +4029,7 @@ index d0ce5c0..72dcb80 100644
  #endif
 
 diff --git a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
-index ed040ff..7f90969 100644
+index ed040ff..23d9b46 100644
 --- a/appframework/sdlmgr.cpp
 +++ b/appframework/sdlmgr.cpp
 @@ -15,6 +15,10 @@
@@ -4098,7 +4098,38 @@ index ed040ff..7f90969 100644
  	// SDL does the right thing, so we never need to use tier0 in this case.
  	retval = SDL_GL_GetProcAddress(fn);
  	//printf("CDynamicFunctionOpenGL: SDL_GL_GetProcAddress(\"%s\") returned %p\n", fn, retval);
-@@ -568,6 +620,25 @@ InitReturnVal_t CSDLMgr::Init()
+@@ -146,6 +198,30 @@ void *VoidFnPtrLookup_GlMgr( const char *libname, const char *fn, bool &okay, co
+ 	okay = (okay && (retval != NULL));
+ 	if (bRequired && !okay)
+ 	{
++		// csARM round 60: gl4es advertises GL_ARB_sampler_objects-style usage
++		// through its caps but exports neither the six sampler entry points
++		// nor glColorMaskIndexedEXT (GL_EXT_draw_buffers2), while glfuncs.h
++		// marks all of them REQUIRED - run #201 died on the first one
++		// ('glColorMaskIndexedEXT') right after the honest fence/sync flags
++		// printed.  Audited safe to tolerate on Android: GLMContext hardcodes
++		// m_bUseSamplerObjects=false unless -gl_enablesamplerobjects is passed
++		// (glmgr.cpp:2716 - never in the csARM args), so the sampler slots are
++		// never dereferenced, and NO caller of glColorMaskIndexedEXT exists in
++		// togl/shaderapidx9 (grepped glmgr/meshdx8/shaderapidx8/dxabstract;
++		// m_bHave_GL_EXT_draw_buffers2 itself is read nowhere).  Warn and
++		// return NULL instead of Plat_ExitProcess-ing a bootable stack.
++		static const char *const kToleratedMissing[] = {
++			"glGenSamplers", "glDeleteSamplers", "glBindSampler",
++			"glSamplerParameteri", "glSamplerParameterf", "glSamplerParameterfv",
++			"glColorMaskIndexedEXT", NULL };
++		for ( int i = 0; kToleratedMissing[i]; ++i )
++		{
++			if ( strcmp( kToleratedMissing[i], fn ) == 0 )
++			{
++				CSARM_LOGI( "GLM: entry point '%s' absent from gl4es - tolerated (slot never dereferenced by this engine)", fn );
++				return NULL;
++			}
++		}
+ 		// We can't continue execution, because one or more GL function pointers will be NULL.
+ 		Error( "Could not find required OpenGL entry point '%s'! Either your video card is unsupported, or your OpenGL driver needs to be updated.\n", fn);
+ 	}
+@@ -568,6 +644,25 @@ InitReturnVal_t CSDLMgr::Init()
  
  	m_pixelFormatAttribCount = (attCursor - &m_pixelFormatAttribs[0]) / 2;
  
@@ -4124,7 +4155,7 @@ index ed040ff..7f90969 100644
  	// we need a GL context before we dig down further, since we're calling
  	//  GL entry points, but the game hasn't made a window yet. So it's time
  	//  to make a window! We make a 640x480 one here, and later, when asked
-@@ -577,6 +648,7 @@ InitReturnVal_t CSDLMgr::Init()
+@@ -577,6 +672,7 @@ InitReturnVal_t CSDLMgr::Init()
  
  	if ( !m_bTextMode )
  		SDL_HideWindow( m_Window );
@@ -4132,7 +4163,7 @@ index ed040ff..7f90969 100644
  
  	return INIT_OK;
  }
-@@ -752,6 +824,14 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
+@@ -752,6 +848,14 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
  	}
  
  #if defined( DX_TO_GL_ABSTRACTION )
@@ -4147,7 +4178,7 @@ index ed040ff..7f90969 100644
  	m_GLContext = SDL_GL_CreateContext(m_Window);
  	if (m_GLContext == NULL)
  		Error( "Failed to create GL context: %s", SDL_GetError() );
-@@ -819,6 +899,7 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
+@@ -819,6 +923,7 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
  	SDL_GL_SwapWindow(m_Window);
  	gGL->glClear(GL_COLOR_BUFFER_BIT);
  	SDL_GL_SwapWindow(m_Window);
@@ -4155,7 +4186,7 @@ index ed040ff..7f90969 100644
  #endif // DX_TO_GL_ABSTRACTION
  
  	m_WindowWidth = width;
-@@ -1431,8 +1512,16 @@ void CSDLMgr::SizeWindow( int width, int tall )
+@@ -1431,8 +1536,16 @@ void CSDLMgr::SizeWindow( int width, int tall )
  	PumpEvents();
  
  #if defined( DX_TO_GL_ABSTRACTION )
