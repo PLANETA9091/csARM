@@ -4175,7 +4175,7 @@ index ed040ff..7f90969 100644
  }
  
 diff --git a/togl/glentrypoints.cpp b/togl/glentrypoints.cpp
-index 2d7e0f4..efed4a6 100644
+index 2d7e0f4..3a291b5 100644
 --- a/togl/glentrypoints.cpp
 +++ b/togl/glentrypoints.cpp
 @@ -23,6 +23,19 @@
@@ -4248,7 +4248,34 @@ index 2d7e0f4..efed4a6 100644
  	// SDL does the right thing, so we never need to use tier0 in this case.
  	retval = (*gGL_GetProcAddressCallback)( libname, fn, okay, bRequired, fallback); //SDL_GL_GetProcAddress(fn);
  	//printf("CDynamicFunctionOpenGL: SDL_GL_GetProcAddress(\"%s\") returned %p\n", fn, retval);
-@@ -359,13 +415,41 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
+@@ -285,6 +341,18 @@ static bool CheckOpenGLExtension_internal(const char *libname, const char *ext,
+ #else
+ 		if (!ptr)
+ 		{
++#if defined( __ANDROID__ )
++			// csARM round 59: no GLX on Android.  Run #200: every GL_EXT/GL_ARB/
++			// GL_NV flag row whose extension gl4es does not advertise fell into
++			// this fallback and died on the REQUIRED glXGetCurrentDisplay lookup
++			// (gl4es exports zero glX* symbols, SDL's EGL proc path cannot supply
++			// them) -> Plat_ExitProcess in the COpenGLEntryPoints ctor right after
++			// 'This system supports ... GL_EXT_framebuffer_blit'.  The glX retry
++			// is unreachable on Android in any case: return false directly, like
++			// the OSX branch does.  The round-57 relaxed gates then see honest
++			// false flags (fence/sync/sRGB_decode are declared-but-unused).
++			return false;
++#else
+ 			static CDynamicFunctionOpenGL< true, Display *( APIENTRY *)( ), Display* > glXGetCurrentDisplay( NULL, "glXGetCurrentDisplay");
+ 			static CDynamicFunctionOpenGL< true, const char *( APIENTRY *)( Display*, int ), const char * > glXQueryExtensionsString( NULL, "glXQueryExtensionsString");
+ 			if (glXQueryExtensionsString && glXGetCurrentDisplay) 
+@@ -297,6 +365,7 @@ static bool CheckOpenGLExtension_internal(const char *libname, const char *ext,
+ 			{
+ 				return false;
+ 			}
++#endif // __ANDROID__
+ 		}
+ #endif
+ 
+@@ -359,13 +428,41 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
  	pszString = ( const char * )glGetString(GL_EXTENSIONS);
  	m_pGLDriverStrings[cGLExtensionsString] = strdup( pszString ? pszString : "" );
  
@@ -4290,7 +4317,7 @@ index 2d7e0f4..efed4a6 100644
   	}
  
  	// same extension, different name.
-@@ -462,7 +546,17 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
+@@ -462,7 +559,17 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
  #ifndef OSX
  	if ( !m_bHave_GL_EXT_texture_sRGB_decode )
   	{
