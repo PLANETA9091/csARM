@@ -471,7 +471,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bundle
-          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c
+          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss2
 
       - name: Clone SwiftShader at known-good Android-capable revision
         run: |
@@ -493,6 +493,23 @@ jobs:
           # ES-only build still needs marl (Reactor includes marl/event.h) but
           # at this revision marl is gated on the Vulkan build -> force it on
           sed -i 's/set(BUILD_MARL ${SWIFTSHADER_BUILD_VULKAN})/set(BUILD_MARL TRUE)/' CMakeLists.txt
+          # csARM round 68: libEGL's Display::createContext pulls GL entry
+          # points through LibGLESv2::loadExports, whose __ANDROID__ name
+          # list is {"libGLESv2_swiftshader.so", "libGLESv2_swiftshader.so"}
+          # ONLY.  Our bundle ships libGLESv2.so, so loadExports stayed null
+          # and EVERY eglCreateContext returned EGL_BAD_ALLOC (run #212: the
+          # gl4es extension-gather got no context -> "default to none" ->
+          # first contextless GL call from CSDLMgr::CreateHiddenGameWindow
+          # SEGV'd 0x140 in es2::getContextLocked — the same class of crash
+          # round 66 fixed for the dlopen path, but one level deeper).
+          # Fall back to the bundled name: <moduledir>/libGLESv2.so is the
+          # SAME module gl4es already loaded (bionic dedups by absolute
+          # path), so libEGL's contexts and gl4es's GL calls share one
+          # instance and one TLS.  mustContainSymbol="libGLESv2_swiftshader"
+          # still gates the match (GL_APICALL is visibility-default on
+          # Android, so our lib exports it).
+          sed -i 's@{"libGLESv2_swiftshader.so", "libGLESv2_swiftshader.so"}@{"libGLESv2_swiftshader.so", "libGLESv2.so"}@' src/OpenGL/libGLESv2/libGLESv2.hpp
+          grep -q '"libGLESv2.so"' src/OpenGL/libGLESv2/libGLESv2.hpp || { echo "::error::libGLESv2 name-list patch failed"; exit 1; }
           # NDK-standalone fixes: platform-only headers are not in the NDK.
           # - FrameBufferAndroid.hpp needs cutils/native_handle.h only for the
           #   non-NDK gralloc member (dead code under ANDROID_NDK_BUILD)
@@ -548,6 +565,13 @@ jobs:
           for f in libGLESv1_CM*.so libGLES_CM*.so; do [ "$f" = "libGLESv1_CM.so" ] || mv -f "$f" libGLESv1_CM.so || true; done
           ls -la
           { [ -f libEGL.so ] && [ -f libGLESv2.so ]; } || { echo "::error::EGL/GLES libs missing"; find out -name "*.so"; exit 1; }
+          # round 68: libEGL's loadExports gates the dlopen with
+          # mustContainSymbol="libGLESv2_swiftshader" - if our libGLESv2.so
+          # did not export it (hidden visibility), the fallback name would
+          # be rejected and every eglCreateContext would fail BAD_ALLOC again
+          "$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -W --dyn-syms libGLESv2.so | grep -q "libGLESv2_swiftshader" \
+            || { echo "::error::libGLESv2.so does not export libGLESv2_swiftshader - loadExports mustContainSymbol gate would reject it"; exit 1; }
+          echo "libGLESv2_swiftshader export present - libEGL can create contexts"
           # sanity: correct arch
           file libEGL.so | tee /dev/stderr | grep -q aarch64 && echo "arch arm64 OK" || true
           file libEGL.so | grep -q "x86-64" && echo "arch x86_64 OK" || true
