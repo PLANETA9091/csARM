@@ -3916,11 +3916,14 @@ diff -ruN a/engine/networkstringtable.cpp b/engine/networkstringtable.cpp
  			}
  
 
-diff --git a/togl/glmgr.cpp b/togl/glmgr.cpp
-index 0ab7ee4..7880adf 100644
 --- a/togl/glmgr.cpp
 +++ b/togl/glmgr.cpp
-@@ -25,6 +25,14 @@
+@@ -22,9 +22,19 @@
+ #include "intelglmallocworkaround.h"
+ #endif
+ 
++#include "common/csarm_log.h"
++
  // memdbgon -must- be the last include file in a .cpp file.
  #include "tier0/memdbgon.h"
  
@@ -3935,6 +3938,41 @@ index 0ab7ee4..7880adf 100644
  
  // Whether the code should use gl_arb_debug_output. This causes error messages to be streamed, via callback, to the application. 
  // It is much friendlier to the MTGL driver. 
+@@ -588,6 +598,13 @@
+ 		bool bSuccess = MakeContextCurrent( m_ctx );
+ 		if ( !bSuccess )
+ 		{
++#ifdef __ANDROID__
++			// csARM round 72: a silently-eaten failure here cost a whole
++			// debug round (runs #216/#217 - EGL_BAD_ACCESS because the
++			// context was still bound to the thread that created the
++			// previous device).  Say so in logcat.
++			CSARM_LOGW( "GLM: MakeContextCurrent FAILED ctx=%p thread=%u", m_ctx, (unsigned)ThreadGetCurrentId() );
++#endif
+ 			Assert( 0 );
+ 		}
+ 	}
+@@ -3143,6 +3160,20 @@
+ 	}
+ #endif
+ 
++#ifdef __ANDROID__
++	// csARM round 72: hand the GL context back before the GLMContext dies.
++	// The caps-probe device (CShaderDeviceMgrDx8::ComputeCapsFromD3D) runs on
++	// a different thread than the real SetMode device, and an EGL context
++	// stays bound to the thread that last made it current - eglMakeCurrent
++	// from the second thread fails with EGL_BAD_ACCESS while the dead
++	// device's context still holds it (run #217: device #1 + gl4es init on
++	// tid 2347, SetMode device #2 on tid 2345, FBO ctor MakeCurrent failed
++	// silently, glGenFramebuffers no-op'd, m_name stayed 0, status query
++	// returned 0).  Releasing here lets the next device take the context
++	// wherever it runs.
++	ReleaseCurrent( true );
++#endif
++
+ 	DecrementWindowRefCount();
+ }
+ 
 diff --git a/togl/glmgrbasics.cpp b/togl/glmgrbasics.cpp
 index 768b418..d03b857 100644
 --- a/togl/glmgrbasics.cpp
@@ -4017,7 +4055,20 @@ index ec3fd9c..664d11d 100644
  			{
  				ident.VendorId = nVendorID;
  			}
-@@ -2537,6 +2540,13 @@
+@@ -2508,6 +2511,12 @@
+ 		if ( !IsPC() )
+ 			return NULL;
+ 
++		// csARM round 72: a real logging call on the retry path - in the
++		// shipped binaries the optimizer kept turning this failure branch
++		// into an int3 pad (runs #216/#217 died at InvokeCreateDevice+235
++		// and +226 the moment CreateDevice returned a failure, before the
++		// final-else log could run).  Side effects make the branch real.
++		CSARM_LOGW( "InvokeCreateDevice: attempt FAILED hr=0x%08x - retrying", (unsigned)hr );
+ 		// try again, other applications may be taking their time
+ 		Sleep( 1000 );
+ 		hr = D3D()->CreateDevice( nAdapter, devType, (VD3DHWND)hWnd, deviceCreationFlags, &m_PresentParameters, &pD3DDevice );
+@@ -2537,6 +2546,13 @@
  	{
  		// Otherwise we failed, show a message and shutdown
  		pD3DDevice = NULL;
