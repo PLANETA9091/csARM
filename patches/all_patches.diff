@@ -4118,20 +4118,30 @@ index ed040ff..b574b3f 100644
  }
  
 diff --git a/togl/glentrypoints.cpp b/togl/glentrypoints.cpp
-index 2d7e0f4..a2c3f8d 100644
+index 2d7e0f4..e92a53e 100644
 --- a/togl/glentrypoints.cpp
 +++ b/togl/glentrypoints.cpp
-@@ -23,6 +23,9 @@
+@@ -23,6 +23,19 @@
  
  #ifdef _LINUX
  #include <GL/glx.h>
 +// csARM round 56b: dlopen/dlsym for the bundled gl4es libGL.so
 +#include <dlfcn.h>
 +#include <string>
++// csARM round 56d: GLM bring-up diagnostics straight to logcat — the
++// stderr pipe is unreliable past engine init, the spew listener is not
++// installed during the COpenGLEntryPoints ctor, and these rungs must be
++// visible in the CI boot log.
++#ifdef __ANDROID__
++#include <android/log.h>
++#define CSARM_GLM_LOG(...) __android_log_print( ANDROID_LOG_INFO, "CSARM_GLM", __VA_ARGS__ )
++#else
++#define CSARM_GLM_LOG(...) ((void)0)
++#endif
  #endif
  // NOTE: This has to be the last file included!
  #include "tier0/memdbgon.h"
-@@ -112,6 +115,49 @@ void *VoidFnPtrLookup_GlMgr( const char *libname, const char *fn, bool &okay, co
+@@ -112,6 +125,49 @@ void *VoidFnPtrLookup_GlMgr( const char *libname, const char *fn, bool &okay, co
  		return NULL;
  	// The SDL path would work on all these platforms, if we were using SDL there, too...
  #if defined( LINUX ) || defined( WIN32 )
@@ -4166,7 +4176,7 @@ index 2d7e0f4..a2c3f8d 100644
 +					}
 +				}
 +			}
-+			fprintf( stderr, "csARM: gl4es libGL.so %s\n", s_hGl4es ? "loaded (desktop-GL entry points active)" : "FAILED — GLES fallback (EXT slots will be NULL)" );
++			CSARM_GLM_LOG( "gl4es libGL.so %s", s_hGl4es ? "loaded (desktop-GL entry points active)" : "FAILED - GLES fallback (EXT slots will be NULL)" );
 +		}
 +		if ( s_hGl4es )
 +		{
@@ -4181,4 +4191,27 @@ index 2d7e0f4..a2c3f8d 100644
  	// SDL does the right thing, so we never need to use tier0 in this case.
  	retval = (*gGL_GetProcAddressCallback)( libname, fn, okay, bRequired, fallback); //SDL_GL_GetProcAddress(fn);
  	//printf("CDynamicFunctionOpenGL: SDL_GL_GetProcAddress(\"%s\") returned %p\n", fn, retval);
+@@ -359,6 +415,22 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
+ 	pszString = ( const char * )glGetString(GL_EXTENSIONS);
+ 	m_pGLDriverStrings[cGLExtensionsString] = strdup( pszString ? pszString : "" );
+ 
++	// csARM round 56d: GLM bring-up diagnostics (see CSARM_GLM_LOG above).
++	CSARM_GLM_LOG( "GL_VERSION=[%s] GL_RENDERER=[%s]",
++				   m_pGLDriverStrings[cGLVersionString] ? m_pGLDriverStrings[cGLVersionString] : "?",
++				   m_pGLDriverStrings[cGLRendererString] ? m_pGLDriverStrings[cGLRendererString] : "?" );
++	{
++		const char *ext = m_pGLDriverStrings[cGLExtensionsString] ? m_pGLDriverStrings[cGLExtensionsString] : "";
++		CSARM_GLM_LOG( "ext_len=%d fbo_arb=%d fbo_ext=%d sync=%d bHaveOpenGL=%d",
++					   (int)strlen(ext),
++					   m_bHave_GL_ARB_framebuffer_object ? 1 : 0,
++					   m_bHave_GL_EXT_framebuffer_object ? 1 : 0,
++					   m_bHave_GL_ARB_sync ? 1 : 0,
++					   m_bHave_OpenGL ? 1 : 0 );
++		if ( V_stristr( ext, "framebuffer_object" ) == NULL )
++			CSARM_GLM_LOG( "extension string has NO framebuffer_object, first 220: [%.220s]", ext );
++	}
++
+ 	// !!! FIXME: Alfred says the original GL_APPLE_fence code only exists to
+ 	// !!! FIXME:  hint Apple's drivers and not because we rely on the
+ 	// !!! FIXME:  functionality. If so, just remove this check (and the
 
