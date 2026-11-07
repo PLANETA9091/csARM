@@ -4118,30 +4118,56 @@ index ed040ff..b574b3f 100644
  }
  
 diff --git a/togl/glentrypoints.cpp b/togl/glentrypoints.cpp
-index 2d7e0f4..256c913 100644
+index 2d7e0f4..a2c3f8d 100644
 --- a/togl/glentrypoints.cpp
 +++ b/togl/glentrypoints.cpp
-@@ -23,6 +23,8 @@
+@@ -23,6 +23,9 @@
  
  #ifdef _LINUX
  #include <GL/glx.h>
 +// csARM round 56b: dlopen/dlsym for the bundled gl4es libGL.so
 +#include <dlfcn.h>
++#include <string>
  #endif
  // NOTE: This has to be the last file included!
  #include "tier0/memdbgon.h"
-@@ -112,6 +114,24 @@ void *VoidFnPtrLookup_GlMgr( const char *libname, const char *fn, bool &okay, co
+@@ -112,6 +115,49 @@ void *VoidFnPtrLookup_GlMgr( const char *libname, const char *fn, bool &okay, co
  		return NULL;
  	// The SDL path would work on all these platforms, if we were using SDL there, too...
  #if defined( LINUX ) || defined( WIN32 )
-+	// csARM round 56b: resolve desktop-GL entry points from the bundled
++	// csARM round 56b/56c: resolve desktop-GL entry points from the bundled
 +	// gl4es libGL.so FIRST (GL 2.x fixed-function + GLSL over the ES-only
-+	// SwiftShader bundle; the APK ships libGL.so in nativeLibraryDir, which
-+	// is on the app's LD_LIBRARY_PATH, and gl4es itself pulls the bundled
-+	// libEGL/libGLESv2).  Everything gl4es does not export falls through to
-+	// the SDL callback below exactly like before.
++	// SwiftShader bundle; the APK ships libGL.so in nativeLibraryDir and
++	// gl4es itself pulls the bundled libEGL/libGLESv2).  Everything gl4es
++	// does not export falls through to the SDL callback below exactly like
++	// before.  Run #196: bare dlopen("libGL.so") alone is fragile — try the
++	// absolute path from THIS library's own location as well (dladdr on this
++	// function = nativeLibraryDir) and log the outcome, otherwise the silent
++	// GLES fallback leaves EXT-named slots NULL and the gGL-> tails SEGV
++	// (fault 0x3d8).
 +	{
-+		static void *s_hGl4es = dlopen( "libGL.so", RTLD_NOW | RTLD_GLOBAL );
++		static void *s_hGl4es = NULL;
++		static bool s_bGl4esTried = false;
++		if ( !s_bGl4esTried )
++		{
++			s_bGl4esTried = true;
++			s_hGl4es = dlopen( "libGL.so", RTLD_NOW | RTLD_GLOBAL );
++			if ( !s_hGl4es )
++			{
++				Dl_info info;
++				if ( dladdr( (void *)&VoidFnPtrLookup_GlMgr, &info ) && info.dli_fname )
++				{
++					std::string dir( info.dli_fname );
++					size_t slash = dir.rfind( '/' );
++					if ( slash != std::string::npos )
++					{
++						std::string path = dir.substr( 0, slash + 1 ) + "libGL.so";
++						s_hGl4es = dlopen( path.c_str(), RTLD_NOW | RTLD_GLOBAL );
++					}
++				}
++			}
++			fprintf( stderr, "csARM: gl4es libGL.so %s\n", s_hGl4es ? "loaded (desktop-GL entry points active)" : "FAILED — GLES fallback (EXT slots will be NULL)" );
++		}
 +		if ( s_hGl4es )
 +		{
 +			void *sym = dlsym( s_hGl4es, fn );
