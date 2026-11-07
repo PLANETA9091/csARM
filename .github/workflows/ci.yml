@@ -583,7 +583,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bundle
-          key: gl4es-libs-${{ matrix.abi }}-bc4314d
+          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl1
 
       - name: Clone + build gl4es (NDK r27d)
         run: |
@@ -615,7 +615,8 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$NDKROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24 \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_STANDARD_LIBRARIES="-lm"
+            -DCMAKE_C_STANDARD_LIBRARIES="-lm" \
+            -DEGL_WRAPPER=ON
           cmake --build out --parallel $(nproc)
           # NB: stay inside gl4es/ is fine — B is absolute (run #196: the cp
           # landed in gl4es/bundle/ and the artifact uploaded empty)
@@ -623,6 +624,16 @@ jobs:
           [ -n "$found" ] || { echo "::error::gl4es libGL.so not produced"; find . -name "*.so*" | head; exit 1; }
           mkdir -p "$B"
           cp "$found" "$B/libGL.so"
+          # round 65: the EGL wrapper (cmake target "EGL" -> libEGL.so) ships
+          # as libEGLgl4es.so - SDL pins it via SDL_VIDEO_EGL_DRIVER (absolute
+          # path) so SDL creates the desktop-GL context THROUGH gl4es; a live
+          # gl4es context is what togl/GLM device creation requires (run #207:
+          # contextless gl4es returned 0 from glCheckFramebufferStatusEXT and
+          # the FBO gate int3'd).  Renamed to avoid clashing with the bundled
+          # SwiftShader libEGL.so in lib/<abi>/.
+          foundegl=$(find out lib -name "libEGL.so*" 2>/dev/null | head -1)
+          [ -n "$foundegl" ] || { echo "::error::gl4es EGL wrapper not produced (EGL_WRAPPER=ON)"; find . -name "*.so*" | head; exit 1; }
+          cp "$foundegl" "$B/libEGLgl4es.so"
           ls -la "$B"
           $NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -W --dyn-syms "$B/libGL.so" | grep -c "glGenFramebuffersEXT\|glShaderSource" || true
 
@@ -630,7 +641,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gl4es-${{ matrix.abi }}
-          path: bundle/${{ matrix.abi }}/libGL.so
+          path: bundle/${{ matrix.abi }}/
           retention-days: 7
 
   # Job 2b: FULL ENGINE BOOT TEST — custom fast emulator runner.

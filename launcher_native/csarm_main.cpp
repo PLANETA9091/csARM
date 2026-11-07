@@ -449,16 +449,41 @@ extern "C" int SDL_main(int argc, char *argv[])
     // Android/EGL video backend SDL routes that variable into the EGL
     // driver slot, and libGLESv2.so is not an EGL driver.
     {
-        std::string eglDriver = nativeLibDir() + "/libEGL.so";
+        std::string libDir = nativeLibDir();
         struct stat st;
-        if (stat(eglDriver.c_str(), &st) == 0)
+        std::string gl4esEgl = libDir + "/libEGLgl4es.so";
+        std::string swEgl    = libDir + "/libEGL.so";
+        std::string swGles   = libDir + "/libGLESv2.so";
+        if (stat(gl4esEgl.c_str(), &st) == 0)
         {
-            setenv("SDL_VIDEO_EGL_DRIVER", eglDriver.c_str(), 1);
-            LOGI("CSARM_EGL pin: SDL_VIDEO_EGL_DRIVER=%s", eglDriver.c_str());
+            // round 65: SDL drives the gl4es EGL WRAPPER - SDL creates the
+            // desktop-GL context through gl4es itself, so every gGL call in
+            // togl/GLM runs against a LIVE gl4es context (run #207: contextless
+            // gl4es returned 0 from glCheckFramebufferStatusEXT and the FBO
+            // readiness gate int3'd inside IDirect3DDevice9::Create).  The
+            // wrapper's backend is pinned to the bundled SwiftShader libs via
+            // gl4es's LIBGL_GLES / LIBGL_EGL loader overrides (src/gl/loader.c)
+            // - the whole stack stays in-process software, zero goldfish EGL.
+            setenv("SDL_VIDEO_EGL_DRIVER", gl4esEgl.c_str(), 1);
+            if (stat(swGles.c_str(), &st) == 0)
+                setenv("LIBGL_GLES", swGles.c_str(), 1);
+            if (stat(swEgl.c_str(), &st) == 0)
+                setenv("LIBGL_EGL", swEgl.c_str(), 1);
+            LOGI("CSARM_EGL pin: gl4es wrapper=%s gles=%s egl=%s",
+                 getenv("SDL_VIDEO_EGL_DRIVER") ? getenv("SDL_VIDEO_EGL_DRIVER") : "-",
+                 getenv("LIBGL_GLES") ? getenv("LIBGL_GLES") : "-",
+                 getenv("LIBGL_EGL") ? getenv("LIBGL_EGL") : "-");
+        }
+        else if (stat(swEgl.c_str(), &st) == 0)
+        {
+            // round 61 fallback: plain SwiftShader EGL (ES contexts only -
+            // togl runs contextless, enough for the fast-boot ladder only)
+            setenv("SDL_VIDEO_EGL_DRIVER", swEgl.c_str(), 1);
+            LOGI("CSARM_EGL pin: SDL_VIDEO_EGL_DRIVER=%s (SwiftShader, no gl4es wrapper)", swEgl.c_str());
         }
         else
         {
-            LOGI("CSARM_EGL pin: no bundled libEGL.so in %s - system EGL stays", nativeLibDir().c_str());
+            LOGI("CSARM_EGL pin: no bundled EGL driver in %s - system EGL stays", libDir.c_str());
         }
     }
 

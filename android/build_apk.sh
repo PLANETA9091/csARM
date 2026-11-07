@@ -102,6 +102,15 @@ for ABI in arm64-v8a x86_64; do
     if ls "$A"/libs-gl4es/$ABI/libGL.so >/dev/null 2>&1; then
       cp "$A"/libs-gl4es/$ABI/libGL.so "$A/lib/$ABI/libGL.so"
       echo "gl4es($ABI): libGL.so bundled"
+      # round 65: the EGL wrapper rides along (SDL_VIDEO_EGL_DRIVER pin in
+      # csarm_main); without it SDL would drive the goldfish/system EGL and
+      # gl4es would run contextless (run #207 FBO int3).
+      if [ -f "$A"/libs-gl4es/$ABI/libEGLgl4es.so ]; then
+        cp "$A"/libs-gl4es/$ABI/libEGLgl4es.so "$A/lib/$ABI/libEGLgl4es.so"
+        echo "gl4es($ABI): libEGLgl4es.so bundled"
+      else
+        echo "WARNING: gl4es($ABI) has no libEGLgl4es.so - real renderer will run contextless"
+      fi
     fi
     NLIB=$(ls "$A/lib/$ABI"/*.so 2>/dev/null | wc -l)
     echo "native libs [$ABI]: $NLIB"
