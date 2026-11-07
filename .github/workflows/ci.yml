@@ -583,7 +583,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bundle
-          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl2
+          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl3
 
       - name: Clone + build gl4es (NDK r27d)
         run: |
@@ -608,6 +608,15 @@ jobs:
           git fetch -q --depth 1 origin bc4314d8369f169d3fa81c5ed1b46b3dba4e74a5
           git checkout -q FETCH_HEAD
           git rev-parse HEAD | tee ../gl4es_commit.txt
+          # csARM round 65 fixup2: the NDK toolchain sets CMAKE_SYSTEM_NAME=Android,
+          # so src/CMakeLists.txt never takes the Linux GLX branch and libGL.so
+          # ships without glx/lookup.c - the EGL wrapper's gl4es_eglGetProcAddress
+          # then has no gl4es_glXGetProcAddress to link against (runs #208/#209
+          # ld.lld undefined-symbol failure).  Provide it as a local stub inside
+          # the wrapper TU: on Android the only correct answer for any glX name
+          # is NULL anyway.
+          sed -i 's|^void\* gl4es_eglGetProcAddress|void *gl4es_glXGetProcAddress(const char *name) { return NULL; }\nvoid* gl4es_eglGetProcAddress|' src/egl/lookup.c
+          grep -q "void \*gl4es_glXGetProcAddress" src/egl/lookup.c || { echo "::error::egl lookup stub patch failed"; exit 1; }
           pip install -q cmake ninja || true
           export PATH="$HOME/.local/bin:$PATH"
           cmake -S . -B out -G Ninja \
