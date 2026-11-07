@@ -4118,7 +4118,7 @@ index ed040ff..b574b3f 100644
  }
  
 diff --git a/togl/glentrypoints.cpp b/togl/glentrypoints.cpp
-index 2d7e0f4..e92a53e 100644
+index 2d7e0f4..efed4a6 100644
 --- a/togl/glentrypoints.cpp
 +++ b/togl/glentrypoints.cpp
 @@ -23,6 +23,19 @@
@@ -4191,7 +4191,7 @@ index 2d7e0f4..e92a53e 100644
  	// SDL does the right thing, so we never need to use tier0 in this case.
  	retval = (*gGL_GetProcAddressCallback)( libname, fn, okay, bRequired, fallback); //SDL_GL_GetProcAddress(fn);
  	//printf("CDynamicFunctionOpenGL: SDL_GL_GetProcAddress(\"%s\") returned %p\n", fn, retval);
-@@ -359,6 +415,22 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
+@@ -359,13 +415,41 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
  	pszString = ( const char * )glGetString(GL_EXTENSIONS);
  	m_pGLDriverStrings[cGLExtensionsString] = strdup( pszString ? pszString : "" );
  
@@ -4214,4 +4214,40 @@ index 2d7e0f4..e92a53e 100644
  	// !!! FIXME: Alfred says the original GL_APPLE_fence code only exists to
  	// !!! FIXME:  hint Apple's drivers and not because we rely on the
  	// !!! FIXME:  functionality. If so, just remove this check (and the
-
+ 	// !!! FIXME:  GL_NV_fence code entirely).
++ 		// csARM round 57: gl4es (the Android desktop-GL driver) advertises NEITHER
++ 		// GL_ARB_sync nor GL_NV_fence nor GL_APPLE_fence, and the whole 2019 tree
++ 		// has ZERO call sites for those entry points (the GL_FUNC rows in
++ 		// public/togl/glfuncs.h are declared, filled when present, and never
++ 		// called - audited togl/shaderapidx9/engine).  Error() here would
++ 		// Plat_ExitProcess(100) a perfectly bootable software stack, so on Android
++ 		// the gate downgrades to a logcat + spew warning.
+  	if ((m_bHave_OpenGL) && ((!m_bHave_GL_NV_fence) && (!m_bHave_GL_ARB_sync) && (!m_bHave_GL_APPLE_fence)))
+  	{
++#ifdef __ANDROID__
++ 		CSARM_GLM_LOG( "no fence/sync extension (gl4es) - declared-but-unused by this engine, gate relaxed" );
++ 		Warning( "Required OpenGL extension \"GL_NV_fence\", \"GL_ARB_sync\", or \"GL_APPLE_fence\" is not supported. Continuing (csARM: the entry points are never called).\n" );
++#else
+  		Error( "Required OpenGL extension \"GL_NV_fence\", \"GL_ARB_sync\", or \"GL_APPLE_fence\" is not supported. Please upgrade your OpenGL driver." );
++#endif
+  	}
+ 
+ 	// same extension, different name.
+@@ -462,7 +546,17 @@ COpenGLEntryPoints::COpenGLEntryPoints(const char *libname)
+ #ifndef OSX
+ 	if ( !m_bHave_GL_EXT_texture_sRGB_decode )
+  	{
++ 		// csARM round 57: gl4es does not advertise GL_EXT_texture_sRGB_decode
++ 		// either; its only consumer is glmgr's m_bTexClientStorage fallback
++ 		// (togl/glmgr.cpp: m_bTexClientStorage = !m_bHave_...sRGB_decode - the
++ 		// legacy tex-client-storage path, slower but fully functional).  Same
++ 		// treatment as the fence gate above.
++#ifdef __ANDROID__
++ 		CSARM_GLM_LOG( "no GL_EXT_texture_sRGB_decode (gl4es) - m_bTexClientStorage fallback engages, gate relaxed" );
++ 		Warning( "Required OpenGL extension \"GL_EXT_texture_sRGB_decode\" is not supported. Continuing (csARM: legacy tex-client-storage path).\n" );
++#else
+  		Error( "Required OpenGL extension \"GL_EXT_texture_sRGB_decode\" is not supported. Please update your OpenGL driver.\n" );
++#endif
+  	}
+ #endif
+ }

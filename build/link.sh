@@ -568,7 +568,10 @@ link_so() {
       [ -n "$GLUE_O" ] && { objs+=("$GLUE_O"); total=$((total+1)); }
       [ -n "$GLUE_ENG_O" ] && { objs+=("$GLUE_ENG_O"); total=$((total+1)); } ;;
     libappframework.so)
-      # sdlmgr.cpp resolves the ToGL entry-point table (see glue_stubs.cpp);
+      # sdlmgr.cpp's real-renderer tail resolves the ToGL entry-point table
+      # through libtogl's real GetOpenGLEntryPoints (round 57: the glue_stubs
+      # NULL stub is GONE — it left gGL NULL and SEGV'd at glGenFramebuffersEXT,
+      # run #198 fault 0x3d8); auto-dep rounds add the libtogl DT_NEEDED.
       # filesystem_init.cpp needs FileSystem_UpdateAddonSearchPaths (glue_fs)
       [ -n "$GLUE_O" ] && { objs+=("$GLUE_O"); total=$((total+1)); }
       [ -n "$GLUE_FS_O" ] && { objs+=("$GLUE_FS_O"); total=$((total+1)); } ;;

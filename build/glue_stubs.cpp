@@ -41,12 +41,18 @@ __attribute__((weak)) bool ScaleformUI(void) { return false; }
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// ToGL GL entry-point table: appframework/sdlmgr.cpp calls this when the
-// render device initializes.  The real provider is the togl module (DX9->GL
-// shim) which is not part of the boot milestone; NULL makes the engine take
-// its fallback path instead of crashing on a missing module.
+// ToGL GL entry-point table: NO stub here any more (round 57).
+// sdlmgr.cpp (appframework) calls GetOpenGLEntryPoints(VoidFnPtrLookup_GlMgr)
+// in CreateHiddenGameWindow's real-renderer tail and fills its own gGL copy
+// from the RETURN value (Valve's per-module pattern — sdlmgr.cpp:44 and
+// shaderdevicedx8.cpp:33 each define a private gGL).  The old NULL stub
+// ("togl not part of the boot milestone") survived into the round-55 build
+// and made that assignment return NULL: run #197/#198 SEGV'd at the first
+// gGL deref (gGL->glGenFramebuffersEXT, fault 0x3d8, CreateHiddenGameWindow
+// +769).  The real provider lives in libtogl.so (glentrypoints.cpp) and is
+// the unique strong definer once this stub is gone — link.sh's auto-dep
+// rounds add DT_NEEDED libtogl to libappframework automatically.
 // ---------------------------------------------------------------------------
-extern "C" void *GetOpenGLEntryPoints(void *callback) { (void)callback; return 0; }
 
 // ---------------------------------------------------------------------------
 // Steam Datagram Relay — stubs mirroring steamnetworkingsockets flat API
