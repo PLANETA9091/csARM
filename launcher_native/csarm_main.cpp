@@ -435,6 +435,33 @@ extern "C" int SDL_main(int argc, char *argv[])
     setenv("USRLOCALCSGO", filesDir.c_str(), 1);
     setenv("USRLOCALVPCGAMECAPS", filesDir.c_str(), 1);
 
+    // csARM round 61: pin SDL's EGL driver to the bundled SwiftShader copy.
+    // Run #202: the goldfish emulation stack (/system/lib64/libEGL.so ->
+    // /vendor/lib64/egl/libEGL_emulation.so) SEGVs inside createNativeSync
+    // during the very first eglSwapBuffers (ATD image, no working native
+    // sync fences) - CSDLMgr::CreateHiddenGameWindow died on its priming
+    // swap, and the engine frame loop would die the same way at its first
+    // present.  SwiftShader's in-process EGL renders software-side and has
+    // no goldfish pipe dependency.  The app linker namespace does NOT search
+    // nativeLibraryDir ahead of /system (the #202 tombstone resolved the
+    // system libEGL despite the bundle), so the absolute path is the only
+    // reliable pin.  SDL_VIDEO_GL_DRIVER is deliberately NOT set: on the
+    // Android/EGL video backend SDL routes that variable into the EGL
+    // driver slot, and libGLESv2.so is not an EGL driver.
+    {
+        std::string eglDriver = nativeLibDir() + "/libEGL.so";
+        struct stat st;
+        if (stat(eglDriver.c_str(), &st) == 0)
+        {
+            setenv("SDL_VIDEO_EGL_DRIVER", eglDriver.c_str(), 1);
+            LOGI("CSARM_EGL pin: SDL_VIDEO_EGL_DRIVER=%s", eglDriver.c_str());
+        }
+        else
+        {
+            LOGI("CSARM_EGL pin: no bundled libEGL.so in %s - system EGL stays", nativeLibDir().c_str());
+        }
+    }
+
     makeModuleLinks(filesDir, nativeLibDir(), realRendererMode(args));
 
     // --- fill every module's private interfaces.cpp registry ---------------
