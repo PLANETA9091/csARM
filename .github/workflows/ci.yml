@@ -583,7 +583,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bundle
-          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl3
+          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl4
 
       - name: Clone + build gl4es (NDK r27d)
         run: |
@@ -617,6 +617,18 @@ jobs:
           # is NULL anyway.
           sed -i 's|^void\* gl4es_eglGetProcAddress|void *gl4es_glXGetProcAddress(const char *name) { return NULL; }\nvoid* gl4es_eglGetProcAddress|' src/egl/lookup.c
           grep -q "void \*gl4es_glXGetProcAddress" src/egl/lookup.c || { echo "::error::egl lookup stub patch failed"; exit 1; }
+          # csARM round 66: gl4es's constructor runs at dlopen (initialize_gl4es ->
+          # gl_init -> NewGLState(DEFAULT_STATE)) and glstate.c makes two contextless
+          # GLES queries (GL_VIEWPORT/GL_SCISSOR_BOX, GL_IMPLEMENTATION_COLOR_READ_*)
+          # unless built for AMIGAOS4/EMSCRIPTEN, whose guards read "if it's
+          # default_glstate, then there is probably no glcontext".  SwiftShader's
+          # es2::getContextLocked has no contextless tolerance and SEGVs (run #210:
+          # fault 0x140 in NewGLState -> glGetIntegerv).  Extend the same guards to
+          # ANDROID: the default state skips the queries (sane defaults pre-set),
+          # and per-context NewGLState(shared!=NULL) still queries with a live
+          # context.
+          sed -i 's|#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__)|#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__) || defined(ANDROID)|' src/gl/glstate.c
+          [ "$(grep -c "defined(ANDROID)" src/gl/glstate.c)" -ge 6 ] || { echo "::error::glstate.c contextless-query guard patch failed"; exit 1; }
           pip install -q cmake ninja || true
           export PATH="$HOME/.local/bin:$PATH"
           cmake -S . -B out -G Ninja \
