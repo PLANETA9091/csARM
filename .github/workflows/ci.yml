@@ -471,7 +471,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bundle
-          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss2
+          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss3
 
       - name: Clone SwiftShader at known-good Android-capable revision
         run: |
@@ -510,6 +510,22 @@ jobs:
           # Android, so our lib exports it).
           sed -i 's@{"libGLESv2_swiftshader.so", "libGLESv2_swiftshader.so"}@{"libGLESv2_swiftshader.so", "libGLESv2.so"}@' src/OpenGL/libGLESv2/libGLESv2.hpp
           grep -q '"libGLESv2.so"' src/OpenGL/libGLESv2/libGLESv2.hpp || { echo "::error::libGLESv2 name-list patch failed"; exit 1; }
+          # csARM round 69: the MIRROR image of round 68.  libGLESv2 reads the
+          # current context back through LibEGL::loadExports (main.h
+          # "extern LibEGL libEGL" -> getContextLocked ->
+          # libEGL->clientGetCurrentContext), and its __ANDROID__ name list is
+          # {"libEGL_swiftshader.so", "libEGL_swiftshader.so"} ONLY.  With no
+          # such file the exports pointer stayed NULL and the first GL call
+          # died at es2::getContextLocked+13 loading clientGetCurrentContext
+          # at offset 0x140 from NULL (run #213: GetHardwareExtensions ->
+          # gles_glGetString at gl4es dlopen time — eglCreateContext now
+          # SUCCEEDS thanks to round 68, but every GLES entry point still
+          # faults because the TLS read goes through the missing exports).
+          # Same properties as round 68: <moduledir>/libEGL.so is the module
+          # gl4es/SDL already loaded (bionic dedups by path) so the TLS that
+          # eglMakeCurrent wrote is the TLS getContextLocked reads.
+          sed -i 's@{"libEGL_swiftshader.so", "libEGL_swiftshader.so"}@{"libEGL_swiftshader.so", "libEGL.so"}@' src/OpenGL/libEGL/libEGL.hpp
+          grep -q '"libEGL.so"' src/OpenGL/libEGL/libEGL.hpp || { echo "::error::libEGL name-list patch failed"; exit 1; }
           # NDK-standalone fixes: platform-only headers are not in the NDK.
           # - FrameBufferAndroid.hpp needs cutils/native_handle.h only for the
           #   non-NDK gralloc member (dead code under ANDROID_NDK_BUILD)
@@ -572,6 +588,11 @@ jobs:
           "$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -W --dyn-syms libGLESv2.so | grep -q "libGLESv2_swiftshader" \
             || { echo "::error::libGLESv2.so does not export libGLESv2_swiftshader - loadExports mustContainSymbol gate would reject it"; exit 1; }
           echo "libGLESv2_swiftshader export present - libEGL can create contexts"
+          # round 69: symmetric gate - libGLESv2's getContextLocked reads the
+          # current context through libEGL's libEGL_swiftshader() exports
+          "$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -W --dyn-syms libEGL.so | grep -q "libEGL_swiftshader" \
+            || { echo "::error::libEGL.so does not export libEGL_swiftshader - LibEGL loadExports mustContainSymbol gate would reject it"; exit 1; }
+          echo "libEGL_swiftshader export present - libGLESv2 can read the current context"
           # sanity: correct arch
           file libEGL.so | tee /dev/stderr | grep -q aarch64 && echo "arch arm64 OK" || true
           file libEGL.so | grep -q "x86-64" && echo "arch x86_64 OK" || true
