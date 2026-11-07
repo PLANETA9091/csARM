@@ -798,8 +798,8 @@ diff -ruN a/game/server/ai_movesolver.cpp b/game/server/ai_movesolver.cpp
 --- a/game/server/ai_movesolver.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/server/ai_movesolver.cpp	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
-+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose:
  //
@@ -818,8 +818,8 @@ diff -ruN a/game/server/entitylist.h b/game/server/entitylist.h
 --- a/game/server/entitylist.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/server/entitylist.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
-+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
  //
@@ -899,8 +899,8 @@ diff -ruN a/game/shared/baseviewmodel_shared.h b/game/shared/baseviewmodel_share
 --- a/game/shared/baseviewmodel_shared.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/shared/baseviewmodel_shared.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
-+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+-//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
++//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
  //
  // Purpose: 
  //
@@ -940,8 +940,8 @@ diff -ruN a/game/shared/sharedvar.h b/game/shared/sharedvar.h
 --- a/game/shared/sharedvar.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/shared/sharedvar.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
-+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
  //
@@ -1052,8 +1052,8 @@ diff -ruN a/game/shared/util_shared.h b/game/shared/util_shared.h
 --- a/game/shared/util_shared.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/game/shared/util_shared.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
-+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: Shared util code between client and server.
  //
@@ -1496,8 +1496,8 @@ diff -ruN a/public/basehandle.h b/public/basehandle.h
 --- a/public/basehandle.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/basehandle.h	2026-11-02 19:22:40.764854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
-+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
  //
@@ -1867,8 +1867,8 @@ diff -ruN a/public/gcsdk/msgprotobuf.h b/public/gcsdk/msgprotobuf.h
 --- a/public/gcsdk/msgprotobuf.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/gcsdk/msgprotobuf.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
--//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
-+//====== Copyright © 1996-2004, Valve Corporation, All rights reserved. =======
+-//====== Copyright ï¿½ 1996-2004, Valve Corporation, All rights reserved. =======
++//====== Copyright ï¿½ 1996-2004, Valve Corporation, All rights reserved. =======
  //
  // Purpose: 
  //
@@ -1921,8 +1921,8 @@ diff -ruN a/public/mathlib/math_pfns.h b/public/mathlib/math_pfns.h
 --- a/public/mathlib/math_pfns.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/mathlib/math_pfns.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
-+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: 
  //
@@ -2017,8 +2017,8 @@ diff -ruN a/public/mathlib/mathlib.h b/public/mathlib/mathlib.h
  // Fast compare
  // maxUlps is the maximum error in terms of Units in the Last Place. This 
  // specifies how big an error we are willing to accept in terms of the value
--// of the least significant digit of the floating point number’s 
-+// of the least significant digit of the floating point number’s 
+-// of the least significant digit of the floating point numberï¿½s 
++// of the least significant digit of the floating point numberï¿½s 
  // representation. maxUlps can also be interpreted in terms of how many 
  // representable floats we are willing to accept between A and B. 
  // This function will allow maxUlps-1 floats between A and B.
@@ -2512,8 +2512,8 @@ diff -ruN a/public/tier1/byteswap.h b/public/tier1/byteswap.h
 --- a/public/tier1/byteswap.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/tier1/byteswap.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2006, Valve LLC, All rights reserved. ============
-+//========= Copyright © 1996-2006, Valve LLC, All rights reserved. ============
+-//========= Copyright ï¿½ 1996-2006, Valve LLC, All rights reserved. ============
++//========= Copyright ï¿½ 1996-2006, Valve LLC, All rights reserved. ============
  //
  // Purpose: Low level byte swapping routines.
  //
@@ -2538,8 +2538,8 @@ diff -ruN a/public/tier1/tokenset.h b/public/tier1/tokenset.h
 --- a/public/tier1/tokenset.h	2026-08-10 03:28:37.000000000 +0000
 +++ b/public/tier1/tokenset.h	2026-11-02 19:22:40.765854264 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 2008, Valve Corporation, All rights reserved. ============//
-+//========= Copyright © 2008, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 2008, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 2008, Valve Corporation, All rights reserved. ============//
  
  #ifndef __TOKENSET_H
  #define __TOKENSET_H
@@ -2880,8 +2880,8 @@ diff -ruN a/tier1/processor_detect_linux.cpp b/tier1/processor_detect_linux.cpp
 --- a/tier1/processor_detect_linux.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/tier1/processor_detect_linux.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -1,4 +1,4 @@
--//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
-+//========= Copyright © 1996-2005, Valve Corporation, All rights reserved. ============//
+-//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
++//========= Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ============//
  //
  // Purpose: linux dependant ASM code for CPU capability detection
  //
@@ -3037,8 +3037,8 @@ diff -ruN a/utils/common/bsplib.cpp b/utils/common/bsplib.cpp
 --- a/utils/common/bsplib.cpp	2026-08-10 03:28:37.000000000 +0000
 +++ b/utils/common/bsplib.cpp	2026-11-02 19:22:40.766854263 +0000
 @@ -1,4 +1,4 @@
--//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
-+//===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
+-//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
++//===== Copyright ï¿½ 1996-2005, Valve Corporation, All rights reserved. ======//
  //
  // Purpose: 
  //
@@ -4028,6 +4028,233 @@ index d0ce5c0..72dcb80 100644
  #pragma warning (disable:4189 4701)
  #endif
 
+--- a/appframework/sdlmgr.cpp
++++ b/appframework/sdlmgr.cpp
+@@ -15,6 +15,10 @@
+ #include "tier0/fasttimer.h"
+ 
+ 
++#include "common/csarm_log.h"
++#include <dlfcn.h>
++#include <string>
++
+ // NOTE: This has to be the last file included! (turned off below, since this is included like a header)
+ #include "tier0/memdbgon.h"
+ 
+@@ -126,6 +130,54 @@
+ 
+ 	// The SDL path would work on all these platforms, if we were using SDL there, too...
+ #if defined( USE_SDL )
++	// csARM round 58: gl4es-first.  Run #199 proved bionic symbol
++	// interposition: BOTH libappframework and libtogl export
++	// VoidFnPtrLookup_GlMgr, and libappframework's export (THIS function)
++	// shadows libtogl's gl4es-aware copy for every caller - the
++	// COpenGLEntryPoints ctor went straight here (the CSARM_EXIT_BT has no
++	// togl lookup frame between ctor and Error, and zero CSARM_GLM lines
++	// appeared).  SDL's EGL proc path (SwiftShader libEGL) returns NULL for
++	// core names - 'glGetError' - because eglGetProcAddress is
++	// extension-only per spec and libEGL.so exports no gl* symbols, so the
++	// engine Plat_ExitProcess'd in the ctor before any frame.  The gl4es
++	// dlopen+dlsym path therefore lives HERE: gl4es libGL.so (bundled in
++	// nativeLibraryDir; 1222 gl* exports, GL 2.1 + GL_ARB_framebuffer_object;
++	// DT_NEEDED only libm/libdl/libc) resolves every entry point with a
++	// plain dlsym - no GL context needed.  Whatever gl4es lacks still falls
++	// back to SDL below, exactly like before.
++	{
++		static void *s_hGl4es = NULL;
++		static bool s_bGl4esTried = false;
++		if ( !s_bGl4esTried )
++		{
++			s_bGl4esTried = true;
++			s_hGl4es = dlopen( "libGL.so", RTLD_NOW | RTLD_GLOBAL );
++			if ( !s_hGl4es )
++			{
++				Dl_info info;
++				if ( dladdr( (void *)&VoidFnPtrLookup_GlMgr, &info ) && info.dli_fname )
++				{
++					std::string dir( info.dli_fname );
++					size_t slash = dir.rfind( '/' );
++					if ( slash != std::string::npos )
++					{
++						std::string path = dir.substr( 0, slash + 1 ) + "libGL.so";
++						s_hGl4es = dlopen( path.c_str(), RTLD_NOW | RTLD_GLOBAL );
++					}
++				}
++			}
++			CSARM_LOGI( "GLM: gl4es libGL.so %s", s_hGl4es ? "loaded (desktop-GL entry points active)" : "FAILED - SDL/GLES fallback (EXT slots will be NULL)" );
++		}
++		if ( s_hGl4es )
++		{
++			retval = dlsym( s_hGl4es, fn );
++			if ( retval )
++			{
++				okay = true;
++				return retval;
++			}
++		}
++	}
+ 	// SDL does the right thing, so we never need to use tier0 in this case.
+ 	retval = SDL_GL_GetProcAddress(fn);
+ 	//printf("CDynamicFunctionOpenGL: SDL_GL_GetProcAddress(\"%s\") returned %p\n", fn, retval);
+@@ -146,6 +198,30 @@
+ 	okay = (okay && (retval != NULL));
+ 	if (bRequired && !okay)
+ 	{
++		// csARM round 60: gl4es advertises GL_ARB_sampler_objects-style usage
++		// through its caps but exports neither the six sampler entry points
++		// nor glColorMaskIndexedEXT (GL_EXT_draw_buffers2), while glfuncs.h
++		// marks all of them REQUIRED - run #201 died on the first one
++		// ('glColorMaskIndexedEXT') right after the honest fence/sync flags
++		// printed.  Audited safe to tolerate on Android: GLMContext hardcodes
++		// m_bUseSamplerObjects=false unless -gl_enablesamplerobjects is passed
++		// (glmgr.cpp:2716 - never in the csARM args), so the sampler slots are
++		// never dereferenced, and NO caller of glColorMaskIndexedEXT exists in
++		// togl/shaderapidx9 (grepped glmgr/meshdx8/shaderapidx8/dxabstract;
++		// m_bHave_GL_EXT_draw_buffers2 itself is read nowhere).  Warn and
++		// return NULL instead of Plat_ExitProcess-ing a bootable stack.
++		static const char *const kToleratedMissing[] = {
++			"glGenSamplers", "glDeleteSamplers", "glBindSampler",
++			"glSamplerParameteri", "glSamplerParameterf", "glSamplerParameterfv",
++			"glColorMaskIndexedEXT", NULL };
++		for ( int i = 0; kToleratedMissing[i]; ++i )
++		{
++			if ( strcmp( kToleratedMissing[i], fn ) == 0 )
++			{
++				CSARM_LOGI( "GLM: entry point '%s' absent from gl4es - tolerated (slot never dereferenced by this engine)", fn );
++				return NULL;
++			}
++		}
+ 		// We can't continue execution, because one or more GL function pointers will be NULL.
+ 		Error( "Could not find required OpenGL entry point '%s'! Either your video card is unsupported, or your OpenGL driver needs to be updated.\n", fn);
+ 	}
+@@ -568,6 +644,25 @@
+ 
+ 	m_pixelFormatAttribCount = (attCursor - &m_pixelFormatAttribs[0]) / 2;
+ 
++	#ifdef __ANDROID__
++	// csARM round 56b: runtime-gated on -noshaderapi.  shaderapiempty mode
++	// keeps the old skip (the hidden GL window needs a Java-side surface
++	// SDL 2.0.2 cannot wire up from this thread, and the boot path does not
++	// present frames); the real renderer (gl4es libGL over the bundled
++	// SwiftShader) needs the window + context before togl digs in.
++	if ( CommandLine()->FindParm( "-noshaderapi" ) )
++	{
++		CSARM_LOGI( "SDLMgr: skip hidden game window (Android, -noshaderapi)" );
++	}
++	else
++	{
++		if ( !CreateHiddenGameWindow( "", true, 640, 480 ) )
++			Error( "CreateGameWindow failed" );
++
++		if ( !m_bTextMode )
++			SDL_HideWindow( m_Window );
++	}
++	#else
+ 	// we need a GL context before we dig down further, since we're calling
+ 	//  GL entry points, but the game hasn't made a window yet. So it's time
+ 	//  to make a window! We make a 640x480 one here, and later, when asked
+@@ -577,6 +672,7 @@
+ 
+ 	if ( !m_bTextMode )
+ 		SDL_HideWindow( m_Window );
++	#endif
+ 
+ 	return INIT_OK;
+ }
+@@ -752,11 +848,49 @@
+ 	}
+ 
+ #if defined( DX_TO_GL_ABSTRACTION )
++	// csARM round 56b: this block is runtime-gated on -noshaderapi.  In
++	// shaderapiempty mode the old skip stands (runs 41405448535/41422299535:
++	// a bare GLES context left gGL unusable -> SEGV in the tails; boot does
++	// not present frames).  The real renderer goes through gl4es' libGL.so
++	// (togl's entry-point lookup dlsyms it first, round 56b), so the
++	// context + entry points + clear/swap tail run for it.
++	if ( CommandLine()->FindParm( "-noshaderapi" ) == 0 )
++	{
++#ifdef __ANDROID__
++	// csARM round 70: ONE GL context for the whole process.  gl4es's EGL
++	// wrapper is a pure passthrough (gl4es_eglMakeCurrent just forwards to
++	// SwiftShader; gl4es's ActivateGLState only ever runs from the glx/agl
++	// paths), so gl4es keeps ONE internal glstate no matter how many EGL
++	// contexts exist, while SwiftShader switches its TLS per
++	// SDL_GL_CreateContext.  A second SDL context therefore splits the
++	// object namespace: device #2's FBO is glGen'd through gl4es's single
++	// map, but CGLMFBO's desktop-style single-name assumption breaks -
++	// gl4es_glBindFramebuffer's find_framebuffer() misses the name,
++	// rejects the bind (shimmed GL_INVALID_VALUE that togl never reads),
++	// glCheckFramebufferStatus then runs on FBO 0 and returns 0, and
++	// CGLMFBO::IsReady's default: case int3'd the process (run #214,
++	// SIGTRAP in IDirect3DDevice9::Create on the SetMode device).
++	// Re-surface the existing context on the new window instead: EGL
++	// allows eglMakeCurrent(newSurface, oldContext), so the process keeps
++	// one namespace and the desktop code paths stay valid.
++	if ( !m_GLContext )
++	{
++		m_GLContext = SDL_GL_CreateContext(m_Window);
++		if (m_GLContext == NULL)
++			Error( "Failed to create GL context: %s", SDL_GetError() );
++	}
++	else
++	{
++		CSARM_LOGI( "SDLMgr: reusing existing GL context for new window (%dx%d)", width, height );
++	}
++	SDL_GL_MakeCurrent(m_Window, m_GLContext);
++#else
+ 	m_GLContext = SDL_GL_CreateContext(m_Window);
+ 	if (m_GLContext == NULL)
+ 		Error( "Failed to create GL context: %s", SDL_GetError() );
+ 
+ 	SDL_GL_MakeCurrent(m_Window, m_GLContext);
++#endif
+ 
+ 	// !!! FIXME: note for later...we never delete this context anywhere, I think.
+ 	// !!! FIXME:  when we do get around to that, don't forget to delete/NULL gGL!
+@@ -813,12 +947,24 @@
+ 	// Blank out the initial window, so we're not looking at uninitialized
+ 	//  video RAM trash until we start proper drawing.
+ 	gGL->glClearColor(0,0,0,0);
++#ifndef __ANDROID__
++	// csARM round 61/62: the desktop priming swap/clear pairs are off on
++	// Android.  Run #202: the goldfish emulation EGL SEGV'd in
++	// createNativeSync on the first of them (ATD image, no native sync
++	// fences); run #203 proved the pristine tail has THREE pairs and the
++	// round-61 gate left the first one live (CSDLMgr::CreateHiddenGameWindow
++	//+856 -> SDL_GL_SwapWindow@plt).  On Android the hidden context exists
++	// only so the entry-point lookup has a handle - gGL fills from gl4es
++	// dlsym with no context dependency, and the engine presents on the real
++	// game window later, not on this hidden one.
+ 	gGL->glClear(GL_COLOR_BUFFER_BIT);
+ 	SDL_GL_SwapWindow(m_Window);
+ 	gGL->glClear(GL_COLOR_BUFFER_BIT);
+ 	SDL_GL_SwapWindow(m_Window);
+ 	gGL->glClear(GL_COLOR_BUFFER_BIT);
+ 	SDL_GL_SwapWindow(m_Window);
++#endif // __ANDROID__
++	} // csARM round 56b: end of the -noshaderapi runtime gate
+ #endif // DX_TO_GL_ABSTRACTION
+ 
+ 	m_WindowWidth = width;
+@@ -1431,8 +1577,16 @@
+ 	PumpEvents();
+ 
+ #if defined( DX_TO_GL_ABSTRACTION )
+-	gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
+-	gGL->glScissor( 0,0, (GLsizei) width, (GLsizei) tall );
++	// csARM run 41422299535 (SW boot): AdjustWindow->SizeWindow fires before
++	// any real GL context exists on Android, gGL is NULL and the entry-point
++	// struct deref SEGVs at gGL->glViewport (fault 0x338).  Round 56b: the
++	// tail runs only for the real renderer (gl4es libGL); shaderapiempty
++	// mode keeps the skip at runtime.
++	if ( CommandLine()->FindParm( "-noshaderapi" ) == 0 )
++	{
++		gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
++		gGL->glScissor( 0,0, (GLsizei) width, (GLsizei) tall );
++	}
+ #endif
+ }
+ 
 diff --git a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
 index ed040ff..90ad86f 100644
 --- a/appframework/sdlmgr.cpp
@@ -4222,6 +4449,51 @@ index ed040ff..90ad86f 100644
  #endif
  }
  
+
+--- a/togl/cglmfbo.cpp
++++ b/togl/cglmfbo.cpp
+@@ -6,6 +6,8 @@
+ 
+ #include "togl/rendermechanism.h"
+ 
++#include "common/csarm_log.h"
++
+ // memdbgon -must- be the last include file in a .cpp file.
+ #include "tier0/memdbgon.h"
+ 
+@@ -319,14 +321,32 @@
+ 
+ 		case GL_FRAMEBUFFER_UNSUPPORTED_EXT:
+ 			result = false;
++#ifndef __ANDROID__
+ 			DebuggerBreak();
++#endif
+ 			/* choose different formats */
++#ifdef __ANDROID__
++			// csARM round 70: a trap here killed the process before the
++			// engine could report anything (run #214).  Log and let the
++			// device create fail gracefully instead.
++			CSARM_LOGI( "GLM: FBO %u status 0x%X (UNSUPPORTED) - report, don't trap", m_name, (unsigned)status );
++#endif
+ 		break;
+ 
+ 		default:
+ 			result = false;
++#ifndef __ANDROID__
+ 			DebuggerBreak();
++#endif
+ 			/* programming error; will fail on all hardware */
++#ifdef __ANDROID__
++			// csARM round 70: run #214 hit this with status 0 - gl4es
++			// rejected the FBO bind (find_framebuffer miss, shimmed
++			// GL_INVALID_VALUE) so SwiftShader still had FBO 0 bound and
++			// returned 0 (GL_INVALID_OPERATION per spec).  Report the raw
++			// status and fail the create gracefully.
++			CSARM_LOGI( "GLM: FBO %u status 0x%X (unexpected) - report, don't trap", m_name, (unsigned)status );
++#endif
+ 		break;
+ 	}
+ 	return result;
 diff --git a/togl/cglmprogram.cpp b/togl/cglmprogram.cpp
 index 03927e3..36d7c0b 100644
 --- a/togl/cglmprogram.cpp
