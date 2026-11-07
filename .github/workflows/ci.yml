@@ -583,7 +583,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bundle
-          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl1
+          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl2
 
       - name: Clone + build gl4es (NDK r27d)
         run: |
@@ -616,7 +616,7 @@ jobs:
             -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24 \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_STANDARD_LIBRARIES="-lm" \
-            -DEGL_WRAPPER=ON
+            -DEGL_WRAPPER=ON -DGLX_STUBS=ON
           cmake --build out --parallel $(nproc)
           # NB: stay inside gl4es/ is fine — B is absolute (run #196: the cp
           # landed in gl4es/bundle/ and the artifact uploaded empty)
