@@ -4223,7 +4223,7 @@ index ed040ff..90ad86f 100644
  }
  
 diff --git a/togl/cglmprogram.cpp b/togl/cglmprogram.cpp
-index 03927e3..74708bb 100644
+index 03927e3..36d7c0b 100644
 --- a/togl/cglmprogram.cpp
 +++ b/togl/cglmprogram.cpp
 @@ -327,6 +327,18 @@ void	CGLMProgram::CompileActiveSources	( void )
@@ -4237,7 +4237,7 @@ index 03927e3..74708bb 100644
 +			// The engine draws in GLSL anyway (GLMContext::GLMContext defaults
 +			// m_drawingLang to kGLMGLSL; -arbmode is never passed), so the ARB
 +			// descriptions are dead weight: skip the ARB compile entirely.
-+			if ( (EGLMProgramLang)i == kGLMARb )
++			if ( (EGLMProgramLang)i == kGLMARB )
 +			{
 +				continue;
 +			}
