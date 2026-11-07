@@ -4029,19 +4029,76 @@ index d0ce5c0..72dcb80 100644
  #endif
 
 diff --git a/appframework/sdlmgr.cpp b/appframework/sdlmgr.cpp
-index ed040ff..b574b3f 100644
+index ed040ff..7f90969 100644
 --- a/appframework/sdlmgr.cpp
 +++ b/appframework/sdlmgr.cpp
-@@ -15,6 +15,8 @@
+@@ -15,6 +15,10 @@
  #include "tier0/fasttimer.h"
  
  
 +#include "common/csarm_log.h"
++#include <dlfcn.h>
++#include <string>
 +
  // NOTE: This has to be the last file included! (turned off below, since this is included like a header)
  #include "tier0/memdbgon.h"
  
-@@ -568,6 +570,25 @@ InitReturnVal_t CSDLMgr::Init()
+@@ -126,6 +130,54 @@ void *VoidFnPtrLookup_GlMgr( const char *libname, const char *fn, bool &okay, co
+ 
+ 	// The SDL path would work on all these platforms, if we were using SDL there, too...
+ #if defined( USE_SDL )
++	// csARM round 58: gl4es-first.  Run #199 proved bionic symbol
++	// interposition: BOTH libappframework and libtogl export
++	// VoidFnPtrLookup_GlMgr, and libappframework's export (THIS function)
++	// shadows libtogl's gl4es-aware copy for every caller - the
++	// COpenGLEntryPoints ctor went straight here (the CSARM_EXIT_BT has no
++	// togl lookup frame between ctor and Error, and zero CSARM_GLM lines
++	// appeared).  SDL's EGL proc path (SwiftShader libEGL) returns NULL for
++	// core names - 'glGetError' - because eglGetProcAddress is
++	// extension-only per spec and libEGL.so exports no gl* symbols, so the
++	// engine Plat_ExitProcess'd in the ctor before any frame.  The gl4es
++	// dlopen+dlsym path therefore lives HERE: gl4es libGL.so (bundled in
++	// nativeLibraryDir; 1222 gl* exports, GL 2.1 + GL_ARB_framebuffer_object;
++	// DT_NEEDED only libm/libdl/libc) resolves every entry point with a
++	// plain dlsym - no GL context needed.  Whatever gl4es lacks still falls
++	// back to SDL below, exactly like before.
++	{
++		static void *s_hGl4es = NULL;
++		static bool s_bGl4esTried = false;
++		if ( !s_bGl4esTried )
++		{
++			s_bGl4esTried = true;
++			s_hGl4es = dlopen( "libGL.so", RTLD_NOW | RTLD_GLOBAL );
++			if ( !s_hGl4es )
++			{
++				Dl_info info;
++				if ( dladdr( (void *)&VoidFnPtrLookup_GlMgr, &info ) && info.dli_fname )
++				{
++					std::string dir( info.dli_fname );
++					size_t slash = dir.rfind( '/' );
++					if ( slash != std::string::npos )
++					{
++						std::string path = dir.substr( 0, slash + 1 ) + "libGL.so";
++						s_hGl4es = dlopen( path.c_str(), RTLD_NOW | RTLD_GLOBAL );
++					}
++				}
++			}
++			CSARM_LOGI( "GLM: gl4es libGL.so %s", s_hGl4es ? "loaded (desktop-GL entry points active)" : "FAILED - SDL/GLES fallback (EXT slots will be NULL)" );
++		}
++		if ( s_hGl4es )
++		{
++			retval = dlsym( s_hGl4es, fn );
++			if ( retval )
++			{
++				okay = true;
++				return retval;
++			}
++		}
++	}
+ 	// SDL does the right thing, so we never need to use tier0 in this case.
+ 	retval = SDL_GL_GetProcAddress(fn);
+ 	//printf("CDynamicFunctionOpenGL: SDL_GL_GetProcAddress(\"%s\") returned %p\n", fn, retval);
+@@ -568,6 +620,25 @@ InitReturnVal_t CSDLMgr::Init()
  
  	m_pixelFormatAttribCount = (attCursor - &m_pixelFormatAttribs[0]) / 2;
  
@@ -4067,7 +4124,7 @@ index ed040ff..b574b3f 100644
  	// we need a GL context before we dig down further, since we're calling
  	//  GL entry points, but the game hasn't made a window yet. So it's time
  	//  to make a window! We make a 640x480 one here, and later, when asked
-@@ -577,6 +598,7 @@ InitReturnVal_t CSDLMgr::Init()
+@@ -577,6 +648,7 @@ InitReturnVal_t CSDLMgr::Init()
  
  	if ( !m_bTextMode )
  		SDL_HideWindow( m_Window );
@@ -4075,7 +4132,7 @@ index ed040ff..b574b3f 100644
  
  	return INIT_OK;
  }
-@@ -752,6 +774,14 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
+@@ -752,6 +824,14 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
  	}
  
  #if defined( DX_TO_GL_ABSTRACTION )
@@ -4090,7 +4147,7 @@ index ed040ff..b574b3f 100644
  	m_GLContext = SDL_GL_CreateContext(m_Window);
  	if (m_GLContext == NULL)
  		Error( "Failed to create GL context: %s", SDL_GetError() );
-@@ -819,6 +849,7 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
+@@ -819,6 +899,7 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, bool bWindowed, int wi
  	SDL_GL_SwapWindow(m_Window);
  	gGL->glClear(GL_COLOR_BUFFER_BIT);
  	SDL_GL_SwapWindow(m_Window);
@@ -4098,7 +4155,7 @@ index ed040ff..b574b3f 100644
  #endif // DX_TO_GL_ABSTRACTION
  
  	m_WindowWidth = width;
-@@ -1431,8 +1462,16 @@ void CSDLMgr::SizeWindow( int width, int tall )
+@@ -1431,8 +1512,16 @@ void CSDLMgr::SizeWindow( int width, int tall )
  	PumpEvents();
  
  #if defined( DX_TO_GL_ABSTRACTION )
