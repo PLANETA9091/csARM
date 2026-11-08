@@ -3952,7 +3952,19 @@ diff -ruN a/engine/networkstringtable.cpp b/engine/networkstringtable.cpp
  			Assert( 0 );
  		}
  	}
-@@ -3143,6 +3160,20 @@
+@@ -2825,6 +2842,11 @@
+ 
+ #if defined( USE_SDL )
+ 	m_ctx = (SDL_GLContext)GetGLContextForWindow( params ? (void*)params->m_focusWindow : NULL );
++#ifdef __ANDROID__
++	// csARM round 73: make the context handout visible - which SDL context
++	// this GLMContext wrapped, on which thread, and whether the bind took.
++	CSARM_LOGI( "GLM: ctor sdlctx=%p thread=%u", m_ctx, (unsigned)ThreadGetCurrentId() );
++#endif
+ 	MakeCurrent( true );
+ 	m_oneCtxEnable = true;
+ #elif defined( OSX )
+@@ -3143,6 +3165,20 @@
  	}
  #endif
  
@@ -4307,7 +4319,26 @@ index d0ce5c0..72dcb80 100644
  #endif // DX_TO_GL_ABSTRACTION
  
  	m_WindowWidth = width;
-@@ -1431,8 +1577,16 @@
+@@ -859,6 +1005,18 @@
+ {
+ 	SDLAPP_FUNC;
+ 
++#ifdef __ANDROID__
++	// csARM round 73: make every (re)bind visible.  Runs #216-#218 burned
++	// three rounds on an invisible context-handoff problem - the FBO name
++	// stayed 0 because the thread creating the SetMode device never
++	// actually received the context.  Log who binds what where, and note
++	// that SDL 2.0.2's fast path (SDL_GL_GetCurrentWindow/Context are
++	// TLS-backed) can still report success without EGL ever seeing the
++	// call if the pair matches this thread's stale TLS.
++	int _ok = SDL_GL_MakeCurrent(m_Window, (SDL_GLContext)hContext );
++	CSARM_LOGI( "SDLMgr: MakeCurrent win=%p ctx=%p tid=%u -> %d", m_Window, hContext, (unsigned)SDL_ThreadID(), _ok );
++	return _ok == 0;
++#endif
+ 	// We only ever have one GL context on Linux at the moment, so don't spam these calls.
+ 	return SDL_GL_MakeCurrent(m_Window, (SDL_GLContext)hContext ) == 0;
+ }
+@@ -1431,8 +1589,16 @@
  	PumpEvents();
  
  #if defined( DX_TO_GL_ABSTRACTION )
@@ -4328,7 +4359,7 @@ index d0ce5c0..72dcb80 100644
  
 --- a/togl/cglmfbo.cpp
 +++ b/togl/cglmfbo.cpp
-@@ -6,13 +6,28 @@
+@@ -6,15 +6,32 @@
  
  #include "togl/rendermechanism.h"
  
@@ -4341,30 +4372,34 @@ index d0ce5c0..72dcb80 100644
  {
  	m_ctx = ctx;
 +#ifdef __ANDROID__
-+	// csARM round 71: CheckCurrent is a no-op (upstream removed it on
-+	// Linux), but on Android the SDL/EGL layer silently drops the current
-+	// context between device generations (native-surface churn inside
-+	// SDL_ShowWindow/SizeWindow sits between device #1 and the SetMode
-+	// device).  With no current context SwiftShader's glGenFramebuffers
-+	// no-ops, m_name stays 0 (run #216: "GLM: FBO 0 status 0x0"), the bind
-+	// is rejected and IsReady sees status 0.  Force the context current on
-+	// this cold path before generating; everything downstream (render
-+	// targets, attach, status) inherits the restored context.
-+	m_ctx->MakeCurrent();
++	// csARM round 73: CheckCurrent is a no-op (upstream removed it on
++	// Linux).  Forcing the context current here is load-bearing on
++	// Android: an EGL context only becomes current per-THREAD, and the
++	// thread creating this FBO may never have had it (runs #216-#218).
++	// NB: MakeCurrent(true) - the false/bRenderThread=false path of
++	// GLMContext::MakeCurrent compiles to NOTHING with CHECK_THREAD_USAGE
++	// undefined, so the round-71 call was a silent no-op.
++	m_ctx->MakeCurrent( true );
++	CSARM_LOGI( "GLM: FBO ctor ctx=%p sdl=%p", m_ctx, m_ctx->m_ctx );
 +#else
  	m_ctx->CheckCurrent();
 +#endif
  	
  	gGL->glGenFramebuffersEXT( 1, &m_name );
++#ifdef __ANDROID__
++	CSARM_LOGI( "GLM: FBO ctor gen -> name=%u", m_name );
++#endif
  	
-@@ -303,8 +318,14 @@
+ 	memset( m_attach, 0, sizeof( m_attach ) );
+ }
+@@ -303,8 +320,14 @@
  {
  	bool result = false;
  	
 +#ifdef __ANDROID__
-+	// csARM round 71: same rationale as the ctor - this is a cold path and
-+	// the SDL/EGL layer may have dropped the context since the last use.
-+	m_ctx->MakeCurrent();
++	// csARM round 73: same rationale as the ctor - cold path, and the
++	// bRenderThread=false variant of MakeCurrent is a compiled-out no-op.
++	m_ctx->MakeCurrent( true );
 +#else
  	// ensure our parent context is current
  	m_ctx->CheckCurrent();
@@ -4372,7 +4407,7 @@ index d0ce5c0..72dcb80 100644
  	
  	// bind to context (will cause FBO object creation on first use)
  	m_ctx->BindFBOToCtx( this );
-@@ -319,14 +340,32 @@
+@@ -319,14 +342,32 @@
  
  		case GL_FRAMEBUFFER_UNSUPPORTED_EXT:
  			result = false;
