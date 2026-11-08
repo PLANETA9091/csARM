@@ -4046,8 +4046,8 @@ index ec3fd9c..664d11d 100644
  #ifdef _WIN32
  #pragma warning (disable:4189)
  #endif
---- a/materialsystem/shaderapidx9/shaderdevicedx8.cpp	2026-11-08 09:27:55.455814451 +0000
-+++ b/materialsystem/shaderapidx9/shaderdevicedx8.cpp	2026-11-08 09:27:55.456814454 +0000
+--- a/materialsystem/shaderapidx9/shaderdevicedx8.cpp	2026-11-08 09:38:19.652616309 +0000
++++ b/materialsystem/shaderapidx9/shaderdevicedx8.cpp	2026-11-08 09:38:19.652616309 +0000
 @@ -14,6 +14,7 @@
  #include "filesystem.h"
  #include "tier0/icommandline.h"
@@ -4056,7 +4056,7 @@ index ec3fd9c..664d11d 100644
  #include "shadershadowdx8.h"
  #include "colorformatdx8.h"
  #include "materialsystem/IShader.h"
-@@ -691,7 +692,9 @@
+@@ -753,7 +754,9 @@
  		if ( pVendorID )
  		{
  			int nVendorID = V_atoi( pVendorID );	// use V_atoi for hex support
@@ -4067,7 +4067,7 @@ index ec3fd9c..664d11d 100644
  			{
  				ident.VendorId = nVendorID;
  			}
-@@ -2430,6 +2433,22 @@
+@@ -2508,6 +2511,22 @@
  		if ( !IsPC() )
  			return NULL;
  
@@ -4090,7 +4090,7 @@ index ec3fd9c..664d11d 100644
  		// try again, other applications may be taking their time
  		Sleep( 1000 );
  		hr = D3D()->CreateDevice( nAdapter, devType, (VD3DHWND)hWnd, deviceCreationFlags, &m_PresentParameters, &pD3DDevice );
-@@ -2459,6 +2478,13 @@
+@@ -2537,6 +2556,13 @@
  	{
  		// Otherwise we failed, show a message and shutdown
  		pD3DDevice = NULL;
@@ -4121,8 +4121,8 @@ index d0ce5c0..72dcb80 100644
  #pragma warning (disable:4189 4701)
  #endif
 
---- a/appframework/sdlmgr.cpp	2026-11-08 09:27:55.454814448 +0000
-+++ b/appframework/sdlmgr.cpp	2026-11-08 09:27:55.454814448 +0000
+--- a/appframework/sdlmgr.cpp	2026-11-08 09:38:19.651616306 +0000
++++ b/appframework/sdlmgr.cpp	2026-11-08 09:38:19.651616306 +0000
 @@ -15,6 +15,10 @@
  #include "tier0/fasttimer.h"
  
@@ -4355,8 +4355,8 @@ index d0ce5c0..72dcb80 100644
  	// We only ever have one GL context on Linux at the moment, so don't spam these calls.
  	return SDL_GL_MakeCurrent(m_Window, (SDL_GLContext)hContext ) == 0;
  }
-@@ -1415,8 +1580,16 @@
- 	SDL_SetWindowSize(m_Window, width, tall);
+@@ -1431,8 +1596,16 @@
+ 	PumpEvents();
  
  #if defined( DX_TO_GL_ABSTRACTION )
 -	gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
@@ -4374,8 +4374,8 @@ index d0ce5c0..72dcb80 100644
  #endif
  }
  
---- a/togl/cglmfbo.cpp	2026-11-08 09:27:55.452814442 +0000
-+++ b/togl/cglmfbo.cpp	2026-11-08 09:27:55.452814442 +0000
+--- a/togl/cglmfbo.cpp	2026-11-08 09:38:19.650616303 +0000
++++ b/togl/cglmfbo.cpp	2026-11-08 09:38:19.650616303 +0000
 @@ -6,15 +6,91 @@
  
  #include "togl/rendermechanism.h"
