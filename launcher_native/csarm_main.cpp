@@ -469,6 +469,17 @@ extern "C" int SDL_main(int argc, char *argv[])
                 setenv("LIBGL_GLES", swGles.c_str(), 1);
             if (stat(swEgl.c_str(), &st) == 0)
                 setenv("LIBGL_EGL", swEgl.c_str(), 1);
+            // csARM round 74: pin the ES backend version.  gl4es's
+            // eglCreateContext wrapper picks the attrib list from
+            // hardext.esversion, and GetHardwareExtensions never updates
+            // that field from the driver - it stays at LIBGL_ES (or
+            // DEFAULT_ES).  An esversion of 1 makes the wrapper pass an
+            // EMPTY attrib list (no EGL_CONTEXT_CLIENT_VERSION), and
+            // SwiftShader's es2::getContextLocked() then rejects the
+            // context (client version != 2/3 -> es2::getContext() NULL ->
+            // every GL entry point silently no-ops on unwritten out
+            // params).  LIBGL_ES=2 keeps the whole chain ES2.
+            setenv("LIBGL_ES", "2", 1);
             LOGI("CSARM_EGL pin: gl4es wrapper=%s gles=%s egl=%s",
                  getenv("SDL_VIDEO_EGL_DRIVER") ? getenv("SDL_VIDEO_EGL_DRIVER") : "-",
                  getenv("LIBGL_GLES") ? getenv("LIBGL_GLES") : "-",

@@ -4046,8 +4046,8 @@ index ec3fd9c..664d11d 100644
  #ifdef _WIN32
  #pragma warning (disable:4189)
  #endif
---- a/materialsystem/shaderapidx9/shaderdevicedx8.cpp
-+++ b/materialsystem/shaderapidx9/shaderdevicedx8.cpp
+--- a/materialsystem/shaderapidx9/shaderdevicedx8.cpp	2026-11-08 09:27:55.455814451 +0000
++++ b/materialsystem/shaderapidx9/shaderdevicedx8.cpp	2026-11-08 09:27:55.456814454 +0000
 @@ -14,6 +14,7 @@
  #include "filesystem.h"
  #include "tier0/icommandline.h"
@@ -4056,7 +4056,7 @@ index ec3fd9c..664d11d 100644
  #include "shadershadowdx8.h"
  #include "colorformatdx8.h"
  #include "materialsystem/IShader.h"
-@@ -753,7 +754,9 @@
+@@ -691,7 +692,9 @@
  		if ( pVendorID )
  		{
  			int nVendorID = V_atoi( pVendorID );	// use V_atoi for hex support
@@ -4067,7 +4067,7 @@ index ec3fd9c..664d11d 100644
  			{
  				ident.VendorId = nVendorID;
  			}
-@@ -2508,6 +2511,12 @@
+@@ -2430,6 +2433,22 @@
  		if ( !IsPC() )
  			return NULL;
  
@@ -4076,11 +4076,21 @@ index ec3fd9c..664d11d 100644
 +		// into an int3 pad (runs #216/#217 died at InvokeCreateDevice+235
 +		// and +226 the moment CreateDevice returned a failure, before the
 +		// final-else log could run).  Side effects make the branch real.
-+		CSARM_LOGW( "InvokeCreateDevice: attempt FAILED hr=0x%08x - retrying", (unsigned)hr );
++		// csARM round 74: run #219 proved logging alone does not fix the
++		// branch - clang still terminates it with the int3 pad (SIGTRAP at
++		// pc=InvokeCreateDevice+254: the 'attempt FAILED' line printed, then
++		// the trap; the Sleep/retry ladder after the int3 is unreachable
++		// fall-through).  The retry cannot help anyway - the create failure
++		// is deterministic - and CreateD3DDevice handles NULL cleanly
++		// ('if (!pD3DDevice) return false;').
++		CSARM_LOGW( "InvokeCreateDevice: attempt FAILED hr=0x%08x device=%p - giving up", (unsigned)hr, (void*)pD3DDevice );
++#ifdef __ANDROID__
++		return NULL;
++#endif
  		// try again, other applications may be taking their time
  		Sleep( 1000 );
  		hr = D3D()->CreateDevice( nAdapter, devType, (VD3DHWND)hWnd, deviceCreationFlags, &m_PresentParameters, &pD3DDevice );
-@@ -2537,6 +2546,13 @@
+@@ -2459,6 +2478,13 @@
  	{
  		// Otherwise we failed, show a message and shutdown
  		pD3DDevice = NULL;
@@ -4111,8 +4121,8 @@ index d0ce5c0..72dcb80 100644
  #pragma warning (disable:4189 4701)
  #endif
 
---- a/appframework/sdlmgr.cpp
-+++ b/appframework/sdlmgr.cpp
+--- a/appframework/sdlmgr.cpp	2026-11-08 09:27:55.454814448 +0000
++++ b/appframework/sdlmgr.cpp	2026-11-08 09:27:55.454814448 +0000
 @@ -15,6 +15,10 @@
  #include "tier0/fasttimer.h"
  
@@ -4319,7 +4329,7 @@ index d0ce5c0..72dcb80 100644
  #endif // DX_TO_GL_ABSTRACTION
  
  	m_WindowWidth = width;
-@@ -859,6 +1005,18 @@
+@@ -859,6 +1005,25 @@
  {
  	SDLAPP_FUNC;
  
@@ -4331,6 +4341,13 @@ index d0ce5c0..72dcb80 100644
 +	// that SDL 2.0.2's fast path (SDL_GL_GetCurrentWindow/Context are
 +	// TLS-backed) can still report success without EGL ever seeing the
 +	// call if the pair matches this thread's stale TLS.
++	// csARM round 74: run #219 - every MakeCurrent returned 0, yet the ES
++	// driver's es2::getContext() was NULL at FBO gen time.  SDL 2.0.2's
++	// fast path ('We're already current.', SDL_video.c) returns 0 without
++	// ANY EGL call when the (window, context) pair matches this thread's
++	// TLS, so a stale pair silently skips the real bind.  Clear the pair
++	// first so SDL_GL_MakeCurrent always reaches EGL.
++	SDL_GL_MakeCurrent( NULL, NULL );
 +	int _ok = SDL_GL_MakeCurrent(m_Window, (SDL_GLContext)hContext );
 +	CSARM_LOGI( "SDLMgr: MakeCurrent win=%p ctx=%p tid=%u -> %d", m_Window, hContext, (unsigned)SDL_ThreadID(), _ok );
 +	return _ok == 0;
@@ -4338,8 +4355,8 @@ index d0ce5c0..72dcb80 100644
  	// We only ever have one GL context on Linux at the moment, so don't spam these calls.
  	return SDL_GL_MakeCurrent(m_Window, (SDL_GLContext)hContext ) == 0;
  }
-@@ -1431,8 +1589,16 @@
- 	PumpEvents();
+@@ -1415,8 +1580,16 @@
+ 	SDL_SetWindowSize(m_Window, width, tall);
  
  #if defined( DX_TO_GL_ABSTRACTION )
 -	gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
@@ -4357,13 +4374,19 @@ index d0ce5c0..72dcb80 100644
  #endif
  }
  
---- a/togl/cglmfbo.cpp
-+++ b/togl/cglmfbo.cpp
-@@ -6,15 +6,32 @@
+--- a/togl/cglmfbo.cpp	2026-11-08 09:27:55.452814442 +0000
++++ b/togl/cglmfbo.cpp	2026-11-08 09:27:55.452814442 +0000
+@@ -6,15 +6,91 @@
  
  #include "togl/rendermechanism.h"
  
 +#include "common/csarm_log.h"
++#ifdef __ANDROID__
++// csARM round 74: one-shot context-state dump (dlopen/dlsym + maps)
++#include <dlfcn.h>
++#include <stdio.h>
++#include <string>
++#endif
 +
  // memdbgon -must- be the last include file in a .cpp file.
  #include "tier0/memdbgon.h"
@@ -4381,6 +4404,59 @@ index d0ce5c0..72dcb80 100644
 +	// undefined, so the round-71 call was a silent no-op.
 +	m_ctx->MakeCurrent( true );
 +	CSARM_LOGI( "GLM: FBO ctor ctx=%p sdl=%p", m_ctx, m_ctx->m_ctx );
++	// csARM round 74: run #219 - the ES driver skipped GenFramebuffers'
++	// 'if (context)' body (the same garbage value came back twice =
++	// unwritten memory), i.e. es2::getContext() was NULL although
++	// SDL_GL_MakeCurrent had just returned 0.  One-shot decisive dump:
++	// every libEGL/libGLESv2 module actually mapped, which module owns
++	// the resolved entry points, what EGL thinks is current, and whether
++	// the ES layer itself sees a context (GL_EXTENSIONS: NULL when none).
++	{
++		static bool s_csarmDiag = false;
++		if ( !s_csarmDiag )
++		{
++			s_csarmDiag = true;
++			Dl_info mi;
++			if ( dladdr( (void *)&gGL, &mi ) && mi.dli_fname )
++			{
++				std::string dir( mi.dli_fname );
++				std::string::size_type slash = dir.rfind( '/' );
++				dir.erase( ( slash == std::string::npos ) ? 0 : slash + 1 );
++				FILE *f = fopen( "/proc/self/maps", "r" );
++				if ( f )
++				{
++					char line[1024];
++					while ( fgets( line, sizeof( line ), f ) )
++						if ( strstr( line, "/libEGL" ) || strstr( line, "/libGLESv2" ) )
++							CSARM_LOGI( "GLM: maps %s", line );
++					fclose( f );
++				}
++				void *hEGL = dlopen( ( dir + "libEGL.so" ).c_str(), RTLD_NOW | RTLD_NOLOAD );
++				void *hGLV = dlopen( ( dir + "libGLESv2.so" ).c_str(), RTLD_NOW | RTLD_NOLOAD );
++				CSARM_LOGI( "GLM: FBO diag handles egl=%p glesv2=%p dir=%s", hEGL, hGLV, dir.c_str() );
++				if ( hEGL && hGLV )
++				{
++					void *(*curCtx)(void) = (void *(*)(void))dlsym( hEGL, "eglGetCurrentContext" );
++					unsigned (*eglErr)(void) = (unsigned (*)(void))dlsym( hEGL, "eglGetError" );
++					const unsigned char *(*glExt)(unsigned) = (const unsigned char *(*)(unsigned))dlsym( hGLV, "glGetString" );
++					void (*esGen)(int, unsigned *) = (void (*)(int, unsigned *))dlsym( hGLV, "glGenFramebuffers" );
++					Dl_info ei; ei.dli_fname = NULL;
++					Dl_info gi; gi.dli_fname = NULL;
++					if ( curCtx ) dladdr( (void *)curCtx, &ei );
++					if ( glExt ) dladdr( (void *)glExt, &gi );
++					GLuint directName = 0xDEADBEEF;
++					if ( esGen ) esGen( 1, &directName );
++					CSARM_LOGI( "GLM: FBO diag eglCurCtx=%p(egl in %s) eglErr=0x%x esExt=[%s](gl in %s) esGenName=%u",
++						curCtx ? curCtx() : (void *)0,
++						ei.dli_fname ? ei.dli_fname : "?",
++						eglErr ? eglErr() : 0xBAD0,
++						glExt ? ( glExt( 0x1F00 ) ? (const char *)glExt( 0x1F00 ) : "(null)" ) : "(nosym)",
++						gi.dli_fname ? gi.dli_fname : "?",
++						directName );
++				}
++			}
++		}
++	}
 +#else
  	m_ctx->CheckCurrent();
 +#endif
@@ -4392,7 +4468,7 @@ index d0ce5c0..72dcb80 100644
  	
  	memset( m_attach, 0, sizeof( m_attach ) );
  }
-@@ -303,8 +320,14 @@
+@@ -303,8 +379,14 @@
  {
  	bool result = false;
  	
@@ -4407,7 +4483,7 @@ index d0ce5c0..72dcb80 100644
  	
  	// bind to context (will cause FBO object creation on first use)
  	m_ctx->BindFBOToCtx( this );
-@@ -319,14 +342,32 @@
+@@ -319,14 +401,32 @@
  
  		case GL_FRAMEBUFFER_UNSUPPORTED_EXT:
  			result = false;
