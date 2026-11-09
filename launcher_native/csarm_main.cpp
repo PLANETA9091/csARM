@@ -484,6 +484,43 @@ extern "C" int SDL_main(int argc, char *argv[])
                  getenv("SDL_VIDEO_EGL_DRIVER") ? getenv("SDL_VIDEO_EGL_DRIVER") : "-",
                  getenv("LIBGL_GLES") ? getenv("LIBGL_GLES") : "-",
                  getenv("LIBGL_EGL") ? getenv("LIBGL_EGL") : "-");
+            // csARM round 76: pre-load gl4es libGL.so BEFORE SDL can load the
+            // wrapper.  The wrapper's DT_NEEDED is "libGL.so.1" and libGL.so
+            // carries SONAME "libGL.so.1" under the FILE name libGL.so, while
+            // the APK ships the file as libGL.so.  SDL drives the wrapper
+            // from SDL_GL_LoadLibrary (CSDLMgr::Init) - BEFORE the engine's
+            // own gl4es load in the COpenGLEntryPoints ctor - so bionic had
+            // no already-loaded "libGL.so.1" to satisfy the dependency, the
+            // wrapper's dlopen failed, and CSDLMgr::Init died cleanly:
+            // Error("SDL_GL_LoadLibrary(NULL) failed: %s") -> CSARM_EXIT_HIT
+            // depth=36 (runs #225/#226; symbolized via the unstripped
+            // libappframework.so).  This failure was INVISIBLE for rounds:
+            // a lost link-toolchain cache generation had regressed the
+            // shipped SDL to PRISTINE (pre-round-62!), which ignores
+            // SDL_VIDEO_EGL_DRIVER entirely and silently drives the system
+            // goldfish EGL instead - that is what the round-73/74 maps dumps
+            // (/system/lib64/libEGL.so + vendor *_emulation.so) and the
+            // never-driven wrapper (zero CSARM_EGLW passthrough lines) were
+            // showing.  The round-75 forced TU recompile (fixup3) restored
+            // the round-62 env-var probe, which made the wrapper dlopen
+            // attempt happen - and fail - loudly.  Pre-loading libGL.so by
+            // absolute path lets bionic match the already-loaded module by
+            // SONAME when the wrapper's dependency is resolved, and
+            // RTLD_GLOBAL additionally satisfies the wrapper's undefined
+            // egl/proc_address/hardext/LogPrintf/gl4es_GetProcAddress.  The
+            // dlopen-time gl4es constructor is contextless-query-safe since
+            // round 66 (glstate.c ANDROID guards).
+            std::string gl4esGl = libDir + "/libGL.so";
+            if (stat(gl4esGl.c_str(), &st) == 0)
+            {
+                void *hGl = dlopen(gl4esGl.c_str(), RTLD_NOW | RTLD_GLOBAL);
+                LOGI("CSARM_EGL preload: dlopen(%s) -> %p (%s)",
+                     gl4esGl.c_str(), hGl, hGl ? "ok" : (dlerror() ? dlerror() : "failed"));
+            }
+            else
+            {
+                LOGI("CSARM_EGL preload: no libGL.so in %s - wrapper will not load", libDir.c_str());
+            }
         }
         else if (stat(swEgl.c_str(), &st) == 0)
         {

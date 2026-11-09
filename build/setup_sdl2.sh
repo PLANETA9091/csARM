@@ -109,6 +109,23 @@ if ! grep -q "csARM round 75" "$SRCDIR/src/video/SDL_video.c"; then
   grep -q "GL_MakeCurrent driver win=" "$SRCDIR/src/video/SDL_video.c" || { echo "SDL_video.c driver-call patch failed"; exit 1; }
 fi
 rm -f "$SRCDIR"/build-obj/*_SDL_video.c.o
+# csARM round 76: runs #225/#226 died INSIDE SDL_EGL_LoadLibrary but BEFORE
+# any round-75 log line fires - the first round-75 marker sits after the
+# dlopen attempts, so the actual failure point (which SDL_LoadObject returned
+# NULL) was invisible; the engine only said "SDL_GL_LoadLibrary(NULL) failed:
+# %s" and console.log is empty.  Log the entry, the pre-probe handle state,
+# and BOTH documented failure returns of the loader.  Own guard (the
+# restore-keys cache can hand back a source that already carries round 75).
+if ! grep -q "csARM round 76" "$SRCDIR/src/video/SDL_egl.c"; then
+  sed -i 's@    void \*dll_handle = NULL, \*egl_dll_handle = NULL; /\* The naming is counter intuitive, but hey, I just work here -- Gabriel \*/@    void *dll_handle = NULL, *egl_dll_handle = NULL; /* The naming is counter intuitive, but hey, I just work here -- Gabriel */\n    /* csARM round 76: entry marker (see setup_sdl2.sh) */\n    CSARM_SDLEGL_LOG("EGL_LoadLibrary enter egl_path=%s", egl_path ? egl_path : "(null)");@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "EGL_LoadLibrary enter egl_path" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r76 entry patch failed"; exit 1; }
+  sed -i 's@    if (SDL_getenv("SDL_VIDEO_EGL_DRIVER") != NULL || SDL_LoadFunction(dll_handle, "eglChooseConfig") == NULL) {@    CSARM_SDLEGL_LOG("EGL_LoadLibrary pre-probe dll=%p egl_dll=%p", dll_handle, egl_dll_handle);\n    if (SDL_getenv("SDL_VIDEO_EGL_DRIVER") != NULL || SDL_LoadFunction(dll_handle, "eglChooseConfig") == NULL) {@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "EGL_LoadLibrary pre-probe" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r76 pre-probe patch failed"; exit 1; }
+  sed -i 's@        return SDL_SetError("Could not initialize OpenGL / GLES library");@        CSARM_SDLEGL_LOG("EGL_LoadLibrary FAILED: GLES backend dlopen NULL (path=%s)", path ? path : "(null)");\n        return SDL_SetError("Could not initialize OpenGL / GLES library");@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "GLES backend dlopen NULL" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r76 gles-fail patch failed"; exit 1; }
+  sed -i 's@            return SDL_SetError("Could not load EGL library");@            CSARM_SDLEGL_LOG("EGL_LoadLibrary FAILED: EGL driver dlopen NULL (path=%s)", path ? path : "(null)");\n            return SDL_SetError("Could not load EGL library");@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "EGL driver dlopen NULL" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r76 egl-fail patch failed"; exit 1; }
+fi
 
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 CC=${CC:-aarch64-linux-android24-clang}   # x86_64 link jobs pass x86_64-linux-android24-clang
