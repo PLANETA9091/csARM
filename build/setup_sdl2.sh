@@ -93,8 +93,12 @@ if ! grep -q "csARM round 75" "$SRCDIR/src/video/SDL_egl.c"; then
   # derived).  The two instrumented TUs must be forced to recompile or the
   # shipped libSDL2.so stays pristine (run #223: zero CSARM_SDLEGL lines
   # despite the seds running).
-  rm -f "$SRCDIR"/build-obj/*_SDL_egl.c.o
 fi
+# NOTE: the rm lives OUTSIDE the guard on purpose: the guard keys on the
+# patched SOURCE (already present when a restore-keys cache restored a
+# previously-patched tree), while the STALE OBJECTS are exactly what must go
+# (run #223/#224: restored tree was already patched, .o were not rebuilt).
+rm -f "$SRCDIR"/build-obj/*_SDL_egl.c.o
 # (e) SDL_video.c: expose the TLS fast-path vs the real driver call
 if ! grep -q "csARM round 75" "$SRCDIR/src/video/SDL_video.c"; then
   sed -i 's@/\* The high-level video driver subsystem \*/@/* The high-level video driver subsystem */\n\n#if defined(__ANDROID__)\n#include <android/log.h>\n/* csARM round 75: EGL-chain instrumentation (see setup_sdl2.sh) */\n#define CSARM_SDLEGL_LOG(...) __android_log_print(ANDROID_LOG_INFO, "CSARM_SDLEGL", __VA_ARGS__)\n#else\n#define CSARM_SDLEGL_LOG(...) do {} while (0)\n#endif@' "$SRCDIR/src/video/SDL_video.c"
@@ -103,8 +107,8 @@ if ! grep -q "csARM round 75" "$SRCDIR/src/video/SDL_video.c"; then
   grep -q "GL_MakeCurrent FAST-PATH" "$SRCDIR/src/video/SDL_video.c" || { echo "SDL_video.c fast-path patch failed"; exit 1; }
   sed -i 's@    retval = _this->GL_MakeCurrent(_this, window, ctx);@    retval = _this->GL_MakeCurrent(_this, window, ctx);\n    CSARM_SDLEGL_LOG("GL_MakeCurrent driver win=%p ctx=%p -> %d", window, ctx, retval);@' "$SRCDIR/src/video/SDL_video.c"
   grep -q "GL_MakeCurrent driver win=" "$SRCDIR/src/video/SDL_video.c" || { echo "SDL_video.c driver-call patch failed"; exit 1; }
-  rm -f "$SRCDIR"/build-obj/*_SDL_video.c.o
 fi
+rm -f "$SRCDIR"/build-obj/*_SDL_video.c.o
 
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 CC=${CC:-aarch64-linux-android24-clang}   # x86_64 link jobs pass x86_64-linux-android24-clang
