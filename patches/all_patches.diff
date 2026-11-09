@@ -4739,3 +4739,194 @@ index 2d7e0f4..87bab56 100644
   	}
  #endif
  }
+
+diff -ruN a/materialsystem/shaderapidx9/meshdx8.cpp b/materialsystem/shaderapidx9/meshdx8.cpp
+--- a/materialsystem/shaderapidx9/meshdx8.cpp	2026-11-09 16:49:44.735673125 +0000
++++ b/materialsystem/shaderapidx9/meshdx8.cpp	2026-11-09 16:49:44.774673267 +0000
+@@ -2889,8 +2889,13 @@
+ {
+ 	Assert( !m_IsVBLocked );
+ 
+-	// Just give the app crap buffers to fill up while we're suppressed...
+-	if ( g_pShaderDeviceDx8->IsDeactivated() || (nVertexCount == 0))
++// csARM round 78: an error material (unknown shader, run #227:
++// "__background"/UnlitGeneric) has an EMPTY vertex format -
++// VertexFormatSize()==0 - and GetMaxToRender divided by its zero
++// VertexSize (SIGFPE_INTDIV).  Treat a degenerate format like the
++// suppressed path: zeroed descriptor, no buffer, nothing rendered.
++	if ( g_pShaderDeviceDx8->IsDeactivated() || (nVertexCount == 0) ||
++		( g_MeshMgr.VertexFormatSize( m_VertexFormat &~ m_fmtStreamSpec ) == 0 ) )
+ 	{
+ 		// Set up the vertex descriptor
+ 		CVertexBufferBase::ComputeVertexDescription( 0, 0, desc );
+diff -ruN a/materialsystem/shaderlib/ShaderDLL.cpp b/materialsystem/shaderlib/ShaderDLL.cpp
+--- a/materialsystem/shaderlib/ShaderDLL.cpp	2026-11-09 16:49:44.734673122 +0000
++++ b/materialsystem/shaderlib/ShaderDLL.cpp	2026-11-09 16:49:44.760673216 +0000
+@@ -17,6 +17,16 @@
+ #include "mathlib/mathlib.h"
+ #include "tier2/tier2.h"
+ 
++// csARM round 78: log the Connect interface queries (which of the
++// three is NULL silently drops the whole stdshader registry) and
++// prove the stdshader global ctors reach InsertShader.
++#ifdef __ANDROID__
++#include <android/log.h>
++#define CSARM_SHDR(...) __android_log_print(ANDROID_LOG_INFO, "CSARM_SHDR", __VA_ARGS__)
++#else
++#define CSARM_SHDR(...) ((void)0)
++#endif
++
+ // memdbgon must be the last include file in a .cpp file!!!
+ #include "tier0/memdbgon.h"
+ 
+@@ -127,13 +137,18 @@
+ 	g_pConfig = (const MaterialSystem_Config_t*)factory( MATERIALSYSTEM_CONFIG_VERSION, NULL );
+ 	g_pSLShaderSystem =  (IShaderSystem*)factory( SHADERSYSTEM_INTERFACE_VERSION, NULL );
+ 
++// csARM round 78: name the NULL interface instead of a silent drop
++	CSARM_SHDR( "CShaderDLL::Connect bIsMatSys=%d hwcfg=%p config=%p shadsys=%p", (int)bIsMaterialSystem, (void*)g_pHardwareConfig, (void*)g_pConfig, (void*)g_pSLShaderSystem );
++
+ 	if ( !bIsMaterialSystem )
+ 	{
+ 		ConnectTier1Libraries( &factory, 1 );
+   		InitShaderLibCVars( factory );
+ 	}
+ 
+-	return ( g_pConfig != NULL ) && (g_pHardwareConfig != NULL) && ( g_pSLShaderSystem != NULL );
++	bool bConnected = ( g_pConfig != NULL ) && (g_pHardwareConfig != NULL) && ( g_pSLShaderSystem != NULL );
++	CSARM_SHDR( "CShaderDLL::Connect -> %d", (int)bConnected );
++	return bConnected;
+ #endif
+ }
+ 
+@@ -189,6 +204,16 @@
+ {
+ 	Assert( pShader );
+ 	m_ShaderList.AddToTail( pShader );
++
++// csARM round 78: called from the stdshader global ctors - the first
++// three names prove registration ran in THIS libshaderlib instance.
++#ifdef __ANDROID__
++	static int s_nInserted = 0;
++	if ( s_nInserted++ < 3 )
++	{
++		CSARM_SHDR( "InsertShader #%d '%s' this=%p", s_nInserted, pShader->GetName(), (void*)this );
++	}
++#endif
+ }
+ 
+ //-----------------------------------------------------------------------------
+diff -ruN a/materialsystem/shadersystem.cpp b/materialsystem/shadersystem.cpp
+--- a/materialsystem/shadersystem.cpp	2026-11-09 16:49:44.733673118 +0000
++++ b/materialsystem/shadersystem.cpp	2026-11-09 16:49:44.747673169 +0000
+@@ -26,6 +26,19 @@
+ #include "tier0/vprof.h"
+ #include "tier1/tier1_logging.h"
+ 
++// csARM round 78: run #227 - the map probe died at DrawStartupGraphic
++// because Material "__background" got the error material ("unknown
++// shader UnlitGeneric") and CMeshDX8::Lock divided by a zero vertex
++// size.  libstdshader_dx9.so loaded SILENTLY, so the break is in one
++// of the logging-free branches below (factory / SHADER_DLL interface /
++// Connect) or in an empty CShaderDLL registry.  Log them all.
++#ifdef __ANDROID__
++#include <android/log.h>
++#define CSARM_SHDR(...) __android_log_print(ANDROID_LOG_INFO, "CSARM_SHDR", __VA_ARGS__)
++#else
++#define CSARM_SHDR(...) ((void)0)
++#endif
++
+ // NOTE: This must be the last file included!
+ #include "tier0/memdbgon.h"
+ 
+@@ -333,13 +346,16 @@
+ 	Assert( dxSupportLevel >= 60 );
+ 	dxSupportLevel /= 10;
+ 
++// csARM round 78: prove which stdshader_dx* the loop even tries
++	CSARM_SHDR( "LoadAllShaderDLLs: maxDXSupportLevel=%d -> dx loop 9..%d", HardwareConfig()->GetMaxDXSupportLevel(), dxSupportLevel );
+ 	// 360 only supports its dx9 dll
+ 	int dxStart = 9;
+ 	char buf[32];
+ 	for ( i = dxStart; i <= dxSupportLevel; ++i )
+ 	{
+ 		Q_snprintf( buf, sizeof( buf ), "stdshader_dx%d", i );
+-		LoadShaderDLL( buf );
++		bool bLoaded = LoadShaderDLL( buf );
++		CSARM_SHDR( "LoadAllShaderDLLs: LoadShaderDLL(%s) -> %d", buf, (int)bLoaded );
+ 	}
+ 
+ 	const char *pShaderName = NULL;
+@@ -423,6 +439,8 @@
+ bool CShaderSystem::LoadShaderDLL( const char *pFullPath, const char *pPathID, bool bModShaderDLL )
+ {
+ #if !defined( _PS3 ) && !defined( _OSX )
++// csARM round 78: the whole chain below fails SILENTLY on Android
++	CSARM_SHDR( "LoadShaderDLL(%s) pathID=%s mod=%d", pFullPath, pPathID ? pPathID : "(null)", (int)bModShaderDLL );
+ 	if ( !pFullPath && !pFullPath[0] )
+ 		return true;
+ 
+@@ -433,12 +451,16 @@
+ 
+ 	CSysModule *hInstance = g_pFullFileSystem->LoadModule( pFullPath, pPathID, bValidatedDllOnly );
+ 	if ( !hInstance )
++	{
++		CSARM_SHDR( "LoadShaderDLL(%s): LoadModule FAILED", pFullPath );
+ 		return false;
++	}
+ 
+ 	// Get at the shader DLL interface
+ 	CreateInterfaceFn factory = Sys_GetFactory( hInstance );
+ 	if (!factory)
+ 	{
++		CSARM_SHDR( "LoadShaderDLL(%s): Sys_GetFactory FAILED", pFullPath );
+ 		g_pFullFileSystem->UnloadModule( hInstance );
+ 		return false;
+ 	}
+@@ -446,6 +468,7 @@
+ 	IShaderDLLInternal *pShaderDLL = (IShaderDLLInternal*)factory( SHADER_DLL_INTERFACE_VERSION, NULL );
+ 	if ( !pShaderDLL )
+ 	{
++		CSARM_SHDR( "LoadShaderDLL(%s): SHADER_DLL_INTERFACE_VERSION query FAILED", pFullPath );
+ 		g_pFullFileSystem->UnloadModule( hInstance );
+ 		return false;
+ 	}
+@@ -453,6 +476,10 @@
+ 	// Allow the DLL to try to connect to interfaces it needs
+ 	if ( !pShaderDLL->Connect( Sys_GetFactoryThis(), false ) )
+ 	{
++		// csARM round 78: PRIME SUSPECT - Connect unloads the module and
++		// returns false with zero logging; the registry is then empty and
++		// every material becomes an error material (UnlitGeneric SIGFPE).
++		CSARM_SHDR( "LoadShaderDLL(%s): Connect FAILED - dropping shader DLL silently", pFullPath );
+ 		g_pFullFileSystem->UnloadModule( hInstance );
+ 		return false;
+ 	}
+@@ -488,7 +515,10 @@
+ 	
+ 	// Add the shaders to the dictionary of shaders...
+ 	SetupShaderDictionary( nShaderDLLIndex );
+-	
++
++// csARM round 78: ShaderCount()==0 here means the stdshader global
++// ctors never reached InsertShader (registration/dual-instance bug).
++	CSARM_SHDR( "LoadShaderDLL(%s): OK dllCount=%d shaderCount=%d", pFullPath, (int)m_ShaderDLLs.Count(), (int)m_ShaderDLLs[nShaderDLLIndex].m_pShaderDLL->ShaderCount() );
+ 	// FIXME: Fix up existing materials that were using shaders that have
+ 	// been reloaded?
+ 
+@@ -677,6 +707,15 @@
+ 		}
+ 	}
+ 
++// csARM round 78: a miss means the material becomes an error material
++	static int s_nMisses = 0;
++	if ( s_nMisses++ < 12 )
++	{
++		CSARM_SHDR( "FindShader MISS '%s' dllCount=%d counts=[%d %d %d]", pShaderName, (int)m_ShaderDLLs.Count(),
++			m_ShaderDLLs.Count() > 0 ? (int)m_ShaderDLLs[0].m_pShaderDLL->ShaderCount() : -1,
++			m_ShaderDLLs.Count() > 1 ? (int)m_ShaderDLLs[1].m_pShaderDLL->ShaderCount() : -1,
++			m_ShaderDLLs.Count() > 2 ? (int)m_ShaderDLLs[2].m_pShaderDLL->ShaderCount() : -1 );
++	}
+ 	return NULL;
+ }
+ 

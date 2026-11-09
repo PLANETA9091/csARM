@@ -1533,6 +1533,15 @@ jobs:
           # be the smoking gun the run #226 tombstone hid).
           echo "=== map probe: SwiftShader JIT memory (round 77) ==="
           grep -a "CSARM_SSRT" logcat_map.txt | head -80 || true
+          # csARM round 78: shader-DLL load/registration chain.  Run #227:
+          # "Material __background uses unknown shader UnlitGeneric" ->
+          # error material -> SIGFPE_INTDIV in CMeshDX8::Lock (VertexSize 0).
+          # CSARM_SHDR names the silent break (LoadModule / factory /
+          # SHADER_DLL iface / Connect / empty registry).
+          echo "=== map probe: shader DLL chain (round 78) ==="
+          grep -a "CSARM_SHDR" logcat_map.txt | head -60 || true
+          echo "=== map probe: shader/material errors ==="
+          grep -aE "uses unknown shader|UnlitGeneric|__background|Error: Material" logcat_map.txt | head -15 || true
           echo "=== map probe: engine spew around map ==="
           grep -aE "Host_NewGame|Loading map|Spawning|Precach|GameRules|Gamerules|[Vv][Pp]hysics|physics|Client [Cc]onnected|Client [Ss]pawn|Activate|Host_Activate|BEGIN|====|Finished|missing|Missing|NET_|Sys_Error|Host_Error|Can't|Couldn't" logcat_map.txt | head -60 || true
           echo "=== map probe: engine errors (top) ==="
