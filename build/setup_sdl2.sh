@@ -87,6 +87,13 @@ if ! grep -q "csARM round 75" "$SRCDIR/src/video/SDL_egl.c"; then
   # (d) real-branch failure path: log the raw rc before the SetError
   sed -i 's@            return SDL_SetError("Unable to make EGL context current");@            CSARM_SDLEGL_LOG("EGL_MakeCurrent real dpy=%p surf=%p ctx=%p rc=0 FAILED", _this->egl_data->egl_display, egl_surface, egl_context);\n            return SDL_SetError("Unable to make EGL context current");@' "$SRCDIR/src/video/SDL_egl.c"
   grep -q "EGL_MakeCurrent real dpy=" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c real-branch patch failed"; exit 1; }
+  # The link-toolchain cache has restore-keys (fallback to the previous
+  # prefix), so a pre-round-75 .cache/SDL-2.0.2/build-obj gets restored and
+  # build_one skips recompiling objects whose name already exists (path-md5
+  # derived).  The two instrumented TUs must be forced to recompile or the
+  # shipped libSDL2.so stays pristine (run #223: zero CSARM_SDLEGL lines
+  # despite the seds running).
+  rm -f "$SRCDIR"/build-obj/*_SDL_egl.c.o
 fi
 # (e) SDL_video.c: expose the TLS fast-path vs the real driver call
 if ! grep -q "csARM round 75" "$SRCDIR/src/video/SDL_video.c"; then
@@ -96,6 +103,7 @@ if ! grep -q "csARM round 75" "$SRCDIR/src/video/SDL_video.c"; then
   grep -q "GL_MakeCurrent FAST-PATH" "$SRCDIR/src/video/SDL_video.c" || { echo "SDL_video.c fast-path patch failed"; exit 1; }
   sed -i 's@    retval = _this->GL_MakeCurrent(_this, window, ctx);@    retval = _this->GL_MakeCurrent(_this, window, ctx);\n    CSARM_SDLEGL_LOG("GL_MakeCurrent driver win=%p ctx=%p -> %d", window, ctx, retval);@' "$SRCDIR/src/video/SDL_video.c"
   grep -q "GL_MakeCurrent driver win=" "$SRCDIR/src/video/SDL_video.c" || { echo "SDL_video.c driver-call patch failed"; exit 1; }
+  rm -f "$SRCDIR"/build-obj/*_SDL_video.c.o
 fi
 
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"

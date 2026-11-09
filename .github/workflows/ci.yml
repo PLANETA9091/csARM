@@ -1420,6 +1420,13 @@ jobs:
           # --- 5. diagnostics + verdict ---
           echo "=== map probe: load/args ==="
           grep -E "CSARM_ARGS|CSARM_NATIVE_INIT|CSARM_IFACE_FILL|CSARM_LOAD_DONE" logcat_map.txt | head -6 || true
+          # csARM round 75: the EGL-chain instrumentation tags (the narrow
+          # list above never showed them — run #223 wrote CSARM_EGLW into
+          # logcat_map.txt but echoed nothing).
+          echo "=== map probe: EGL chain (round 75 instrumentation) ==="
+          grep -aE "CSARM_SDLEGL|CSARM_EGLW" logcat_map.txt | head -120 || true
+          echo "=== map probe: SDLMgr/GLM context handoff ==="
+          grep -aE "CSARM_LNCH.*MakeCurrent|CSARM_LNCH.*GLM" logcat_map.txt | head -40 || true
           echo "=== map probe: engine spew around map ==="
           grep -aE "Host_NewGame|Loading map|Spawning|Precach|GameRules|Gamerules|[Vv][Pp]hysics|physics|Client [Cc]onnected|Client [Ss]pawn|Activate|Host_Activate|BEGIN|====|Finished|missing|Missing|NET_|Sys_Error|Host_Error|Can't|Couldn't" logcat_map.txt | head -60 || true
           echo "=== map probe: engine errors (top) ==="
