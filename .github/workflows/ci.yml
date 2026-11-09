@@ -471,7 +471,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bundle
-          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss3
+          # -ss4: round 77 rewrites ExecutableMemory's JIT-memory backend
+          # (memfd/tmpfs -> MAP_ANONYMOUS + PR_SET_VMA naming); cached libs
+          # predate it and carry the first-call SEGV_ACCERR JIT crash.
+          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss4
 
       - name: Clone SwiftShader at known-good Android-capable revision
         run: |
@@ -534,6 +537,103 @@ jobs:
           sed -i 's|buffer_handle_t bufferImportedHandle;|int bufferImportedHandle;|' src/Main/FrameBufferAndroid.hpp
           sed -i 's|#include <cutils/log.h>|#include <log/log.h>|' src/Common/DebugAndroid.hpp src/OpenGL/common/debug.cpp
           grep -n "set(BUILD_MARL" CMakeLists.txt || true
+          # csARM round 77: the bundled SwiftShader JIT dies on its FIRST
+          # routine: SEGV_ACCERR with rip == fault-addr inside
+          # /memfd:swiftshader_jit, backtrace blitReactor <- Blitter::blit <-
+          # readPixels (run #226 map probe, x86_64 Subzero).  Mechanism:
+          # SwiftShader's CMakeLists sets -DANDROID_NDK_BUILD for every
+          # standalone NDK build, and ExecutableMemory.cpp keys its
+          # JIT-memory backend on that macro: with it set, anonymousFd()
+          # hands out a real memfd (tmpfs), routines are streamed into that
+          # mapping and finalize() flips it to R|X with mprotect.  For an
+          # untrusted app the SELinux policy denies execute on tmpfs, the
+          # flip fails and the Release ASSERT is a no-op -> the page stays
+          # RW and the first call faults at instruction fetch.  The AOSP
+          # system SwiftShader never hits this: without ANDROID_NDK_BUILD it
+          # uses MAP_ANONYMOUS + PR_SET_VMA_ANON_NAME - the same path ART's
+          # own JIT proves is allowed for app domains.  Force that path on
+          # __ANDROID__ and log every alloc/protect through CSARM_SSRT so
+          # the next run shows mmap/mprotect results (and errnos) instead of
+          # a raw SEGV.
+          sed -i 's#defined(__ANDROID__) && !defined(ANDROID_HOST_BUILD) && !defined(ANDROID_NDK_BUILD)#defined(__ANDROID__)#g' src/Reactor/ExecutableMemory.cpp
+          sed -i 's#!defined(__ANDROID__) || defined(ANDROID_HOST_BUILD) || defined(ANDROID_NDK_BUILD)#!defined(__ANDROID__)#' src/Reactor/ExecutableMemory.cpp
+          python3 - <<'PYEOF'
+          import sys
+
+          p = 'src/Reactor/ExecutableMemory.cpp'
+          s = open(p).read()
+
+          # 1. CSARM_SSRT macro + PR_SET_VMA fallback defines (NDK android-24 headers
+          #    may lack the prctl VMA constants; kernel UAPI values, see prctl.h).
+          a = '#undef allocate\n#undef deallocate'
+          assert a in s, 'macro anchor missing'
+          b = a + '''
+
+          #if defined(__ANDROID__)
+          #include <android/log.h>
+          #define CSARM_SSRT(...) __android_log_print(ANDROID_LOG_INFO, "CSARM_SSRT", __VA_ARGS__)
+          #ifndef PR_SET_VMA
+          #define PR_SET_VMA 0x53564d41
+          #endif
+          #ifndef PR_SET_VMA_ANON_NAME
+          #define PR_SET_VMA_ANON_NAME 0
+          #endif
+          #else
+          #define CSARM_SSRT(...) do {} while(0)
+          #endif'''
+          s = s.replace(a, b, 1)
+
+          # 2. Log which backend fd the Linux branch chose (fd >= 0 => memfd/tmpfs,
+          #    -1 => MAP_ANONYMOUS) and the allocation parameters.
+          a = ('\tint anonFd = anonymousFd();\n'
+               '\tif(anonFd == -1)\n'
+               '\t{\n'
+               '\t\tflags |= MAP_ANONYMOUS;\n'
+               '\t}\n'
+               '\telse\n'
+               '\t{\n'
+               '\t\tensureAnonFileSize(anonFd, length);\n'
+               '\t}\n')
+          assert a in s, 'alloc anchor missing'
+          s = s.replace(a, a + '\tCSARM_SSRT("allocPages len=%zu perm=%d need_exec=%d anonFd=%d", length, permissions, (int)need_exec, anonFd);\n', 1)
+
+          # 3. Log the mmap result (errno only meaningful on failure).  NOTE: it goes
+          #    AFTER the Android prctl else-block - that else chains onto
+          #    if(mapping == MAP_FAILED), so inserting between them breaks the chain.
+          a = ('#\tendif  // __ANDROID__ && !ANDROID_HOST_BUILD && !ANDROID_NDK_BUILD\n'
+               '#elif defined(__Fuchsia__)')
+          assert a in s, 'mmap anchor missing'
+          b = ('#\tendif  // __ANDROID__ && !ANDROID_HOST_BUILD && !ANDROID_NDK_BUILD\n'
+               '\tCSARM_SSRT("mmap -> %p errno=%d", mapping, mapping ? 0 : errno);\n'
+               '#elif defined(__Fuchsia__)')
+          s = s.replace(a, b, 1)
+
+          # 4. Log the PR_SET_VMA_ANON_NAME naming result (best-effort, cosmetic).
+          a = ('\t\tprctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, mapping, length,\n'
+               '\t\t      MACRO_STRINGIFY(REACTOR_ANONYMOUS_MMAP_NAME));')
+          assert a in s, 'prctl anchor missing'
+          b = ('\t\tint pr = prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, mapping, length,\n'
+               '\t\t      MACRO_STRINGIFY(REACTOR_ANONYMOUS_MMAP_NAME));\n'
+               '\t\tCSARM_SSRT("prctl VMA_NAME -> %d errno=%d", pr, pr != 0 ? errno : 0);')
+          s = s.replace(a, b, 1)
+
+          # 5. Log EVERY protect() - the R|X flip is THE operation that was failing
+          #    silently on the memfd backend; with errno this is decisive.
+          a = ('\tint result =\n'
+               '\t    mprotect(memory, bytes, permissionsToMmapProt(permissions));\n'
+               '\tASSERT(result == 0);')
+          assert a in s, 'protect anchor missing'
+          b = ('\tint result =\n'
+               '\t    mprotect(memory, bytes, permissionsToMmapProt(permissions));\n'
+               '\tCSARM_SSRT("protect %p bytes=%zu perm=%d -> %d errno=%d", memory, bytes, permissions, result, result != 0 ? errno : 0);\n'
+               '\tASSERT(result == 0);')
+          s = s.replace(a, b, 1)
+
+          open(p, 'w').write(s)
+          print('ExecutableMemory.cpp patched OK:', p)
+          PYEOF
+          N=$(grep -c 'CSARM_SSRT' src/Reactor/ExecutableMemory.cpp); [ "$N" -ge 5 ] || { echo "::error::ExecutableMemory SSRT patch failed (found $N)"; exit 1; }
+          grep -q '^#if defined(__ANDROID__)$' src/Reactor/ExecutableMemory.cpp || { echo "::error::ExecutableMemory anon-path sed failed"; exit 1; }
 
       - name: Setup NDK (r27d — clang-21 of NDK 30 chokes on vendored LLVM-10)
         run: |
@@ -1427,6 +1527,12 @@ jobs:
           grep -aE "CSARM_SDLEGL|CSARM_EGLW" logcat_map.txt | head -120 || true
           echo "=== map probe: SDLMgr/GLM context handoff ==="
           grep -aE "CSARM_LNCH.*MakeCurrent|CSARM_LNCH.*GLM" logcat_map.txt | head -40 || true
+          # csARM round 77: SwiftShader JIT-memory backend switch + logging.
+          # CSARM_SSRT proves which path each routine got (anonFd=-1 =>
+          # MAP_ANONYMOUS) and whether the R|X flip succeeds (errno!=0 would
+          # be the smoking gun the run #226 tombstone hid).
+          echo "=== map probe: SwiftShader JIT memory (round 77) ==="
+          grep -a "CSARM_SSRT" logcat_map.txt | head -80 || true
           echo "=== map probe: engine spew around map ==="
           grep -aE "Host_NewGame|Loading map|Spawning|Precach|GameRules|Gamerules|[Vv][Pp]hysics|physics|Client [Cc]onnected|Client [Ss]pawn|Activate|Host_Activate|BEGIN|====|Finished|missing|Missing|NET_|Sys_Error|Host_Error|Can't|Couldn't" logcat_map.txt | head -60 || true
           echo "=== map probe: engine errors (top) ==="
