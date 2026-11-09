@@ -4804,14 +4804,14 @@ diff -ruN a/materialsystem/shaderlib/ShaderDLL.cpp b/materialsystem/shaderlib/Sh
  	Assert( pShader );
  	m_ShaderList.AddToTail( pShader );
 +
-+// csARM round 78: called from the stdshader global ctors - the first
-+// three names prove registration ran in THIS libshaderlib instance.
++// csARM round 78: called from the stdshader global ctors -
++// CBaseShader::CBaseShader() tail-calls InsertShader(this) BEFORE the
++// derived vtable exists: vptr[0] is then __cxa_pure_virtual (run #229
++// died inside our GetName() probe).  Raw vptr only - never a virtual
++// call on a half-constructed shader.
 +#ifdef __ANDROID__
 +	static int s_nInserted = 0;
-+	if ( s_nInserted++ < 3 )
-+	{
-+		CSARM_SHDR( "InsertShader #%d '%s' this=%p", s_nInserted, pShader->GetName(), (void*)this );
-+	}
++	if ( s_nInserted++ < 3 ) { CSARM_SHDR( "InsertShader #%d this=%p vptr=%p", s_nInserted, (void*)pShader, *(void* const*)pShader ); }
 +#endif
  }
  
