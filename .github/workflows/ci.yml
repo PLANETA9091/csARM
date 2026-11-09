@@ -714,12 +714,18 @@ jobs:
           grep -q "load_libs egl override" src/gl/loader.c || { echo "::error::loader.c egl pin patch failed"; exit 1; }
           pip install -q cmake ninja || true
           export PATH="$HOME/.local/bin:$PATH"
+          # round 75 fixup: -llog must be on EVERY target link line — the
+          # CSARM_EGLW_LOG instrumentation calls __android_log_print from
+          # BOTH the GL target (loader.c) and the EGL wrapper (egl.c), but
+          # USE_ANDROID_LOG is OFF in gl4es's default config so its own
+          # ${log-lib} link (src/CMakeLists.txt) never fires (run #222:
+          # ld.lld undefined __android_log_print from open_lib, both ABIs).
           cmake -S . -B out -G Ninja \
             -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
             -DCMAKE_TOOLCHAIN_FILE="$NDKROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24 \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_STANDARD_LIBRARIES="-lm" \
+            -DCMAKE_C_STANDARD_LIBRARIES="-lm -llog" \
             -DEGL_WRAPPER=ON -DGLX_STUBS=ON
           cmake --build out --parallel $(nproc)
           # NB: stay inside gl4es/ is fine — B is absolute (run #196: the cp
