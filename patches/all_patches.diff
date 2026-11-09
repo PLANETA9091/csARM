@@ -4349,7 +4349,7 @@ index d0ce5c0..72dcb80 100644
 +	// first so SDL_GL_MakeCurrent always reaches EGL.
 +	SDL_GL_MakeCurrent( NULL, NULL );
 +	int _ok = SDL_GL_MakeCurrent(m_Window, (SDL_GLContext)hContext );
-+	CSARM_LOGI( "SDLMgr: MakeCurrent win=%p ctx=%p tid=%u -> %d", m_Window, hContext, (unsigned)SDL_ThreadID(), _ok );
++	CSARM_LOGI( "SDLMgr: MakeCurrent win=%p ctx=%p tid=%u -> %d now(win=%p ctx=%p)", m_Window, hContext, (unsigned)SDL_ThreadID(), _ok, SDL_GL_GetCurrentWindow(), SDL_GL_GetCurrentContext() );
 +	return _ok == 0;
 +#endif
  	// We only ever have one GL context on Linux at the moment, so don't spam these calls.

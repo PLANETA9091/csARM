@@ -56,6 +56,48 @@ if ! grep -q "csARM round 62" "$SRCDIR/src/video/SDL_egl.c"; then
   grep -q "csARM round 62" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c env-var probe patch failed"; exit 1; }
 fi
 
+# csARM round 75: instrument the EGL chain inside SDL itself (tag
+# CSARM_SDLEGL).  Runs #216-#221 established who calls MakeCurrent and what
+# SDL returns, but three links stay invisible at runtime:
+#   1. SDL_GL_MakeCurrent's TLS fast-path ("We're already current.") returns 0
+#      WITHOUT any EGL call - a real bind is indistinguishable from a TLS hit;
+#   2. SDL_EGL_MakeCurrent's null-branch (the unbind the round-74
+#      MakeCurrent(NULL,NULL) fix relies on) DISCARDS the raw eglMakeCurrent
+#      result and returns 0 unconditionally - a failed unbind looks exactly
+#      like a successful one;
+#   3. SDL never says WHICH EGL library it actually loaded (the pinned
+#      egl_path vs the dlsym(NULL)/DEFAULT_EGL fallback), so the
+#      SDL_VIDEO_EGL_DRIVER pin was only ever verified indirectly.
+# Every log goes to logcat under CSARM_SDLEGL.  eglGetError is resolved from
+# the loaded EGL handle per call (SDL 2.0.2's egl_data has no such member);
+# err=0xffffffff means "no eglGetError resolvable".  The link-toolchain cache
+# key hashes this script, so the SDL rebuild happens automatically.
+if ! grep -q "csARM round 75" "$SRCDIR/src/video/SDL_egl.c"; then
+  sed -i 's@#include "SDL_hints.h"@#include "SDL_hints.h"\n\n#if defined(__ANDROID__)\n#include <android/log.h>\n/* csARM round 75: EGL-chain instrumentation (see setup_sdl2.sh) */\n#define CSARM_SDLEGL_LOG(...) __android_log_print(ANDROID_LOG_INFO, "CSARM_SDLEGL", __VA_ARGS__)\n#else\n#define CSARM_SDLEGL_LOG(...) do {} while (0)\n#endif@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "CSARM_SDLEGL_LOG" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c log macro patch failed"; exit 1; }
+  # (a) SDL_EGL_LoadLibrary: which egl_path reached SDL and what display it got
+  sed -i 's@    _this->egl_data->egl_display = _this->egl_data->eglGetDisplay(native_display);@    /* csARM round 75 */\n    CSARM_SDLEGL_LOG("EGL_LoadLibrary egl_path=%s dll=%p", egl_path ? egl_path : "(null)", dll_handle);\n    _this->egl_data->egl_display = _this->egl_data->eglGetDisplay(native_display);\n    CSARM_SDLEGL_LOG("EGL_LoadLibrary display=%p", _this->egl_data->egl_display);@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "EGL_LoadLibrary egl_path=" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c LoadLibrary patch failed"; exit 1; }
+  # (b) SDL_EGL_MakeCurrent entry: dpy/surf/ctx identity of every call
+  sed -i 's@    if (!egl_context || !egl_surface) {@    /* csARM round 75 */\n    {\n        EGLint (*_csarm_eglGetError)(void) = (EGLint (*)(void)) (_this->egl_data->dll_handle ? SDL_LoadFunction(_this->egl_data->dll_handle, "eglGetError") : NULL);\n        int _csarm_err = _csarm_eglGetError ? (int)_csarm_eglGetError() : -1;\n        CSARM_SDLEGL_LOG("EGL_MakeCurrent enter dpy=%p surf=%p ctx=%p (stale-err=0x%x)", _this->egl_data->egl_display, egl_surface, egl_context, (unsigned)_csarm_err);\n    }\n    if (!egl_context || !egl_surface) {@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "EGL_MakeCurrent enter dpy=" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c MakeCurrent entry patch failed"; exit 1; }
+  # (c) null-branch: capture the DISCARDED unbind result + backend error
+  sed -i 's@         _this->egl_data->eglMakeCurrent(_this->egl_data->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);@         /* csARM round 75: the pristine code discarded this result (SDL\n          * returns 0 unconditionally) - capture it for logcat. */\n         {\n             EGLBoolean _csarm_rc = _this->egl_data->eglMakeCurrent(_this->egl_data->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);\n             EGLint (*_csarm_eglGetError)(void) = (EGLint (*)(void)) (_this->egl_data->dll_handle ? SDL_LoadFunction(_this->egl_data->dll_handle, "eglGetError") : NULL);\n             int _csarm_err = _csarm_eglGetError ? (int)_csarm_eglGetError() : -1;\n             CSARM_SDLEGL_LOG("EGL_MakeCurrent NULL-branch dpy=%p ctx=%p surf=%p rc=%d err=0x%x", _this->egl_data->egl_display, egl_context, egl_surface, (int)_csarm_rc, (unsigned)_csarm_err);\n         }@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "EGL_MakeCurrent NULL-branch" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c null-branch patch failed"; exit 1; }
+  # (d) real-branch failure path: log the raw rc before the SetError
+  sed -i 's@            return SDL_SetError("Unable to make EGL context current");@            CSARM_SDLEGL_LOG("EGL_MakeCurrent real dpy=%p surf=%p ctx=%p rc=0 FAILED", _this->egl_data->egl_display, egl_surface, egl_context);\n            return SDL_SetError("Unable to make EGL context current");@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "EGL_MakeCurrent real dpy=" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c real-branch patch failed"; exit 1; }
+fi
+# (e) SDL_video.c: expose the TLS fast-path vs the real driver call
+if ! grep -q "csARM round 75" "$SRCDIR/src/video/SDL_video.c"; then
+  sed -i 's@/\* The high-level video driver subsystem \*/@/* The high-level video driver subsystem */\n\n#if defined(__ANDROID__)\n#include <android/log.h>\n/* csARM round 75: EGL-chain instrumentation (see setup_sdl2.sh) */\n#define CSARM_SDLEGL_LOG(...) __android_log_print(ANDROID_LOG_INFO, "CSARM_SDLEGL", __VA_ARGS__)\n#else\n#define CSARM_SDLEGL_LOG(...) do {} while (0)\n#endif@' "$SRCDIR/src/video/SDL_video.c"
+  grep -q "CSARM_SDLEGL_LOG" "$SRCDIR/src/video/SDL_video.c" || { echo "SDL_video.c log macro patch failed"; exit 1; }
+  sed -i 's@        /\* We'"'"'re already current. \*/@        /* We'"'"'re already current. */\n        CSARM_SDLEGL_LOG("GL_MakeCurrent FAST-PATH win=%p ctx=%p (no EGL call)", window, ctx);@' "$SRCDIR/src/video/SDL_video.c"
+  grep -q "GL_MakeCurrent FAST-PATH" "$SRCDIR/src/video/SDL_video.c" || { echo "SDL_video.c fast-path patch failed"; exit 1; }
+  sed -i 's@    retval = _this->GL_MakeCurrent(_this, window, ctx);@    retval = _this->GL_MakeCurrent(_this, window, ctx);\n    CSARM_SDLEGL_LOG("GL_MakeCurrent driver win=%p ctx=%p -> %d", window, ctx, retval);@' "$SRCDIR/src/video/SDL_video.c"
+  grep -q "GL_MakeCurrent driver win=" "$SRCDIR/src/video/SDL_video.c" || { echo "SDL_video.c driver-call patch failed"; exit 1; }
+fi
+
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 CC=${CC:-aarch64-linux-android24-clang}   # x86_64 link jobs pass x86_64-linux-android24-clang
 

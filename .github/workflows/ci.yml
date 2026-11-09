@@ -628,7 +628,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bundle
-          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl4
+          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl5
 
       - name: Clone + build gl4es (NDK r27d)
         run: |
@@ -679,6 +679,39 @@ jobs:
           # "OpenGL 0.0.0" / missing glGetError -> Sys_Error -> _exit(0)).
           sed -i 's@#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__)@#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__) || defined(ANDROID)@' src/gl/glstate.c
           [ "$(grep -c "defined(ANDROID)" src/gl/glstate.c)" -ge 6 ] || { echo "::error::glstate.c contextless-query guard patch failed"; exit 1; }
+          # csARM round 75: instrument the gl4es EGL passthrough + backend
+          # loader (tag CSARM_EGLW).  egl.c is a pure pass-through to the
+          # pinned SwiftShader backend and loader.c's open_lib decides WHICH
+          # .so actually backs gl4es - neither says anything under their own
+          # LOGD/nobanner gating, so the SDL -> libEGLgl4es.so -> gl4es ->
+          # SwiftShader chain was never attributed at runtime.  Log every
+          # load decision (override vs search, exact path) and every
+          # eglInitialize / eglCreateContext / eglCreateWindowSurface /
+          # eglMakeCurrent result UNCONDITIONALLY to logcat.  Cache key
+          # bumped egl4->egl5 so the instrumented libs actually rebuild.
+          sed -i 's@#include "../glx/hardext.h"@#include "../glx/hardext.h"\n\n#if defined(ANDROID) || defined(__ANDROID__)\n#include <android/log.h>\n/* csARM round 75: EGL-chain instrumentation (see ci.yml) */\n#define CSARM_EGLW_LOG(...) __android_log_print(ANDROID_LOG_INFO, "CSARM_EGLW", __VA_ARGS__)\n#else\n#define CSARM_EGLW_LOG(...) do {} while (0)\n#endif@' src/egl/egl.c
+          grep -q "CSARM_EGLW_LOG" src/egl/egl.c || { echo "::error::egl.c log macro patch failed"; exit 1; }
+          sed -i 's@    return egl_eglMakeCurrent(dpy, draw, read, ctx);@    EGLBoolean _csarm_rc = egl_eglMakeCurrent(dpy, draw, read, ctx);\n    CSARM_EGLW_LOG("eglMakeCurrent dpy=%p draw=%p read=%p ctx=%p -> %d", dpy, draw, read, ctx, (int)_csarm_rc);\n    return _csarm_rc;@' src/egl/egl.c
+          grep -q "eglMakeCurrent dpy=" src/egl/egl.c || { echo "::error::egl.c MakeCurrent patch failed"; exit 1; }
+          sed -i 's@    return egl_eglInitialize(dpy, major, minor);@    EGLBoolean _csarm_rc = egl_eglInitialize(dpy, major, minor);\n    CSARM_EGLW_LOG("eglInitialize dpy=%p -> %d ver=%d.%d", dpy, (int)_csarm_rc, major ? (int)*major : -1, minor ? (int)*minor : -1);\n    return _csarm_rc;@' src/egl/egl.c
+          grep -q "eglInitialize dpy=" src/egl/egl.c || { echo "::error::egl.c Initialize patch failed"; exit 1; }
+          sed -i 's@    return egl_eglCreateContext(dpy, config, share_context, (hardext.esversion == 1) ? egl_context_attrib : egl_context_attrib_es2);@    EGLContext _csarm_ctx = egl_eglCreateContext(dpy, config, share_context, (hardext.esversion == 1) ? egl_context_attrib : egl_context_attrib_es2);\n    CSARM_EGLW_LOG("eglCreateContext dpy=%p cfg=%p share=%p esver=%d -> %p", dpy, config, share_context, hardext.esversion, _csarm_ctx);\n    return _csarm_ctx;@' src/egl/egl.c
+          grep -q "eglCreateContext dpy=" src/egl/egl.c || { echo "::error::egl.c CreateContext patch failed"; exit 1; }
+          sed -i 's@    return egl_eglCreateWindowSurface(dpy, config, win, attrib_list);@    EGLSurface _csarm_surf = egl_eglCreateWindowSurface(dpy, config, win, attrib_list);\n    CSARM_EGLW_LOG("eglCreateWindowSurface dpy=%p cfg=%p win=%p -> %p", dpy, config, win, _csarm_surf);\n    return _csarm_surf;@' src/egl/egl.c
+          grep -q "eglCreateWindowSurface dpy=" src/egl/egl.c || { echo "::error::egl.c CreateWindowSurface patch failed"; exit 1; }
+          # loader.c (compiled into libGL.so): same macro + open_lib/load_libs
+          sed -i 's@#include "loader.h"@#include "loader.h"\n\n#if defined(ANDROID) || defined(__ANDROID__)\n#include <android/log.h>\n/* csARM round 75: EGL-chain instrumentation (see ci.yml) */\n#define CSARM_EGLW_LOG(...) __android_log_print(ANDROID_LOG_INFO, "CSARM_EGLW", __VA_ARGS__)\n#else\n#define CSARM_EGLW_LOG(...) do {} while (0)\n#endif@' src/gl/loader.c
+          grep -q "CSARM_EGLW_LOG" src/gl/loader.c || { echo "::error::loader.c log macro patch failed"; exit 1; }
+          sed -i 's@            strncpy(path_name, override, PATH_MAX);@            strncpy(path_name, override, PATH_MAX);\n            CSARM_EGLW_LOG("open_lib override OK: %s lib=%p", path_name, lib);@' src/gl/loader.c
+          grep -q "open_lib override OK" src/gl/loader.c || { echo "::error::loader.c override patch failed"; exit 1; }
+          sed -i 's@                if ((lib = dlopen(path_name, flags))) {@                if ((lib = dlopen(path_name, flags))) {\n                    CSARM_EGLW_LOG("open_lib search OK: %s lib=%p", path_name, lib);@' src/gl/loader.c
+          grep -q "open_lib search OK" src/gl/loader.c || { echo "::error::loader.c search patch failed"; exit 1; }
+          sed -i 's@^    return lib;@    CSARM_EGLW_LOG("open_lib done lib=%p", lib);\n    return lib;@' src/gl/loader.c
+          grep -q "open_lib done lib=" src/gl/loader.c || { echo "::error::loader.c tail patch failed"; exit 1; }
+          sed -i 's@    gles = open_lib((globals4es.es==1)?gles_lib:gles2_lib, gles_override);@    CSARM_EGLW_LOG("load_libs gles override=%s", gles_override ? gles_override : "(unset)");\n    gles = open_lib((globals4es.es==1)?gles_lib:gles2_lib, gles_override);@' src/gl/loader.c
+          grep -q "load_libs gles override" src/gl/loader.c || { echo "::error::loader.c gles pin patch failed"; exit 1; }
+          sed -i 's@    egl = open_lib(egl_lib, egl_override);@    CSARM_EGLW_LOG("load_libs egl override=%s", egl_override ? egl_override : "(unset)");\n    egl = open_lib(egl_lib, egl_override);@' src/gl/loader.c
+          grep -q "load_libs egl override" src/gl/loader.c || { echo "::error::loader.c egl pin patch failed"; exit 1; }
           pip install -q cmake ninja || true
           export PATH="$HOME/.local/bin:$PATH"
           cmake -S . -B out -G Ninja \
