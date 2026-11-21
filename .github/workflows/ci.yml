@@ -1226,6 +1226,17 @@ jobs:
             "$ADB" shell "ls /data/data/com.csarm.port/files/cstrike" 2>/dev/null | head -25 \
               || "$ADB" -s emulator-5554 shell "run-as com.csarm.port sh -c 'ls files/cstrike'" | head -25
             echo "content staged in $((SECONDS - T0))s"
+            # shader inventory: does the depot carry compiled VCS files at all?
+            # run #238/#239 hinge on shaders/vsh+psh+fxc presence under cstrike/
+            for d in shaders shaders/vsh shaders/psh shaders/fxc; do
+              if [ -d "$SRC/cstrike/$d" ]; then
+                N=$(find "$SRC/cstrike/$d" -name '*.vcs' 2>/dev/null | wc -l)
+                echo "cstrike/$d: $(ls "$SRC/cstrike/$d" | wc -l) entries, $N .vcs"
+                ls "$SRC/cstrike/$d" | head -5
+              else
+                echo "cstrike/$d: ABSENT from depot"
+              fi
+            done
             rm -rf "$HOME/csgo-content"   # ~30 GB freed on the runner once staged
           else
             echo "CONTENT=none — engine boots on the asset skeleton only"

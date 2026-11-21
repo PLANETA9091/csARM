@@ -5034,3 +5034,48 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  
  		if ( pFileCache->IsOldVersion() )
  		{ 
+diff -ruN a/togl/dxabstract.cpp b/togl/dxabstract.cpp
+--- a/togl/dxabstract.cpp
++++ b/togl/dxabstract.cpp
+@@ -2720,10 +2720,41 @@
+ 	return S_OK;
+ }
+ 
++#ifdef __ANDROID__
++#include <android/log.h>
++#endif
+ HRESULT IDirect3DDevice9::SetViewport(CONST D3DVIEWPORT9* pViewport)
+ {
+ 	GL_BATCH_PERF_CALL_TIMER;
+ 	GL_PUBLIC_ENTRYPOINT_CHECKS( this );
++#ifdef __ANDROID__
++	// csARM round 85: run #238 died SIGSEGV 0x0 inside glViewport
++	// called from here (glViewport <- SetViewport <- CommitSetViewports
++	// <- ClearBuffers) right after the startup-graphic material failed
++	// to load its shaders.  Log the incoming state once per boot and
++	// clamp degenerate 0x0 viewports to 1x1 before gl4es sees them.
++	if ( !pViewport )
++		return D3DERR_INVALIDCALL;
++	{
++		static bool s_seen = false;
++		bool bDegenerate = ( pViewport->Width == 0 || pViewport->Height == 0 );
++		if ( !s_seen || bDegenerate )
++		{
++			s_seen = true;
++			__android_log_print( ANDROID_LOG_INFO, "CSARM_VP",
++				"SetViewport x=%d y=%d w=%d h=%d ctx=%p%s",
++				pViewport->X, pViewport->Y, pViewport->Width, pViewport->Height,
++				(void*)m_ctx, bDegenerate ? " DEGENERATE" : "" );
++		}
++		if ( bDegenerate )
++		{
++			D3DVIEWPORT9 v = *pViewport;
++			v.Width = 1;
++			v.Height = 1;
++			return SetViewport( &v );
++		}
++	}
++#endif
+ 	GLMPRINTF(("-X- IDirect3DDevice9::SetViewport : minZ %f, maxZ %f",pViewport->MinZ, pViewport->MaxZ ));
+ 	
+ 	gl.m_ViewportBox.x		= pViewport->X;
