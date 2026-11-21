@@ -738,7 +738,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: bundle
-          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl5
+          key: gl4es-libs-${{ matrix.abi }}-bc4314d-egl5fbdel
 
       - name: Clone + build gl4es (NDK r27d)
         run: |
@@ -789,6 +789,24 @@ jobs:
           # "OpenGL 0.0.0" / missing glGetError -> Sys_Error -> _exit(0)).
           sed -i 's@#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__)@#if defined(AMIGAOS4) || defined(__EMSCRIPTEN__) || defined(ANDROID)@' src/gl/glstate.c
           [ "$(grep -c "defined(ANDROID)" src/gl/glstate.c)" -ge 6 ] || { echo "::error::glstate.c contextless-query guard patch failed"; exit 1; }
+          # csARM round 86: glDeleteFramebuffers on the CURRENTLY BOUND
+          # framebuffer sets fbo.current_fb / fbo_read / fbo_draw to NULL
+          # (framebuffers.c).  The next glViewport then faults at
+          # glstate->fbo.current_fb->id — the exact #238/#239/#241 crash:
+          # glViewport+35 SIGSEGV 0x0 <- IDirect3DDevice9::SetViewport <-
+          # CommitSetViewports <- CShaderAPIDx8::ClearBuffers during the
+          # startup graphic (disassembled the shipped libGL.so: 105cc3
+          # `cmpl $0x0,(%rax)` with rax=current_fb=0; glstate itself was
+          # fine, so round 85's degenerate-viewport clamp never fired).
+          # GL spec: deleting a bound framebuffer reverts its binding to
+          # the default framebuffer — rebind to fbo_0 (always allocated in
+          # NewGLState, shared contexts copy it) instead of NULL; the GLES
+          # driver already unbinds a deleted FBO to 0, so this matches.
+          # Cache key bumped egl5->egl5fbdel so the fixed libs rebuild.
+          sed -i 's@glstate->fbo.current_fb = 0;@glstate->fbo.current_fb = glstate->fbo.fbo_0;@' src/gl/framebuffers.c
+          sed -i 's@glstate->fbo.fbo_read = 0;@glstate->fbo.fbo_read = glstate->fbo.fbo_0;@' src/gl/framebuffers.c
+          sed -i 's@glstate->fbo.fbo_draw = 0;@glstate->fbo.fbo_draw = glstate->fbo.fbo_0;@' src/gl/framebuffers.c
+          grep -q "glstate->fbo.current_fb = glstate->fbo.fbo_0;" src/gl/framebuffers.c || { echo "::error::gl4es fb-delete rebind patch failed"; exit 1; }
           # csARM round 75: instrument the gl4es EGL passthrough + backend
           # loader (tag CSARM_EGLW).  egl.c is a pure pass-through to the
           # pinned SwiftShader backend and loader.c's open_lib decides WHICH
@@ -1185,6 +1203,10 @@ jobs:
           done
           [ "$OK" = "1" ] || { echo "::error::APK install failed"; "$ADB" -s emulator-5554 logcat -d > logcat_boot.txt || true; exit 1; }
           "$ADB" -s emulator-5554 shell settings put global window_animation_scale 0 || true
+          # csARM round 86: the 256KB default main buffer rotated out the
+          # one-time CSARM_VP SetViewport log in #241 — 4MB keeps every
+          # marker from all boot stages in the final logcat -d dump.
+          "$ADB" -s emulator-5554 shell logcat -G 4M || true
           # --- part 0: stage game content into the app sandbox (once; the
           # same filesDir serves the later native/arm64/swiftshader stages) ---
           if [ "${CONTENT:-none}" = "pack" ]; then
@@ -1237,6 +1259,17 @@ jobs:
                 echo "cstrike/$d: ABSENT from depot"
               fi
             done
+            # round 86: #241 confirmed no loose shaders/ — but the filesystem
+            # auto-mounts pak%02d_dir.vpk for EVERY search path (basefilesystem
+            # AddSearchPathInternal, SUPPORT_VPK on POSIX).  If the depot ships
+            # pak VPKs, VCS inside them are reachable via the GAME pathID and
+            # the shader path can still light up without a new content upload.
+            echo "--- depot VPK scan ---"
+            find "$SRC/cstrike" -name '*.vpk' 2>/dev/null | head -20
+            echo "--- depot top level (first 40) ---"
+            ls "$SRC/cstrike" | head -40
+            echo "--- biggest depot entries ---"
+            du -sh "$SRC/cstrike"/* 2>/dev/null | sort -rh | head -15
             rm -rf "$HOME/csgo-content"   # ~30 GB freed on the runner once staged
           else
             echo "CONTENT=none — engine boots on the asset skeleton only"
@@ -1264,7 +1297,12 @@ jobs:
             # progress marker means static-init is crash-looping — stop early
             # instead of burning the full 600s window (runs 41215315729 /
             # 41219950401 wasted 2x10min exactly here).
-            [ "$(grep -c CSARM_EXIT_HIT logcat_boot.txt 2>/dev/null || echo 0)" -ge 6 ] && { echo "crash-loop detected (6x CSARM_EXIT_HIT) — stopping wait early"; break; }
+            # NB: grep -c prints "0" AND exits 1 when there are no matches,
+            # so `$(grep -c X f || echo 0)` yields "0\n0" and `[ -ge ]`
+            # dies with "integer expected" (run #240: bogus "engine process
+            # died" line right after a healthy t=7s launch).
+            EXIT_HITS=$(grep -c CSARM_EXIT_HIT logcat_boot.txt 2>/dev/null || true); EXIT_HITS=${EXIT_HITS:-0}
+            [ "${EXIT_HITS%%$'\n'*}" -ge 6 ] && { echo "crash-loop detected (6x CSARM_EXIT_HIT) — stopping wait early"; break; }
             # stable-launcher early break: once LauncherMain is live, a process
             # that stays alive 120s with no tick/fail/exit is a healthy engine
             # idling on content it does not have yet — the old code burned the
@@ -1347,7 +1385,8 @@ jobs:
             "$ADB" -s emulator-5554 logcat -d > logcat_sw.txt 2>/dev/null || true
             grep -qE "CSARM_MAIN_EXIT|CSARM_ENGINE_TICK|CSARM_MAIN_FAIL" logcat_sw.txt && break
             # crash-loop fast-fail — see the x86_64 boot loop above
-            [ "$(grep -c CSARM_EXIT_HIT logcat_sw.txt 2>/dev/null || echo 0)" -ge 6 ] && { echo "crash-loop detected (6x CSARM_EXIT_HIT) — stopping wait early"; break; }
+            EXIT_HITS=$(grep -c CSARM_EXIT_HIT logcat_sw.txt 2>/dev/null || true); EXIT_HITS=${EXIT_HITS:-0}
+            [ "${EXIT_HITS%%$'\n'*}" -ge 6 ] && { echo "crash-loop detected (6x CSARM_EXIT_HIT) — stopping wait early"; break; }
             # stable-launcher early break — see the x86_64 boot loop above
             if [ -z "$LAUNCH_S" ] && grep -q "CSARM_LAUNCHER_CALL" logcat_sw.txt; then
               LAUNCH_S=$SECONDS
