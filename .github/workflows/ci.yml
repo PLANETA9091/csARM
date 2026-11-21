@@ -180,6 +180,23 @@ jobs:
           path: obj
           key: obj-${{ matrix.abi }}-${{ matrix.tag }}-O${{ github.event.inputs.opt_level || '-O2' }}-lto${{ github.event.inputs.lto || '1' }}-${{ hashFiles('build/**', 'patches/**', 'lists/**') }}
 
+      # ccache: the obj cache above is exact-keyed, so ANY byte in the patch
+      # diff invalidates every module and "Build modules" recompiles ~1500
+      # TUs from scratch (~10min/job).  ccache hits per TU: a one-file patch
+      # change recompiles only that TU and the .o content stays identical
+      # (same flags), so the obj cache below still links cleanly.
+      # Key is run-id (always new -> always saved), restore-keys is the
+      # ABI-wide prefix (latest previous entry, any tag).  All matrix jobs
+      # share one key per ABI: whichever finishes first saves, the rest
+      # skip ("cache already exists") — coverage converges over runs.
+      - name: Cache ccache (rolling, per-ABI)
+        uses: actions/cache@v4
+        with:
+          path: .cache/ccache
+          key: ccache-${{ matrix.abi }}-v1-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ matrix.abi }}-v1-
+
       - name: Cache host protoc
         uses: actions/cache@v4
         with:
@@ -209,6 +226,19 @@ jobs:
           export OPT=${{ github.event.inputs.opt_level || '-O2' }}
           export LTO=${{ github.event.inputs.lto || '1' }}
           export JOBS=4
+          # csARM round 86: ccache — the obj cache is exact-keyed, so any
+          # patch change rebuilds every module; ccache turns that into
+          # per-TU incremental compiles.  trybuild.sh prefixes the compiler
+          # with `ccache` when CCACHE=1.
+          if command -v ccache >/dev/null 2>&1; then
+            export CCACHE=1
+            export CCACHE_DIR="$GITHUB_WORKSPACE/.cache/ccache"
+            export CCACHE_MAXSIZE=900M
+            ccache --zero-stats >/dev/null || true
+            echo "ccache enabled: $(ccache --version | head -1)"
+          else
+            echo "::warning::ccache not on runner image — building without it"
+          fi
           if [ "${{ matrix.tag }}" = "vgui" ]; then
             bash build/setup_freetype.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.cache"
           fi
@@ -221,6 +251,9 @@ jobs:
             esac
             DEFX="${{ matrix.defs }}" bash build/trybuild.sh "$m" || true
           done
+          if [ "${CCACHE:-0}" = "1" ]; then
+            ccache --show-stats || true
+          fi
 
       - name: Build summary
         run: |
@@ -1266,6 +1299,17 @@ jobs:
             # the shader path can still light up without a new content upload.
             echo "--- depot VPK scan ---"
             find "$SRC/cstrike" -name '*.vpk' 2>/dev/null | head -20
+            # the auto-mount hinges on the INDEX file specifically: it probes
+            # pak01_dir.vpk via fopen and CPackedStore then opens the sibling
+            # pak01_000.vpk.. chunks.  #242's scans (head -20 / du top-15) had
+            # no window where pak01_dir.vpk would sort, so it stayed unknown.
+            if [ -f "$SRC/cstrike/pak01_dir.vpk" ]; then
+              echo "pak01_dir.vpk: PRESENT ($(du -h "$SRC/cstrike/pak01_dir.vpk" | cut -f1))"
+            else
+              echo "pak01_dir.vpk: ABSENT — CS:GO packs shaders loose in csgo/shaders/ (not in this depot)"
+            fi
+            echo "--- staged gameinfo.txt SearchPaths (what the engine actually mounts) ---"
+            sed -n '/SearchPaths/,/}/p' "$SRC/cstrike/gameinfo.txt" 2>/dev/null | head -12
             echo "--- depot top level (first 40) ---"
             ls "$SRC/cstrike" | head -40
             echo "--- biggest depot entries ---"
@@ -1545,7 +1589,7 @@ jobs:
             if grep -qa "CUtlLinkedList overflow" console_live.txt logcat_map.txt 2>/dev/null; then
               echo "engine self-exit: CUtlLinkedList overflow at t=${SECONDS}s (CSARM_EXIT_BT frames in logcat)"; break
             fi
-            if grep -qaE 'Host_NewGame|Loading map|Spawning server' logcat_map.txt console_live.txt 2>/dev/null; then
+            if grep -qaE 'Host_NewGame|Loading map|Spawning server|State_NewGame' logcat_map.txt console_live.txt 2>/dev/null; then
               if [ -z "$PROG" ]; then PROG=$SECONDS; echo "map spawn progress at t=${SECONDS}s — 480s capture window"; fi
               # round 54: 360s proved the muzzleflash fix (#191); 480s keeps
               # the session alive through 3-4 ar_dizzy round cycles so later
@@ -1651,7 +1695,7 @@ jobs:
           if grep -q "CSARM_MAIN_FAIL" logcat_map.txt; then
             echo "::error::map probe: launcher failed"; grep CSARM_MAIN_FAIL logcat_map.txt | head -3; fail=1
           fi
-          NEWGAME=$(grep -ahcE "Host_NewGame|Loading map|Spawning server" logcat_map.txt console_live.txt 2>/dev/null | paste -sd+ | bc 2>/dev/null || grep -acE "Host_NewGame|Loading map|Spawning server" logcat_map.txt console_live.txt 2>/dev/null || echo 0)
+          NEWGAME=$(grep -ahcE "Host_NewGame|Loading map|Spawning server|State_NewGame" logcat_map.txt console_live.txt 2>/dev/null | paste -sd+ | bc 2>/dev/null || grep -acE "Host_NewGame|Loading map|Spawning server" logcat_map.txt console_live.txt 2>/dev/null || echo 0)
           echo "NEWGAME markers: $NEWGAME"
           [ -n "$NEWGAME" ] || NEWGAME=0
           if [ "$fail" = "0" ] && grep -qa "Fatal signal" crash_map.txt && [ "$NEWGAME" = "0" ]; then

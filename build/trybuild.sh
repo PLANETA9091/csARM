@@ -100,7 +100,11 @@ build_one() {
   local obj="$OUT/$(echo "$F" | tr '/' '_').o"
   [ -s "$obj" ] && return 0
   local st="$DEF"; case "$F" in *.c) st="${DEF/-std=gnu++17/-std=gnu11}" ;; esac
-  timeout ${TIMEOUT:-200} $CC -c -fPIC $OPT -w $INC $st "$R/c15/$F" -o "$obj" > "$ERR/$(echo "$F" | tr '/' '_').log" 2>&1
+  # CCACHE=1 (ci.yml round 86): prefix the compiler with ccache for per-TU
+  # incremental builds across patch changes.  ccache passes flags through
+  # untouched and the .o bytes stay identical, so the obj cache + link stay
+  # deterministic.
+  timeout ${TIMEOUT:-200} ${CCACHE:+ccache} $CC -c -fPIC $OPT -w $INC $st "$R/c15/$F" -o "$obj" > "$ERR/$(echo "$F" | tr '/' '_').log" 2>&1
 }
 export -f build_one
 
