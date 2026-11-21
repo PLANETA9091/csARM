@@ -4981,7 +4981,26 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  #include "tier0/memdbgon.h"
  
  // mapping from vcs file basename to shader combo semantics information.
-@@ -3246,11 +3252,15 @@
+@@ -2637,6 +2643,18 @@
+ FileHandle_t CShaderManager::OpenFileAndLoadHeader( const char *pFileName, ShaderHeader_t *pHeader )
+ {
+ 	FileHandle_t fp = g_pFullFileSystem->Open( pFileName, "rb", "PLATFORM" );
++#ifdef __ANDROID__
++	// csARM round 84: "PLATFORM" carries only the ../platform dir
++	// (FileSystem_AddSearchPath_Platform), but the VCS files live in the
++	// game dir (cstrike/shaders/...).  Run #238: with full content staged
++	// every VCS open still failed - the shader manager never saw the game
++	// dir.  Fall back to "GAME", which has the game dir mounted.
++	if ( fp == FILESYSTEM_INVALID_HANDLE )
++	{
++		fp = g_pFullFileSystem->Open( pFileName, "rb", "GAME" );
++		CSARM_SHDR( "VCS GAME-fallback \"%s\" -> %s", pFileName, ( fp == FILESYSTEM_INVALID_HANDLE ) ? "FAIL" : "ok" );
++	}
++#endif
+ 	if ( fp == FILESYSTEM_INVALID_HANDLE )
+ 	{
+ 		return FILESYSTEM_INVALID_HANDLE;
+@@ -3246,11 +3264,15 @@
  		char filename[MAX_PATH];
  		Q_snprintf( filename, MAX_PATH, "shaders\\%s\\%s" SHADER_FNAME_EXTENSION, bVertexShader ? "vsh" : "psh", pName );
  		hFile = OpenFileAndLoadHeader( filename, pHeader );
@@ -4997,7 +5016,7 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  #ifdef DYNAMIC_SHADER_COMPILE
  			lookup.m_nVcsCrc32 = pHeader->m_nSourceCRC32;
  			// See if the CRC in the VCS file matches the source.  If so, load from there rather than compiling dynamically.
-@@ -3280,6 +3290,7 @@
+@@ -3280,6 +3302,7 @@
  			{
  				lookup.m_Flags |= SHADER_FAILED_LOAD;
  				DevWarning( "Couldn't load %s shader %s\n", bVertexShader ? "vertex" : "pixel", pName );
@@ -5005,7 +5024,7 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  				return false;
  			}
  		}
-@@ -3293,6 +3304,9 @@
+@@ -3293,6 +3316,9 @@
  		pFileCache->m_Name = lookup.m_Name;
  		pFileCache->m_Filename = m_ShaderSymbolTable.AddString( filename );
  		pFileCache->m_bVertexShader = bVertexShader;

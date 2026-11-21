@@ -19,6 +19,10 @@ on:
         description: 'Strip debug info from .so (1 = enable)'
         required: false
         default: '0'
+      content_mode:
+        description: 'Game content: auto (download draft-release depot) | none (skeleton boot, fast iteration)'
+        required: false
+        default: 'auto'
 
 env:
   MIRROR: https://github.com/RileyKun/cstrike15_src-2019.git
@@ -965,6 +969,14 @@ jobs:
         run: |
           set -e
           echo "CONTENT=none" >> "$GITHUB_ENV"
+          # dispatch override: content_mode=none skips the whole (multi-GB)
+          # content download + unzip + adb push.  Run #238's boot job spent
+          # ~13 of its ~37 min just moving the 31GB depot — code-only boot
+          # iterations dispatch with content_mode=none and finish in ~half.
+          if [ "${{ inputs.content_mode || 'auto' }}" = "none" ]; then
+            echo "content_mode=none — skeleton boot, skipping content fetch"
+            exit 0
+          fi
           # NB: 'game-content' is a DRAFT release, and its tag does not exist
           # as a git ref yet, so /releases/tags/game-content returns 404 and
           # 'gh release view' fails. Resolve the release through the release
