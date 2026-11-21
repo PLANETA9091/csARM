@@ -128,6 +128,29 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing -I "$R/c15/public"
   -o "$OUTDIR/glue_engine.cpp.o" "$SCRIPT_DIR/glue_engine.cpp" 2>>"$LOG" && GLUE_ENG_O="$OUTDIR/glue_engine.cpp.o"
 # soundsystem glue (windows-only device factories)
 GLUE_SND_O=""
+# round 80: SHADER_DLL_INTERFACE_VERSION ("ShaderDLL004") export for
+# libstdshader_dx9.so.  Upstream links shaderlib STATICALLY into the shader
+# DLL, so ShaderDLL.cpp's EXPOSE_INTERFACE_FN registry answers LoadShaderDLL's
+# version query; here shaderlib is a SHARED lib (round 55) and the shader
+# classes' global ctors register into ITS CShaderDLL singleton, so the DLL's
+# factory must expose that same singleton.  Without it the query returns
+# NULL, the module is unloaded right after dlopen, the registered shaders
+# never reach SetupShaderDictionary, every material falls back to the error
+# material and DrawStartupGraphic SIGSEGVs (run #232, fault 0x1c).
+STDSHADER_EXP_O=""
+$CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing \
+  -include "$SCRIPT_DIR/protocompat.h" \
+  -DDX_TO_GL_ABSTRACTION -DCSARM_GL_SHIM -DX64BITS -DPOSIX=1 -DLINUX=1 -D_LINUX=1 -DGNUC=1 \
+  -DPLATFORM_64BITS=1 -DCOMPILER_GCC=1 -D_POSIX=1 -D__ANDROID__=1 -DANDROID=1 \
+  -DENGINE_DLL=1 -DUSE_SDL=1 -DCSARM_PORT=1 -Dpthread_yield=sched_yield \
+  -Dstricmp=strcasecmp -D_stricmp=strcasecmp -Dstrnicmp=strncasecmp -D_strnicmp=strncasecmp -D_DLL_EXT=.so \
+  -I "$R/c15/public" -I "$R/c15/public/tier0" -I "$R/c15/public/tier1" -I "$R/c15/public/tier2" \
+  -I "$SCRIPT_DIR/glshim" -I "$R/c15/thirdparty" \
+  -o "$OUTDIR/stdshader_export.cpp.o" "$SCRIPT_DIR/stdshader_export.cpp" 2>>"$LOG" \
+  && STDSHADER_EXP_O="$OUTDIR/stdshader_export.cpp.o" \
+  || echo "[glue] WARN: stdshader_export.cpp.o failed — libstdshader_dx9 will not answer ShaderDLL004" | tee -a "$LOG"
+# soundsystem glue (windows-only device factories)
+GLUE_SND_O=""
 $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_soundsystem.cpp.o" "$SCRIPT_DIR/glue_soundsystem.cpp" 2>>"$LOG" && GLUE_SND_O="$OUTDIR/glue_soundsystem.cpp.o"
 # BSP lump globals for raytrace/trace3.cpp tool-only paths (see glue_bsp.cpp)
 BSPGLUE_O=""
@@ -560,6 +583,13 @@ link_so() {
     libvstdlib.so|liblocalize.so|libshaderapiempty.so|\
     libshaderapidx9.so|libstdshader_dx9.so)
       [ -n "$IFACE_OBJ" ] && { objs+=("$IFACE_OBJ"); total=$((total+1)); } ;;
+  esac
+  # round 80: register "ShaderDLL004" in libstdshader_dx9.so's tier1 factory
+  # (see the STDSHADER_EXP_O comment above for why the upstream-shaped static
+  # registry is missing here)
+  case "$name" in
+    libstdshader_dx9.so)
+      [ -n "$STDSHADER_EXP_O" ] && { objs+=("$STDSHADER_EXP_O"); total=$((total+1)); } ;;
   esac
   # Steamworks / platform glue only where the sources actually reference it
   case "$name" in
