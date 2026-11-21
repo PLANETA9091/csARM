@@ -4987,13 +4987,13 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  		hFile = OpenFileAndLoadHeader( filename, pHeader );
 +		// csARM round 83: name every VCS attempt and its result so the next
 +		// run separates "file missing" from "combo missing" at a glance
-+		CSARM_LOGI( "VCS vsh/psh \"%s\" -> %s", filename, ( hFile == FILESYSTEM_INVALID_HANDLE ) ? "FAIL" : "ok" );
++		CSARM_SHDR( "VCS vsh/psh \"%s\" -> %s", filename, ( hFile == FILESYSTEM_INVALID_HANDLE ) ? "FAIL" : "ok" );
  		if ( hFile == FILESYSTEM_INVALID_HANDLE )
  		{
  			// next, try the fxc dir
  			Q_snprintf( filename, MAX_PATH, "shaders\\fxc\\%s" SHADER_FNAME_EXTENSION, pName );
  			hFile = OpenFileAndLoadHeader( filename, pHeader );
-+			CSARM_LOGI( "VCS fxc \"%s\" -> %s", filename, ( hFile == FILESYSTEM_INVALID_HANDLE ) ? "FAIL" : "ok" );
++			CSARM_SHDR( "VCS fxc \"%s\" -> %s", filename, ( hFile == FILESYSTEM_INVALID_HANDLE ) ? "FAIL" : "ok" );
  #ifdef DYNAMIC_SHADER_COMPILE
  			lookup.m_nVcsCrc32 = pHeader->m_nSourceCRC32;
  			// See if the CRC in the VCS file matches the source.  If so, load from there rather than compiling dynamically.
@@ -5001,7 +5001,7 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  			{
  				lookup.m_Flags |= SHADER_FAILED_LOAD;
  				DevWarning( "Couldn't load %s shader %s\n", bVertexShader ? "vertex" : "pixel", pName );
-+				CSARM_LOGW( "VCS load FAILED: %s shader \"%s\" (last tried \"%s\")", bVertexShader ? "vertex" : "pixel", pName, filename );
++				CSARM_SHDR( "VCS load FAILED: %s shader \"%s\" (last tried \"%s\")", bVertexShader ? "vertex" : "pixel", pName, filename );
  				return false;
  			}
  		}
@@ -5009,7 +5009,7 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  		pFileCache->m_Name = lookup.m_Name;
  		pFileCache->m_Filename = m_ShaderSymbolTable.AddString( filename );
  		pFileCache->m_bVertexShader = bVertexShader;
-+		CSARM_LOGI( "VCS hdr \"%s\": ver=%d static=%d dynamic=%d reqIdx=%d(0x%x)", filename,
++		CSARM_SHDR( "VCS hdr \"%s\": ver=%d static=%d dynamic=%d reqIdx=%d(0x%x)", filename,
 +			(int)pHeader->m_nVersion, (int)pHeader->m_nNumStaticCombos, (int)pHeader->m_nDynamicCombos,
 +			(int)lookup.m_nStaticIndex, (unsigned)lookup.m_nStaticIndex );
  
