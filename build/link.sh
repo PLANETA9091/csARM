@@ -73,7 +73,9 @@ bool g_bInitMemory = true;
 void DoApplyMemoryInitializations( void *pMem, size_t nSize ) { (void)pMem; (void)nSize; }
 size_t CalcHeapUsed() { return 0; }
 EOF
-$CC -c -fPIC -O1 -w -o "$OUTDIR/gbinit.cpp.o" "$OUTDIR/gbinit.cpp" 2>>"$LOG"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/gbinit.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -o "$OUTDIR/gbinit.cpp.o" "$OUTDIR/gbinit.cpp" 2>>"$LOG"
+fi
 
 # --- per-module glue objects -------------------------------------------------
 # interfaces.cpp (Valve links this tiny static lib into EVERY module; each .so
@@ -95,25 +97,53 @@ done
 [ -n "$IFACE_OBJ" ] && echo "[glue] iface.o: $IFACE_OBJ" | tee -a "$LOG" || echo "[glue] WARN: tier1_interface.o missing (no CreateInterface in module libs!)" | tee -a "$LOG"
 # Steamworks stub (no Steam on Android) — needed by engine/client/server/inputsystem/vgui_controls
 STEAM_O=""
-$CC -c -fPIC -O1 -w -o "$OUTDIR/stub_steam_api.cpp.o" "$SCRIPT_DIR/stub_steam_api.c" 2>>"$LOG" && STEAM_O="$OUTDIR/stub_steam_api.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/stub_steam_api.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -o "$OUTDIR/stub_steam_api.cpp.o" "$SCRIPT_DIR/stub_steam_api.c" 2>>"$LOG" && STEAM_O="$OUTDIR/stub_steam_api.cpp.o"
+else
+  STEAM_O="$OUTDIR/stub_steam_api.cpp.o"
+fi
 # C++ glue stubs (Phonon thread, SDR transport, ScaleformUI probe) — engine/client/server
 GLUE_O=""
-$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_stubs.cpp.o" "$SCRIPT_DIR/glue_stubs.cpp" 2>>"$LOG" && GLUE_O="$OUTDIR/glue_stubs.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_stubs.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_stubs.cpp.o" "$SCRIPT_DIR/glue_stubs.cpp" 2>>"$LOG" && GLUE_O="$OUTDIR/glue_stubs.cpp.o"
+else
+  GLUE_O="$OUTDIR/glue_stubs.cpp.o"
+fi
 # materialsystem glue: g_pHardwareConfig is owned by shaderapidx9 (not ported yet)
 GLUE_MS_O=""
-$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_materialsystem.cpp.o" "$SCRIPT_DIR/glue_materialsystem.cpp" 2>>"$LOG" && GLUE_MS_O="$OUTDIR/glue_materialsystem.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_materialsystem.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_materialsystem.cpp.o" "$SCRIPT_DIR/glue_materialsystem.cpp" 2>>"$LOG" && GLUE_MS_O="$OUTDIR/glue_materialsystem.cpp.o"
+else
+  GLUE_MS_O="$OUTDIR/glue_materialsystem.cpp.o"
+fi
 # bionic has no glibc __xstat — pathmatch's __real___xstat family shims (tier0/tier1)
 XSTAT_O=""
-$CC -c -fPIC -O1 -w -o "$OUTDIR/glue_xstat.cpp.o" "$SCRIPT_DIR/glue_xstat.c" 2>>"$LOG" && XSTAT_O="$OUTDIR/glue_xstat.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_xstat.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -o "$OUTDIR/glue_xstat.cpp.o" "$SCRIPT_DIR/glue_xstat.c" 2>>"$LOG" && XSTAT_O="$OUTDIR/glue_xstat.cpp.o"
+else
+  XSTAT_O="$OUTDIR/glue_xstat.cpp.o"
+fi
 # bzip2.c (C) cannot inline C++ V_isspace from strtools.h
 BZGLUE_O=""
-$CC -c -fPIC -O1 -w -o "$OUTDIR/glue_bzip2.cpp.o" "$SCRIPT_DIR/glue_bzip2.c" 2>>"$LOG" && BZGLUE_O="$OUTDIR/glue_bzip2.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_bzip2.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -o "$OUTDIR/glue_bzip2.cpp.o" "$SCRIPT_DIR/glue_bzip2.c" 2>>"$LOG" && BZGLUE_O="$OUTDIR/glue_bzip2.cpp.o"
+else
+  BZGLUE_O="$OUTDIR/glue_bzip2.cpp.o"
+fi
 # fontconfig stub (Android has no fontconfig; linuxfont.cpp enumerates fonts via it)
 FCSTUB_O=""
-$CC -c -fPIC -O1 -w -I "$SCRIPT_DIR/fontconfig_shim" -o "$OUTDIR/fcstub.cpp.o" "$SCRIPT_DIR/fontconfig_shim/fcstub.c" 2>>"$LOG" && FCSTUB_O="$OUTDIR/fcstub.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/fcstub.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -I "$SCRIPT_DIR/fontconfig_shim" -o "$OUTDIR/fcstub.cpp.o" "$SCRIPT_DIR/fontconfig_shim/fcstub.c" 2>>"$LOG" && FCSTUB_O="$OUTDIR/fcstub.cpp.o"
+else
+  FCSTUB_O="$OUTDIR/fcstub.cpp.o"
+fi
 # filesystem glue for appframework/vgui (engine has the real implementation)
 GLUE_FS_O=""
-$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_fs.cpp.o" "$SCRIPT_DIR/glue_fs.cpp" 2>>"$LOG" && GLUE_FS_O="$OUTDIR/glue_fs.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_fs.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_fs.cpp.o" "$SCRIPT_DIR/glue_fs.cpp" 2>>"$LOG" && GLUE_FS_O="$OUTDIR/glue_fs.cpp.o"
+else
+  GLUE_FS_O="$OUTDIR/glue_fs.cpp.o"
+fi
 # engine middleware stubs (jpeg / Phonon / DSound voice capture)
 GLUE_ENG_O=""
 # -I c15/public: glue_engine.cpp includes <phonon/phonon.h> (2019 tree ships
@@ -151,17 +181,33 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing \
   || echo "[glue] WARN: stdshader_export.cpp.o failed — libstdshader_dx9 will not answer ShaderDLL004" | tee -a "$LOG"
 # soundsystem glue (windows-only device factories)
 GLUE_SND_O=""
-$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_soundsystem.cpp.o" "$SCRIPT_DIR/glue_soundsystem.cpp" 2>>"$LOG" && GLUE_SND_O="$OUTDIR/glue_soundsystem.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_soundsystem.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_soundsystem.cpp.o" "$SCRIPT_DIR/glue_soundsystem.cpp" 2>>"$LOG" && GLUE_SND_O="$OUTDIR/glue_soundsystem.cpp.o"
+else
+  GLUE_SND_O="$OUTDIR/glue_soundsystem.cpp.o"
+fi
 # BSP lump globals for raytrace/trace3.cpp tool-only paths (see glue_bsp.cpp)
 BSPGLUE_O=""
-$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_bsp.cpp.o" "$SCRIPT_DIR/glue_bsp.cpp" 2>>"$LOG" && BSPGLUE_O="$OUTDIR/glue_bsp.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_bsp.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_bsp.cpp.o" "$SCRIPT_DIR/glue_bsp.cpp" 2>>"$LOG" && BSPGLUE_O="$OUTDIR/glue_bsp.cpp.o"
+else
+  BSPGLUE_O="$OUTDIR/glue_bsp.cpp.o"
+fi
 # particles glue: UTIL_IsDedicatedServer (engine-layered; the game DLLs carry
 # their own definitions — keep the stub OUT of the shared glue objects)
 PARTGLUE_O=""
-$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_particles.cpp.o" "$SCRIPT_DIR/glue_particles.cpp" 2>>"$LOG" && PARTGLUE_O="$OUTDIR/glue_particles.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_particles.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_particles.cpp.o" "$SCRIPT_DIR/glue_particles.cpp" 2>>"$LOG" && PARTGLUE_O="$OUTDIR/glue_particles.cpp.o"
+else
+  PARTGLUE_O="$OUTDIR/glue_particles.cpp.o"
+fi
 # exit() interposer (boot diagnosis — see glue_exit.cpp)
 EXITGLUE_O=""
-$CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_exit.cpp.o" "$SCRIPT_DIR/glue_exit.cpp" 2>>"$LOG" && EXITGLUE_O="$OUTDIR/glue_exit.cpp.o"
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_exit.cpp.o" ]; then
+  $CC -c -fPIC -O1 -w -std=gnu++17 -o "$OUTDIR/glue_exit.cpp.o" "$SCRIPT_DIR/glue_exit.cpp" 2>>"$LOG" && EXITGLUE_O="$OUTDIR/glue_exit.cpp.o"
+else
+  EXITGLUE_O="$OUTDIR/glue_exit.cpp.o"
+fi
 # GCSDK stub: public/gcsdk ships headers only (the .cpp implementations live in
 # the Steam SDK).  game DLLs reference GCSDK::CJob/CSharedObject/CProtoBufMsg*,
 # so provide no-op out-of-line definitions with EXACT signatures from the real
@@ -542,6 +588,11 @@ PYEOF
 
 link_so() {
   local name="$1"; shift
+  # QUICK_LIB=libfoo.so -> relink only that library (deps are already in out/).
+  # Cuts a 90s full link pass down to a few seconds while iterating.
+  if [ -n "${QUICK_LIB:-}" ] && [ "$name" != "$QUICK_LIB" ]; then
+    return 0
+  fi
   local deps="$1"; shift   # list of previously linked libs, e.g. "tier0 tier1"
   local tags=()
   local objs=()
@@ -799,34 +850,42 @@ link_so liblauncher.so "tier0 tier1 tier2 appframework SDL2" launcher || true
 # unresolvable DATA UND there (run #141: client dlopen failure).
 RR_OBJS=$(ls obj/responserules_runtime/*.o 2>/dev/null | tr '\n' ' ')
 [ -n "${RR_OBJS# }" ] && echo "[rr] responserules objs: $(ls obj/responserules_runtime/*.o 2>/dev/null | wc -l)" | tee -a "$LOG"
-for GAMEDLL in client server; do
-  TAGS=$(ls -d obj/$GAMEDLL* 2>/dev/null | grep -v genproto | tr '\n' ' ')
-  [ -z "$TAGS" ] && continue
-  GAMEOBJS=""
-  GTOTAL=0
-  for t in $TAGS; do
-    for o in $t/*.o; do
-      basename "$o" | grep -qE "$EXCLUDE_RE" || { GAMEOBJS="$GAMEOBJS $o"; GTOTAL=$((GTOTAL+1)); }
+# QUICK_LIB: the game DLLs are 25-29 MB of LTO objects each; skip them
+# unless the caller explicitly asked for one of them.
+if [ -z "${QUICK_LIB:-}" ] || [ "$QUICK_LIB" = "libclient.so" ] || [ "$QUICK_LIB" = "libserver.so" ]; then
+  for GAMEDLL in client server; do
+    TAGS=$(ls -d obj/$GAMEDLL* 2>/dev/null | grep -v genproto | tr '\n' ' ')
+    [ -z "$TAGS" ] && continue
+    GAMEOBJS=""
+    GTOTAL=0
+    for t in $TAGS; do
+      for o in $t/*.o; do
+        basename "$o" | grep -qE "$EXCLUDE_RE" || { GAMEOBJS="$GAMEOBJS $o"; GTOTAL=$((GTOTAL+1)); }
+      done
     done
+    [ "$GTOTAL" -eq 0 ] && continue
+    # responserules runtime: server only (Valve's $Lib layout)
+    RR_THIS=""
+    [ "$GAMEDLL" = "server" ] && RR_THIS="$RR_OBJS"
+    echo "[link] lib$GAMEDLL.so (tags: $TAGS) objs=$GTOTAL" | tee -a "$LOG"
+    $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS $RR_THIS \
+       $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $STEAM_O $GLUE_O $GLUE_ENG_O $GCS_O \
+       -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 -lbzip2 \
+       -ldl -llog -lm -lc -lz 2>>"$LOG" \
+       && { echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/lib$GAMEDLL.so" || true; } || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
+    record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_THIS $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $STEAM_O $GLUE_O $GLUE_ENG_O $GCS_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
   done
-  [ "$GTOTAL" -eq 0 ] && continue
-  # responserules runtime: server only (Valve's $Lib layout)
-  RR_THIS=""
-  [ "$GAMEDLL" = "server" ] && RR_THIS="$RR_OBJS"
-  echo "[link] lib$GAMEDLL.so (tags: $TAGS) objs=$GTOTAL" | tee -a "$LOG"
-  $CC $LFLAGS -Wl,-soname,"lib$GAMEDLL.so" -o "$OUTDIR/lib$GAMEDLL.so" $GAMEOBJS $GENPROTO_OBJS $RR_THIS \
-     $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $STEAM_O $GLUE_O $GLUE_ENG_O $GCS_O \
-     -L$OUTDIR -ltier0 -ltier1 -ltier2 -lvstdlib -lmathlib -lprotobuf -lSDL2 -lbzip2 \
-     -ldl -llog -lm -lc -lz 2>>"$LOG" \
-     && { echo "   OK: lib$GAMEDLL.so" | tee -a "$LOG"; [ "${STRIP:-0}" = "1" ] && [ -n "${STRIPBIN:-}" ] && "$STRIPBIN" --strip-debug "$OUTDIR/lib$GAMEDLL.so" || true; } || echo "   LINK FAILED: lib$GAMEDLL.so" | tee -a "$LOG"
-  record_link "lib$GAMEDLL.so" "$GAMEOBJS $GENPROTO_OBJS $RR_THIS $INTERFACES_O $TIER1_CONN_O $TIER2_CONN_O $STEAM_O $GLUE_O $GLUE_ENG_O $GCS_O" "tier0 tier1 tier2 vstdlib mathlib protobuf SDL2 bzip2" "-ldl -llog -lm -lc -lz"
-done
+fi
 
-# resolve every cross-lib reference into a real DT_NEEDED, then gate
-build_sysmap
-auto_dep_rounds || true
-und_gate || true
-reachability_gate || exit 2
+# resolve every cross-lib reference into a real DT_NEEDED, then gate.
+# QUICK_LIB (local single-lib relink) skips the gates: they scan every .so in
+# out/ and dominate the runtime, while the objects/libs are already verified.
+if [ -z "${QUICK_LIB:-}" ]; then
+  build_sysmap
+  auto_dep_rounds || true
+  und_gate || true
+  reachability_gate || exit 2
+fi
 
 echo "=== linked results ===" | tee -a "$LOG"
 ls -la "$OUTDIR" 2>/dev/null | tee -a "$LOG"
