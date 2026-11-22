@@ -5177,3 +5177,37 @@ diff -ruN a/filesystem/basefilesystem.cpp b/filesystem/basefilesystem.cpp
  		// we will fopen to bypass pathing, etc
  		FILE *pstdiofile = fopen( newVPK, "rb" );
  		if ( pstdiofile )
+diff -ruN a/engine/host_cmd.cpp b/engine/host_cmd.cpp
+--- a/engine/host_cmd.cpp
++++ b/engine/host_cmd.cpp
+@@ -95,6 +95,12 @@
+ extern IVEngineClient *engineClient;
+ 
+ // memdbgon must be the last include file in a .cpp file!!!
++#ifdef __ANDROID__
++#include <android/log.h>
++#define CSARM_HOST( ... ) __android_log_print( ANDROID_LOG_INFO, "CSARM_HOST", __VA_ARGS__ )
++#else
++#define CSARM_HOST( ... ) ((void)0)
++#endif
+ #include "tier0/memdbgon.h"
+ 
+ #define STEAM_PREFIX "STEAM_"
+@@ -1345,7 +1351,16 @@
+ #else
+ 	// Stop demo loop
+ 	GetBaseLocalClient().demonum = -1;
+-	if ( GetBaseLocalClient().m_nMaxClients == 0 || sv.IsDedicated() )
++	// csARM round 89: at startup the port's client reports a nonzero
++	// m_nMaxClients, so this stock guard silently dropped every startup
++	// "+map" - no HostState_NewGame, no console output, the engine sits
++	// in HS_RUN drawing a black screen (runs #242/#243/#244: zero
++	// SetState transitions beyond Init).  Map validation and the demo
++	// checks above already passed, and the sv.IsActive() cases were
++	// forwarded to Host_Changelevel_f earlier, so when no server is
++	// active the new-game path must run regardless of maxclients.
++	CSARM_HOST( "Host_Map_Helper: \"%s\" maxclients=%d svactive=%d", name, GetBaseLocalClient().m_nMaxClients, (int)sv.IsActive() );
++	if ( GetBaseLocalClient().m_nMaxClients == 0 || sv.IsDedicated() || !sv.IsActive() )
+ #endif
+ 	{
+ 		Host_Disconnect( false );	// stop old game
