@@ -125,6 +125,10 @@ if ! grep -q "csARM round 76" "$SRCDIR/src/video/SDL_egl.c"; then
   grep -q "GLES backend dlopen NULL" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r76 gles-fail patch failed"; exit 1; }
   sed -i 's@            return SDL_SetError("Could not load EGL library");@            CSARM_SDLEGL_LOG("EGL_LoadLibrary FAILED: EGL driver dlopen NULL (path=%s)", path ? path : "(null)");\n            return SDL_SetError("Could not load EGL library");@' "$SRCDIR/src/video/SDL_egl.c"
   grep -q "EGL driver dlopen NULL" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r76 egl-fail patch failed"; exit 1; }
+  # csARM round 95: log every EGL window surface creation (the "second
+  # surface" theory for the SwiftShader Surface::lock leak - run #251).
+  sed -i 's@    return _this->egl_data->eglCreateWindowSurface(@    { static int s_nSurf = 0; s_nSurf++; CSARM_SDLEGL_LOG("EGL_CreateSurface #%d win=%p", s_nSurf, window); }\n    return _this->egl_data->eglCreateWindowSurface(@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "EGL_CreateSurface #" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r95 create-surface log patch failed"; exit 1; }
 fi
 
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
