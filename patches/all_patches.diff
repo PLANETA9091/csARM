@@ -5723,7 +5723,33 @@ diff -ruN a/materialsystem/shaderapidx9/shaderapidx8.cpp b/materialsystem/shader
 diff -ruN a/filesystem/basefilesystem.cpp b/filesystem/basefilesystem.cpp
 --- a/filesystem/basefilesystem.cpp
 +++ b/filesystem/basefilesystem.cpp
-@@ -2991,16 +2991,34 @@
+@@ -2984,23 +2984,59 @@
+ 
+ #ifdef SUPPORT_VPK
+ 	// scan for vpk's
++	// csARM round 94: run #250 - the PLATFORM search path is the
++	// RELATIVE "platform"; every probe fopen()s it against an unknown
++	// CWD and fails, so the prefixed probe never runs and
++	// platform_pak01_dir.vpk (524 compiled shaders) never mounts -
++	// grey/black screen after a perfectly good server spawn.
++	// Resolve relative paths against -basedir before scanning.
++	char szScanPath[MAX_PATH];
++	const char *pScanPath = pPath;
++	if ( pPath[0] != '/' && pPath[0] != '\\' )
++	{
++		const char *pBase = CommandLine()->ParmValue( "-basedir" );
++		if ( pBase && pBase[0] )
++			Q_snprintf( szScanPath, sizeof( szScanPath ), "%s/%s", pBase, pPath );
++		else
++			Q_MakeAbsolutePath( szScanPath, sizeof( szScanPath ), pPath );
++		pScanPath = szScanPath;
++		CSARM_FS_LOG( "automount: relative resolved to %s", pScanPath );
++	}
+ 	for( int i = 1 ; i < 99; i++ )
+ 	{
+ 		char newVPK[MAX_PATH];
+-		sprintf( newVPK, "%s/pak%02d_dir.vpk", pPath, i );
++		sprintf( newVPK, "%s/pak%02d_dir.vpk", pScanPath, i );
  		CSARM_FS_LOG( "automount probe: %s", newVPK );
  		// we will fopen to bypass pathing, etc
  		FILE *pstdiofile = fopen( newVPK, "rb" );
@@ -5747,7 +5773,7 @@ diff -ruN a/filesystem/basefilesystem.cpp b/filesystem/basefilesystem.cpp
 +			V_FileBase( pPath, szDirName, sizeof( szDirName ) );
 +			if ( szDirName[0] )
 +			{
-+				sprintf( newVPK, "%s/%s_pak%02d_dir.vpk", pPath, szDirName, i );
++				sprintf( newVPK, "%s/%s_pak%02d_dir.vpk", pScanPath, szDirName, i );
 +				pstdiofile = fopen( newVPK, "rb" );
 +				if ( pstdiofile )
 +				{
@@ -5760,7 +5786,7 @@ diff -ruN a/filesystem/basefilesystem.cpp b/filesystem/basefilesystem.cpp
  			break;
  		}
 +		fclose( pstdiofile );
-+		sprintf( newVPK, "%s/pak%02d.vpk", pPath, i );
++			sprintf( newVPK, "%s/pak%02d.vpk", pScanPath, i );
 +		AddVPKFile( newVPK );
  	}
  #endif

@@ -1159,6 +1159,10 @@ jobs:
               "$ADB" push "$SRC/cstrike" /data/data/com.csarm.port/files/cstrike
               if [ -d "$SRC/platform" ]; then
                 "$ADB" push "$SRC/platform" /data/data/com.csarm.port/files/cstrike/platform
+                # csARM round 94: the engine resolves the RELATIVE "platform"
+                # search path against -basedir (/data/user/0/com.csarm.port/files);
+                # the 524-shader platform_pak01_dir.vpk must exist there too.
+                "$ADB" push "$SRC/platform" /data/user/0/com.csarm.port/files/platform
               fi
               APPUID=$("$ADB" shell dumpsys package com.csarm.port | sed -n 's/.*userId=\([0-9]*\).*/\1/p' | head -1 | tr -d '\r')
               if [ -n "$APPUID" ]; then
