@@ -7,7 +7,7 @@
 #   env:   NDKROOT, CC (target clang, e.g. aarch64-linux-android24-clang)
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-R=${1:-$REPO_DIR/..}
+R="$(cd "${1:-$REPO_DIR/..}" && pwd)"
 CACHE=${2:-$R/.cache}
 NDKROOT=${NDKROOT:?NDKROOT must be set}
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"

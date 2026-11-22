@@ -5,7 +5,7 @@
 # usage: build/build_main.sh [workspace_root] [cache_dir]
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-R=${1:-$REPO_DIR}
+R="$(cd "${1:-$REPO_DIR}" && pwd)"
 CACHE=${2:-$R/.cache}
 NDKROOT=${NDKROOT:?NDKROOT must be set}
 TRIP=$(echo "${CC:-aarch64-linux-android27-clang}" | sed -E 's/[0-9]+-clang$//')

@@ -1,0 +1,38 @@
+--- a/src/gl/framebuffers.c
++++ b/src/gl/framebuffers.c
+@@ -153,17 +153,32 @@
+                                 tex->renderstencil = 0;
+                             }
+                         }
++                        /* csARM: GLES implicitly unbinds a deleted framebuffer,
++                         * but the tracked pointers must never go NULL: every
++                         * glViewport() dereferences current_fb, so deleting a
++                         * bound FBO turned the next SetViewport() (ClearBuffers
++                         * during CTexture::ReconstructTexture) into a SIGSEGV
++                         * at address 0.  Fall back to the default framebuffer
++                         * and re-bind it so tracked state == real GLES state. */
++                        int rebind_default = 0;
+                         if (glstate->fbo.current_fb == fb) {
+-                            glstate->fbo.current_fb = 0;
++                            glstate->fbo.current_fb = glstate->fbo.fbo_0;
++                            rebind_default = 1;
+                         }
+                         if (glstate->fbo.fbo_read == fb) {
+-                            glstate->fbo.fbo_read = 0;
++                            glstate->fbo.fbo_read = glstate->fbo.fbo_0;
++                            rebind_default = 1;
+                         }
+                         if (glstate->fbo.fbo_draw == fb) {
+-                            glstate->fbo.fbo_draw = 0;
++                            glstate->fbo.fbo_draw = glstate->fbo.fbo_0;
++                            rebind_default = 1;
+                         }
+                         free(fb);
+                         kh_del(framebufferlist_t, glstate->fbo.framebufferlist, k);                        
++                        if (rebind_default && glstate->fbo.fbo_0) {
++                            LOAD_GLES2_OR_OES(glBindFramebuffer);
++                            gles_glBindFramebuffer(GL_FRAMEBUFFER, glstate->fbo.mainfbo_fbo);
++                        }
+                     }
+                 }
+             }

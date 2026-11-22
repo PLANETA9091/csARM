@@ -53,6 +53,7 @@ class CSOItemRecipe;
 class CMsgDevNewItemRequest;
 class CMsgIncrementKillCountAttribute;
 class CMsgApplySticker;
+class CMsgModifyItemAttribute;
 class CMsgApplyStatTrakSwap;
 class CMsgApplyStrangePart;
 class CMsgApplyPennantUpgrade;
@@ -2566,6 +2567,108 @@ class CMsgApplySticker : public ::google::protobuf::Message {
 
   void InitAsDefaultInstance();
   static CMsgApplySticker* default_instance_;
+};
+// -------------------------------------------------------------------
+
+class CMsgModifyItemAttribute : public ::google::protobuf::Message {
+ public:
+  CMsgModifyItemAttribute();
+  virtual ~CMsgModifyItemAttribute();
+
+  CMsgModifyItemAttribute(const CMsgModifyItemAttribute& from);
+
+  inline CMsgModifyItemAttribute& operator=(const CMsgModifyItemAttribute& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _unknown_fields_;
+  }
+
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return &_unknown_fields_;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const CMsgModifyItemAttribute& default_instance();
+
+  void Swap(CMsgModifyItemAttribute* other);
+
+  // implements Message ----------------------------------------------
+
+  CMsgModifyItemAttribute* New() const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const CMsgModifyItemAttribute& from);
+  void MergeFrom(const CMsgModifyItemAttribute& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const;
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // optional uint64 item_id = 1;
+  inline bool has_item_id() const;
+  inline void clear_item_id();
+  static const int kItemIdFieldNumber = 1;
+  inline ::google::protobuf::uint64 item_id() const;
+  inline void set_item_id(::google::protobuf::uint64 value);
+
+  // optional uint32 attr_defidx = 2;
+  inline bool has_attr_defidx() const;
+  inline void clear_attr_defidx();
+  static const int kAttrDefidxFieldNumber = 2;
+  inline ::google::protobuf::uint32 attr_defidx() const;
+  inline void set_attr_defidx(::google::protobuf::uint32 value);
+
+  // optional uint32 attr_value = 3;
+  inline bool has_attr_value() const;
+  inline void clear_attr_value();
+  static const int kAttrValueFieldNumber = 3;
+  inline ::google::protobuf::uint32 attr_value() const;
+  inline void set_attr_value(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:CMsgModifyItemAttribute)
+ private:
+  inline void set_has_item_id();
+  inline void clear_has_item_id();
+  inline void set_has_attr_defidx();
+  inline void clear_has_attr_defidx();
+  inline void set_has_attr_value();
+  inline void clear_has_attr_value();
+
+  ::google::protobuf::UnknownFieldSet _unknown_fields_;
+
+  ::google::protobuf::uint64 item_id_;
+  ::google::protobuf::uint32 attr_defidx_;
+  ::google::protobuf::uint32 attr_value_;
+
+  mutable int _cached_size_;
+  ::google::protobuf::uint32 _has_bits_[(3 + 31) / 32];
+
+  friend void  protobuf_AddDesc_base_5fgcmessages_2eproto();
+  friend void protobuf_AssignDesc_base_5fgcmessages_2eproto();
+  friend void protobuf_ShutdownFile_base_5fgcmessages_2eproto();
+
+  void InitAsDefaultInstance();
+  static CMsgModifyItemAttribute* default_instance_;
 };
 // -------------------------------------------------------------------
 
@@ -11352,6 +11455,76 @@ inline float CMsgApplySticker::sticker_wear() const {
 inline void CMsgApplySticker::set_sticker_wear(float value) {
   set_has_sticker_wear();
   sticker_wear_ = value;
+}
+
+// -------------------------------------------------------------------
+
+// CMsgModifyItemAttribute
+
+// optional uint64 item_id = 1;
+inline bool CMsgModifyItemAttribute::has_item_id() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CMsgModifyItemAttribute::set_has_item_id() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CMsgModifyItemAttribute::clear_has_item_id() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CMsgModifyItemAttribute::clear_item_id() {
+  item_id_ = GOOGLE_ULONGLONG(0);
+  clear_has_item_id();
+}
+inline ::google::protobuf::uint64 CMsgModifyItemAttribute::item_id() const {
+  return item_id_;
+}
+inline void CMsgModifyItemAttribute::set_item_id(::google::protobuf::uint64 value) {
+  set_has_item_id();
+  item_id_ = value;
+}
+
+// optional uint32 attr_defidx = 2;
+inline bool CMsgModifyItemAttribute::has_attr_defidx() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CMsgModifyItemAttribute::set_has_attr_defidx() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CMsgModifyItemAttribute::clear_has_attr_defidx() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CMsgModifyItemAttribute::clear_attr_defidx() {
+  attr_defidx_ = 0u;
+  clear_has_attr_defidx();
+}
+inline ::google::protobuf::uint32 CMsgModifyItemAttribute::attr_defidx() const {
+  return attr_defidx_;
+}
+inline void CMsgModifyItemAttribute::set_attr_defidx(::google::protobuf::uint32 value) {
+  set_has_attr_defidx();
+  attr_defidx_ = value;
+}
+
+// optional uint32 attr_value = 3;
+inline bool CMsgModifyItemAttribute::has_attr_value() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CMsgModifyItemAttribute::set_has_attr_value() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CMsgModifyItemAttribute::clear_has_attr_value() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CMsgModifyItemAttribute::clear_attr_value() {
+  attr_value_ = 0u;
+  clear_has_attr_value();
+}
+inline ::google::protobuf::uint32 CMsgModifyItemAttribute::attr_value() const {
+  return attr_value_;
+}
+inline void CMsgModifyItemAttribute::set_attr_value(::google::protobuf::uint32 value) {
+  set_has_attr_value();
+  attr_value_ = value;
 }
 
 // -------------------------------------------------------------------

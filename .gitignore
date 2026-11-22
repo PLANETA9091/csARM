@@ -18,3 +18,20 @@ __pycache__/
 env.sh
 worklog.md
 .cache/
+
+# local build/test scratch
+test/.local/
+.local/
+thirdparty/gl4es-*/
+
+# android build outputs (build_apk.sh)
+android/b-*/
+android/out/
+android/gen/
+android/classes/
+android/dex/
+android/lib/
+android/debug.keystore
+
+thirdparty/freetype-lib/
+thirdparty/gl4es-src/

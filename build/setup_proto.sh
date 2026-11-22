@@ -5,7 +5,7 @@
 # usage: setup_proto.sh [workspace_root] [protoc-cache-dir]
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-R=${1:-$REPO_DIR}
+R="$(cd "${1:-$REPO_DIR}" && pwd)"
 CACHE=${2:-$R/.cache}
 SRC="$R/c15"
 OUT="$R/genproto"

@@ -14,7 +14,7 @@
 # usage: setup_sdl2.sh [workspace_root] [cache_dir]
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-R=${1:-$REPO_DIR}
+R="$(cd "${1:-$REPO_DIR}" && pwd)"
 CACHE=${2:-$R/.cache}
 NDKROOT=${NDKROOT:?NDKROOT must be set}
 SRCDIR="$CACHE/SDL-2.0.2"

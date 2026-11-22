@@ -5211,3 +5211,101 @@ diff -ruN a/engine/host_cmd.cpp b/engine/host_cmd.cpp
  #endif
  	{
  		Host_Disconnect( false );	// stop old game
+diff -ruN a/materialsystem/shaderapidx9/meshdx8.cpp b/materialsystem/shaderapidx9/meshdx8.cpp
+--- a/materialsystem/shaderapidx9/meshdx8.cpp
++++ b/materialsystem/shaderapidx9/meshdx8.cpp
+@@ -5463,7 +5463,15 @@
+         if( v != iSubdivLevel - 1 )
+         {
+             // add a degenerate tri for stripping
+-            *pIndices = pIndices[iIndex - 1];
++            // csARM: pIndices[iIndex - 1] underflows (UINT 0 - 1 =
++            // 0xFFFFFFFF) and becomes a read *before* the locked range.  On
++            // D3D the lock region always has slack so Valve never noticed;
++            // under gl4es/SwiftShader the mapped mirror starts on an
++            // allocation boundary and the read lands in a protected page
++            // (SIGSEGV SEGV_ACCERR in FillPreTessPatchIB, from
++            // CMeshMgr::CreatePreTessPatchIndexBuffers -> OnDeviceInit).
++            // The intended value is simply the one written last.
++            *pIndices = *( pIndices - 1 );
+             pIndices ++;
+             *pIndices = ( unsigned short )( ( iSubdivLevel + 1 ) * ( iSubdivLevel - ( v + 1 ) ) );
+             pIndices ++;
+diff -ruN a/engine/cmd.cpp b/engine/cmd.cpp
+--- a/engine/cmd.cpp
++++ b/engine/cmd.cpp
+@@ -354,13 +354,21 @@
+ // hl2 -nosound +cmd amlev1
+ // Output : void Cmd_StuffCmds_f
+ //-----------------------------------------------------------------------------
+-CON_COMMAND( stuffcmds, "Parses and stuffs command line + commands to command buffer." )
+-{		
+-	if ( args.ArgC() != 1 )
+-	{
+-		ConMsg( "stuffcmds : execute command line parameters\n" );
++// csARM: +commands on the command line (+map, +sv_lan, +developer,
++// +con_logfile, ...) are only turned into real console commands by stuffcmds,
++// which CS:GO invokes from cfg/valve.rc.  When that file is missing/not
++// executed (content staged without cfg/, or exec failing at startup) every
++// +command is silently dropped: the engine reaches HS_RUN with an empty level
++// and the screen stays black while the frame loop runs (runs #242+).
++// _Host_RunFrame therefore calls this directly; the valve.rc path goes through
++// the same function, and the flag keeps the stuffing strictly once-only so
++// +map cannot start a second map load.
++void Cmd_StuffCmdsOnce()
++{
++	static bool s_bStuffed = false;
++	if ( s_bStuffed )
+ 		return;
+-	}
++	s_bStuffed = true;
+ 
+ 	MEM_ALLOC_CREDIT();
+ 
+@@ -430,8 +438,18 @@
+ 		
+ 	if ( build.TellPut() > 1 )
+ 	{
+-		Cbuf_InsertText( Cbuf_GetCurrentPlayer(), (char *)build.Base(), args.Source() );
++		Cbuf_AddText( Cbuf_GetCurrentPlayer(), (char *)build.Base() );
++	}
++}
++
++CON_COMMAND( stuffcmds, "Parses and stuffs command line + commands to command buffer." )
++{
++	if ( args.ArgC() != 1 )
++	{
++		ConMsg( "stuffcmds : execute command line parameters\n" );
++		return;
+ 	}
++	Cmd_StuffCmdsOnce();
+ }
+ 
+ 
+diff -ruN a/engine/cmd.h b/engine/cmd.h
+--- a/engine/cmd.h
++++ b/engine/cmd.h
+@@ -194,6 +194,9 @@
+ //-----------------------------------------------------------------------------
+ void Cbuf_Execute();
+ 
++// csARM: stuff the command line +commands exactly once (see cmd.cpp)
++void Cmd_StuffCmdsOnce();
++
+ ECommandTarget_t Cbuf_GetCurrentPlayer();
+ 
+ //===========================================================================
+diff -ruN a/engine/host.cpp b/engine/host.cpp
+--- a/engine/host.cpp
++++ b/engine/host.cpp
+@@ -4124,6 +4124,10 @@
+ #endif
+ 		Cbuf_Execute ();
+ 
++		// csARM: guarantee the command line +commands (+map ...) are stuffed
++		// even when cfg/valve.rc never ran; once-only inside.
++		Cmd_StuffCmdsOnce();
++
+ 		if ( NET_IsDedicatedForXbox() )
+ 		{
+ 			if ( NET_IsDedicated() && !NET_IsMultiplayer() )

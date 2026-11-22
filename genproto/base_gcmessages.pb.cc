@@ -78,6 +78,9 @@ const ::google::protobuf::internal::GeneratedMessageReflection*
 const ::google::protobuf::Descriptor* CMsgApplySticker_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   CMsgApplySticker_reflection_ = NULL;
+const ::google::protobuf::Descriptor* CMsgModifyItemAttribute_descriptor_ = NULL;
+const ::google::protobuf::internal::GeneratedMessageReflection*
+  CMsgModifyItemAttribute_reflection_ = NULL;
 const ::google::protobuf::Descriptor* CMsgApplyStatTrakSwap_descriptor_ = NULL;
 const ::google::protobuf::internal::GeneratedMessageReflection*
   CMsgApplyStatTrakSwap_reflection_ = NULL;
@@ -628,7 +631,24 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgApplySticker));
-  CMsgApplyStatTrakSwap_descriptor_ = file->message_type(20);
+  CMsgModifyItemAttribute_descriptor_ = file->message_type(20);
+  static const int CMsgModifyItemAttribute_offsets_[3] = {
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgModifyItemAttribute, item_id_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgModifyItemAttribute, attr_defidx_),
+    GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgModifyItemAttribute, attr_value_),
+  };
+  CMsgModifyItemAttribute_reflection_ =
+    new ::google::protobuf::internal::GeneratedMessageReflection(
+      CMsgModifyItemAttribute_descriptor_,
+      CMsgModifyItemAttribute::default_instance_,
+      CMsgModifyItemAttribute_offsets_,
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgModifyItemAttribute, _has_bits_[0]),
+      GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgModifyItemAttribute, _unknown_fields_),
+      -1,
+      ::google::protobuf::DescriptorPool::generated_pool(),
+      ::google::protobuf::MessageFactory::generated_factory(),
+      sizeof(CMsgModifyItemAttribute));
+  CMsgApplyStatTrakSwap_descriptor_ = file->message_type(21);
   static const int CMsgApplyStatTrakSwap_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgApplyStatTrakSwap, tool_item_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgApplyStatTrakSwap, item_1_item_id_),
@@ -645,7 +665,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgApplyStatTrakSwap));
-  CMsgApplyStrangePart_descriptor_ = file->message_type(21);
+  CMsgApplyStrangePart_descriptor_ = file->message_type(22);
   static const int CMsgApplyStrangePart_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgApplyStrangePart, strange_part_item_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgApplyStrangePart, item_item_id_),
@@ -661,7 +681,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgApplyStrangePart));
-  CMsgApplyPennantUpgrade_descriptor_ = file->message_type(22);
+  CMsgApplyPennantUpgrade_descriptor_ = file->message_type(23);
   static const int CMsgApplyPennantUpgrade_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgApplyPennantUpgrade, upgrade_item_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgApplyPennantUpgrade, pennant_item_id_),
@@ -677,7 +697,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgApplyPennantUpgrade));
-  CMsgApplyEggEssence_descriptor_ = file->message_type(23);
+  CMsgApplyEggEssence_descriptor_ = file->message_type(24);
   static const int CMsgApplyEggEssence_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgApplyEggEssence, essence_item_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgApplyEggEssence, egg_item_id_),
@@ -693,7 +713,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgApplyEggEssence));
-  CSOEconItemAttribute_descriptor_ = file->message_type(24);
+  CSOEconItemAttribute_descriptor_ = file->message_type(25);
   static const int CSOEconItemAttribute_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemAttribute, def_index_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemAttribute, value_),
@@ -710,7 +730,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CSOEconItemAttribute));
-  CSOEconItemEquipped_descriptor_ = file->message_type(25);
+  CSOEconItemEquipped_descriptor_ = file->message_type(26);
   static const int CSOEconItemEquipped_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemEquipped, new_class_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemEquipped, new_slot_),
@@ -726,7 +746,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CSOEconItemEquipped));
-  CSOEconItem_descriptor_ = file->message_type(26);
+  CSOEconItem_descriptor_ = file->message_type(27);
   static const int CSOEconItem_offsets_[18] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItem, id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItem, account_id_),
@@ -758,7 +778,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CSOEconItem));
-  CMsgAdjustItemEquippedState_descriptor_ = file->message_type(27);
+  CMsgAdjustItemEquippedState_descriptor_ = file->message_type(28);
   static const int CMsgAdjustItemEquippedState_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgAdjustItemEquippedState, item_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgAdjustItemEquippedState, new_class_),
@@ -776,7 +796,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgAdjustItemEquippedState));
-  CMsgSortItems_descriptor_ = file->message_type(28);
+  CMsgSortItems_descriptor_ = file->message_type(29);
   static const int CMsgSortItems_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgSortItems, sort_type_),
   };
@@ -791,7 +811,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgSortItems));
-  CSOEconClaimCode_descriptor_ = file->message_type(29);
+  CSOEconClaimCode_descriptor_ = file->message_type(30);
   static const int CSOEconClaimCode_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconClaimCode, account_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconClaimCode, code_type_),
@@ -809,7 +829,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CSOEconClaimCode));
-  CMsgStoreGetUserData_descriptor_ = file->message_type(30);
+  CMsgStoreGetUserData_descriptor_ = file->message_type(31);
   static const int CMsgStoreGetUserData_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgStoreGetUserData, price_sheet_version_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgStoreGetUserData, currency_),
@@ -825,7 +845,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgStoreGetUserData));
-  CMsgStoreGetUserDataResponse_descriptor_ = file->message_type(31);
+  CMsgStoreGetUserDataResponse_descriptor_ = file->message_type(32);
   static const int CMsgStoreGetUserDataResponse_offsets_[5] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgStoreGetUserDataResponse, result_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgStoreGetUserDataResponse, currency_deprecated_),
@@ -844,7 +864,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgStoreGetUserDataResponse));
-  CMsgUpdateItemSchema_descriptor_ = file->message_type(32);
+  CMsgUpdateItemSchema_descriptor_ = file->message_type(33);
   static const int CMsgUpdateItemSchema_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgUpdateItemSchema, items_game_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgUpdateItemSchema, item_schema_version_),
@@ -862,7 +882,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgUpdateItemSchema));
-  CMsgGCError_descriptor_ = file->message_type(33);
+  CMsgGCError_descriptor_ = file->message_type(34);
   static const int CMsgGCError_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCError, error_text_),
   };
@@ -877,7 +897,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCError));
-  CMsgRequestInventoryRefresh_descriptor_ = file->message_type(34);
+  CMsgRequestInventoryRefresh_descriptor_ = file->message_type(35);
   static const int CMsgRequestInventoryRefresh_offsets_[1] = {
   };
   CMsgRequestInventoryRefresh_reflection_ =
@@ -891,7 +911,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgRequestInventoryRefresh));
-  CMsgConVarValue_descriptor_ = file->message_type(35);
+  CMsgConVarValue_descriptor_ = file->message_type(36);
   static const int CMsgConVarValue_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgConVarValue, name_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgConVarValue, value_),
@@ -907,7 +927,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgConVarValue));
-  CMsgReplicateConVars_descriptor_ = file->message_type(36);
+  CMsgReplicateConVars_descriptor_ = file->message_type(37);
   static const int CMsgReplicateConVars_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgReplicateConVars, convars_),
   };
@@ -922,7 +942,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgReplicateConVars));
-  CMsgUseItem_descriptor_ = file->message_type(37);
+  CMsgUseItem_descriptor_ = file->message_type(38);
   static const int CMsgUseItem_offsets_[5] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgUseItem, item_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgUseItem, target_steam_id_),
@@ -941,7 +961,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgUseItem));
-  CMsgReplayUploadedToYouTube_descriptor_ = file->message_type(38);
+  CMsgReplayUploadedToYouTube_descriptor_ = file->message_type(39);
   static const int CMsgReplayUploadedToYouTube_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgReplayUploadedToYouTube, youtube_url_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgReplayUploadedToYouTube, youtube_account_name_),
@@ -958,7 +978,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgReplayUploadedToYouTube));
-  CMsgConsumableExhausted_descriptor_ = file->message_type(39);
+  CMsgConsumableExhausted_descriptor_ = file->message_type(40);
   static const int CMsgConsumableExhausted_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgConsumableExhausted, item_def_id_),
   };
@@ -973,7 +993,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgConsumableExhausted));
-  CMsgItemAcknowledged__DEPRECATED_descriptor_ = file->message_type(40);
+  CMsgItemAcknowledged__DEPRECATED_descriptor_ = file->message_type(41);
   static const int CMsgItemAcknowledged__DEPRECATED_offsets_[7] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgItemAcknowledged__DEPRECATED, account_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgItemAcknowledged__DEPRECATED, inventory_),
@@ -994,7 +1014,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgItemAcknowledged__DEPRECATED));
-  CMsgSetItemPositions_descriptor_ = file->message_type(41);
+  CMsgSetItemPositions_descriptor_ = file->message_type(42);
   static const int CMsgSetItemPositions_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgSetItemPositions, item_positions_),
   };
@@ -1026,7 +1046,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgSetItemPositions_ItemPosition));
-  CMsgGCReportAbuse_descriptor_ = file->message_type(42);
+  CMsgGCReportAbuse_descriptor_ = file->message_type(43);
   static const int CMsgGCReportAbuse_offsets_[7] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCReportAbuse, target_steam_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCReportAbuse, description_),
@@ -1047,7 +1067,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCReportAbuse));
-  CMsgGCReportAbuseResponse_descriptor_ = file->message_type(43);
+  CMsgGCReportAbuseResponse_descriptor_ = file->message_type(44);
   static const int CMsgGCReportAbuseResponse_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCReportAbuseResponse, target_steam_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCReportAbuseResponse, result_),
@@ -1064,7 +1084,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCReportAbuseResponse));
-  CMsgGCNameItemNotification_descriptor_ = file->message_type(44);
+  CMsgGCNameItemNotification_descriptor_ = file->message_type(45);
   static const int CMsgGCNameItemNotification_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCNameItemNotification, player_steamid_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCNameItemNotification, item_def_index_),
@@ -1081,7 +1101,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCNameItemNotification));
-  CMsgGCClientDisplayNotification_descriptor_ = file->message_type(45);
+  CMsgGCClientDisplayNotification_descriptor_ = file->message_type(46);
   static const int CMsgGCClientDisplayNotification_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCClientDisplayNotification, notification_title_localization_key_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCClientDisplayNotification, notification_body_localization_key_),
@@ -1099,7 +1119,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCClientDisplayNotification));
-  CMsgGCShowItemsPickedUp_descriptor_ = file->message_type(46);
+  CMsgGCShowItemsPickedUp_descriptor_ = file->message_type(47);
   static const int CMsgGCShowItemsPickedUp_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCShowItemsPickedUp, player_steamid_),
   };
@@ -1114,7 +1134,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCShowItemsPickedUp));
-  CMsgGCIncrementKillCountResponse_descriptor_ = file->message_type(47);
+  CMsgGCIncrementKillCountResponse_descriptor_ = file->message_type(48);
   static const int CMsgGCIncrementKillCountResponse_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCIncrementKillCountResponse, killer_account_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCIncrementKillCountResponse, num_kills_),
@@ -1132,7 +1152,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCIncrementKillCountResponse));
-  CSOEconItemDropRateBonus_descriptor_ = file->message_type(48);
+  CSOEconItemDropRateBonus_descriptor_ = file->message_type(49);
   static const int CSOEconItemDropRateBonus_offsets_[6] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemDropRateBonus, account_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemDropRateBonus, expiration_date_),
@@ -1152,7 +1172,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CSOEconItemDropRateBonus));
-  CSOEconItemLeagueViewPass_descriptor_ = file->message_type(49);
+  CSOEconItemLeagueViewPass_descriptor_ = file->message_type(50);
   static const int CSOEconItemLeagueViewPass_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemLeagueViewPass, account_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemLeagueViewPass, league_id_),
@@ -1170,7 +1190,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CSOEconItemLeagueViewPass));
-  CSOEconItemEventTicket_descriptor_ = file->message_type(50);
+  CSOEconItemEventTicket_descriptor_ = file->message_type(51);
   static const int CSOEconItemEventTicket_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemEventTicket, account_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconItemEventTicket, event_id_),
@@ -1187,7 +1207,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CSOEconItemEventTicket));
-  CMsgGCItemPreviewItemBoughtNotification_descriptor_ = file->message_type(51);
+  CMsgGCItemPreviewItemBoughtNotification_descriptor_ = file->message_type(52);
   static const int CMsgGCItemPreviewItemBoughtNotification_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCItemPreviewItemBoughtNotification, item_def_index_),
   };
@@ -1202,7 +1222,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCItemPreviewItemBoughtNotification));
-  CMsgGCStorePurchaseCancel_descriptor_ = file->message_type(52);
+  CMsgGCStorePurchaseCancel_descriptor_ = file->message_type(53);
   static const int CMsgGCStorePurchaseCancel_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCStorePurchaseCancel, txn_id_),
   };
@@ -1217,7 +1237,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCStorePurchaseCancel));
-  CMsgGCStorePurchaseCancelResponse_descriptor_ = file->message_type(53);
+  CMsgGCStorePurchaseCancelResponse_descriptor_ = file->message_type(54);
   static const int CMsgGCStorePurchaseCancelResponse_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCStorePurchaseCancelResponse, result_),
   };
@@ -1232,7 +1252,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCStorePurchaseCancelResponse));
-  CMsgGCStorePurchaseFinalize_descriptor_ = file->message_type(54);
+  CMsgGCStorePurchaseFinalize_descriptor_ = file->message_type(55);
   static const int CMsgGCStorePurchaseFinalize_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCStorePurchaseFinalize, txn_id_),
   };
@@ -1247,7 +1267,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCStorePurchaseFinalize));
-  CMsgGCStorePurchaseFinalizeResponse_descriptor_ = file->message_type(55);
+  CMsgGCStorePurchaseFinalizeResponse_descriptor_ = file->message_type(56);
   static const int CMsgGCStorePurchaseFinalizeResponse_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCStorePurchaseFinalizeResponse, result_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCStorePurchaseFinalizeResponse, item_ids_),
@@ -1263,7 +1283,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCStorePurchaseFinalizeResponse));
-  CMsgGCBannedWordListRequest_descriptor_ = file->message_type(56);
+  CMsgGCBannedWordListRequest_descriptor_ = file->message_type(57);
   static const int CMsgGCBannedWordListRequest_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCBannedWordListRequest, ban_list_group_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCBannedWordListRequest, word_id_),
@@ -1279,7 +1299,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCBannedWordListRequest));
-  CMsgGCRequestAnnouncements_descriptor_ = file->message_type(57);
+  CMsgGCRequestAnnouncements_descriptor_ = file->message_type(58);
   static const int CMsgGCRequestAnnouncements_offsets_[1] = {
   };
   CMsgGCRequestAnnouncements_reflection_ =
@@ -1293,7 +1313,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCRequestAnnouncements));
-  CMsgGCRequestAnnouncementsResponse_descriptor_ = file->message_type(58);
+  CMsgGCRequestAnnouncementsResponse_descriptor_ = file->message_type(59);
   static const int CMsgGCRequestAnnouncementsResponse_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCRequestAnnouncementsResponse, announcement_title_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCRequestAnnouncementsResponse, announcement_),
@@ -1311,7 +1331,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCRequestAnnouncementsResponse));
-  CMsgGCBannedWord_descriptor_ = file->message_type(59);
+  CMsgGCBannedWord_descriptor_ = file->message_type(60);
   static const int CMsgGCBannedWord_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCBannedWord, word_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCBannedWord, word_type_),
@@ -1328,7 +1348,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCBannedWord));
-  CMsgGCBannedWordListResponse_descriptor_ = file->message_type(60);
+  CMsgGCBannedWordListResponse_descriptor_ = file->message_type(61);
   static const int CMsgGCBannedWordListResponse_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCBannedWordListResponse, ban_list_group_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCBannedWordListResponse, word_list_),
@@ -1344,7 +1364,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCBannedWordListResponse));
-  CMsgGCToGCBannedWordListBroadcast_descriptor_ = file->message_type(61);
+  CMsgGCToGCBannedWordListBroadcast_descriptor_ = file->message_type(62);
   static const int CMsgGCToGCBannedWordListBroadcast_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCBannedWordListBroadcast, broadcast_),
   };
@@ -1359,7 +1379,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCBannedWordListBroadcast));
-  CMsgGCToGCBannedWordListUpdated_descriptor_ = file->message_type(62);
+  CMsgGCToGCBannedWordListUpdated_descriptor_ = file->message_type(63);
   static const int CMsgGCToGCBannedWordListUpdated_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCBannedWordListUpdated, group_id_),
   };
@@ -1374,7 +1394,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCBannedWordListUpdated));
-  CSOEconDefaultEquippedDefinitionInstanceClient_descriptor_ = file->message_type(63);
+  CSOEconDefaultEquippedDefinitionInstanceClient_descriptor_ = file->message_type(64);
   static const int CSOEconDefaultEquippedDefinitionInstanceClient_offsets_[4] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconDefaultEquippedDefinitionInstanceClient, account_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CSOEconDefaultEquippedDefinitionInstanceClient, item_definition_),
@@ -1392,7 +1412,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CSOEconDefaultEquippedDefinitionInstanceClient));
-  CMsgGCToGCDirtySDOCache_descriptor_ = file->message_type(64);
+  CMsgGCToGCDirtySDOCache_descriptor_ = file->message_type(65);
   static const int CMsgGCToGCDirtySDOCache_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCDirtySDOCache, sdo_type_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCDirtySDOCache, key_uint64_),
@@ -1408,7 +1428,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCDirtySDOCache));
-  CMsgGCToGCDirtyMultipleSDOCache_descriptor_ = file->message_type(65);
+  CMsgGCToGCDirtyMultipleSDOCache_descriptor_ = file->message_type(66);
   static const int CMsgGCToGCDirtyMultipleSDOCache_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCDirtyMultipleSDOCache, sdo_type_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCDirtyMultipleSDOCache, key_uint64_),
@@ -1424,7 +1444,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCDirtyMultipleSDOCache));
-  CMsgGCCollectItem_descriptor_ = file->message_type(66);
+  CMsgGCCollectItem_descriptor_ = file->message_type(67);
   static const int CMsgGCCollectItem_offsets_[2] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCCollectItem, collection_item_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCCollectItem, subject_item_id_),
@@ -1440,7 +1460,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCCollectItem));
-  CMsgSDONoMemcached_descriptor_ = file->message_type(67);
+  CMsgSDONoMemcached_descriptor_ = file->message_type(68);
   static const int CMsgSDONoMemcached_offsets_[1] = {
   };
   CMsgSDONoMemcached_reflection_ =
@@ -1454,7 +1474,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgSDONoMemcached));
-  CMsgGCToGCUpdateSQLKeyValue_descriptor_ = file->message_type(68);
+  CMsgGCToGCUpdateSQLKeyValue_descriptor_ = file->message_type(69);
   static const int CMsgGCToGCUpdateSQLKeyValue_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCUpdateSQLKeyValue, key_name_),
   };
@@ -1469,7 +1489,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCUpdateSQLKeyValue));
-  CMsgGCToGCIsTrustedServer_descriptor_ = file->message_type(69);
+  CMsgGCToGCIsTrustedServer_descriptor_ = file->message_type(70);
   static const int CMsgGCToGCIsTrustedServer_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCIsTrustedServer, steam_id_),
   };
@@ -1484,7 +1504,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCIsTrustedServer));
-  CMsgGCToGCIsTrustedServerResponse_descriptor_ = file->message_type(70);
+  CMsgGCToGCIsTrustedServerResponse_descriptor_ = file->message_type(71);
   static const int CMsgGCToGCIsTrustedServerResponse_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCIsTrustedServerResponse, is_trusted_),
   };
@@ -1499,7 +1519,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCIsTrustedServerResponse));
-  CMsgGCToGCBroadcastConsoleCommand_descriptor_ = file->message_type(71);
+  CMsgGCToGCBroadcastConsoleCommand_descriptor_ = file->message_type(72);
   static const int CMsgGCToGCBroadcastConsoleCommand_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCBroadcastConsoleCommand, con_command_),
   };
@@ -1514,7 +1534,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCBroadcastConsoleCommand));
-  CMsgGCServerVersionUpdated_descriptor_ = file->message_type(72);
+  CMsgGCServerVersionUpdated_descriptor_ = file->message_type(73);
   static const int CMsgGCServerVersionUpdated_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCServerVersionUpdated, server_version_),
   };
@@ -1529,7 +1549,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCServerVersionUpdated));
-  CMsgGCClientVersionUpdated_descriptor_ = file->message_type(73);
+  CMsgGCClientVersionUpdated_descriptor_ = file->message_type(74);
   static const int CMsgGCClientVersionUpdated_offsets_[1] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCClientVersionUpdated, client_version_),
   };
@@ -1544,7 +1564,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCClientVersionUpdated));
-  CMsgGCToGCWebAPIAccountChanged_descriptor_ = file->message_type(74);
+  CMsgGCToGCWebAPIAccountChanged_descriptor_ = file->message_type(75);
   static const int CMsgGCToGCWebAPIAccountChanged_offsets_[1] = {
   };
   CMsgGCToGCWebAPIAccountChanged_reflection_ =
@@ -1558,7 +1578,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCWebAPIAccountChanged));
-  CMsgGCToGCRequestPassportItemGrant_descriptor_ = file->message_type(75);
+  CMsgGCToGCRequestPassportItemGrant_descriptor_ = file->message_type(76);
   static const int CMsgGCToGCRequestPassportItemGrant_offsets_[3] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCRequestPassportItemGrant, steam_id_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGCToGCRequestPassportItemGrant, league_id_),
@@ -1575,7 +1595,7 @@ void protobuf_AssignDesc_base_5fgcmessages_2eproto() {
       ::google::protobuf::DescriptorPool::generated_pool(),
       ::google::protobuf::MessageFactory::generated_factory(),
       sizeof(CMsgGCToGCRequestPassportItemGrant));
-  CMsgGameServerInfo_descriptor_ = file->message_type(76);
+  CMsgGameServerInfo_descriptor_ = file->message_type(77);
   static const int CMsgGameServerInfo_offsets_[18] = {
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGameServerInfo, server_public_ip_addr_),
     GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(CMsgGameServerInfo, server_private_ip_addr_),
@@ -1663,6 +1683,8 @@ void protobuf_RegisterTypes(const ::std::string&) {
     CMsgIncrementKillCountAttribute_descriptor_, &CMsgIncrementKillCountAttribute::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     CMsgApplySticker_descriptor_, &CMsgApplySticker::default_instance());
+  ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
+    CMsgModifyItemAttribute_descriptor_, &CMsgModifyItemAttribute::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
     CMsgApplyStatTrakSwap_descriptor_, &CMsgApplyStatTrakSwap::default_instance());
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedMessage(
@@ -1824,6 +1846,8 @@ void protobuf_ShutdownFile_base_5fgcmessages_2eproto() {
   delete CMsgIncrementKillCountAttribute_reflection_;
   delete CMsgApplySticker::default_instance_;
   delete CMsgApplySticker_reflection_;
+  delete CMsgModifyItemAttribute::default_instance_;
+  delete CMsgModifyItemAttribute_reflection_;
   delete CMsgApplyStatTrakSwap::default_instance_;
   delete CMsgApplyStatTrakSwap_reflection_;
   delete CMsgApplyStrangePart::default_instance_;
@@ -2010,164 +2034,166 @@ void protobuf_AddDesc_base_5fgcmessages_2eproto() {
     "(\r\"\206\001\n\020CMsgApplySticker\022\027\n\017sticker_item_"
     "id\030\001 \001(\004\022\024\n\014item_item_id\030\002 \001(\004\022\024\n\014sticke"
     "r_slot\030\003 \001(\r\022\027\n\017baseitem_defidx\030\004 \001(\r\022\024\n"
-    "\014sticker_wear\030\005 \001(\002\"]\n\025CMsgApplyStatTrak"
-    "Swap\022\024\n\014tool_item_id\030\001 \001(\004\022\026\n\016item_1_ite"
-    "m_id\030\002 \001(\004\022\026\n\016item_2_item_id\030\003 \001(\004\"J\n\024CM"
-    "sgApplyStrangePart\022\034\n\024strange_part_item_"
-    "id\030\001 \001(\004\022\024\n\014item_item_id\030\002 \001(\004\"K\n\027CMsgAp"
-    "plyPennantUpgrade\022\027\n\017upgrade_item_id\030\001 \001"
-    "(\004\022\027\n\017pennant_item_id\030\002 \001(\004\"C\n\023CMsgApply"
-    "EggEssence\022\027\n\017essence_item_id\030\001 \001(\004\022\023\n\013e"
-    "gg_item_id\030\002 \001(\004\"M\n\024CSOEconItemAttribute"
-    "\022\021\n\tdef_index\030\001 \001(\r\022\r\n\005value\030\002 \001(\r\022\023\n\013va"
-    "lue_bytes\030\003 \001(\014\":\n\023CSOEconItemEquipped\022\021"
-    "\n\tnew_class\030\001 \001(\r\022\020\n\010new_slot\030\002 \001(\r\"\237\003\n\013"
-    "CSOEconItem\022\n\n\002id\030\001 \001(\004\022\022\n\naccount_id\030\002 "
-    "\001(\r\022\021\n\tinventory\030\003 \001(\r\022\021\n\tdef_index\030\004 \001("
-    "\r\022\020\n\010quantity\030\005 \001(\r\022\r\n\005level\030\006 \001(\r\022\017\n\007qu"
-    "ality\030\007 \001(\r\022\020\n\005flags\030\010 \001(\r:\0010\022\016\n\006origin\030"
-    "\t \001(\r\022\023\n\013custom_name\030\n \001(\t\022\023\n\013custom_des"
-    "c\030\013 \001(\t\022(\n\tattribute\030\014 \003(\0132\025.CSOEconItem"
-    "Attribute\022#\n\rinterior_item\030\r \001(\0132\014.CSOEc"
-    "onItem\022\025\n\006in_use\030\016 \001(\010:\005false\022\020\n\005style\030\017"
-    " \001(\r:\0010\022\026\n\013original_id\030\020 \001(\004:\0010\022,\n\016equip"
-    "ped_state\030\022 \003(\0132\024.CSOEconItemEquipped\022\016\n"
-    "\006rarity\030\023 \001(\r\"a\n\033CMsgAdjustItemEquippedS"
-    "tate\022\017\n\007item_id\030\001 \001(\004\022\021\n\tnew_class\030\002 \001(\r"
-    "\022\020\n\010new_slot\030\003 \001(\r\022\014\n\004swap\030\004 \001(\010\"\"\n\rCMsg"
-    "SortItems\022\021\n\tsort_type\030\001 \001(\r\"^\n\020CSOEconC"
-    "laimCode\022\022\n\naccount_id\030\001 \001(\r\022\021\n\tcode_typ"
-    "e\030\002 \001(\r\022\025\n\rtime_acquired\030\003 \001(\r\022\014\n\004code\030\004"
-    " \001(\t\"E\n\024CMsgStoreGetUserData\022\033\n\023price_sh"
-    "eet_version\030\001 \001(\007\022\020\n\010currency\030\002 \001(\005\"\231\001\n\034"
-    "CMsgStoreGetUserDataResponse\022\016\n\006result\030\001"
-    " \001(\005\022\033\n\023currency_deprecated\030\002 \001(\005\022\032\n\022cou"
-    "ntry_deprecated\030\003 \001(\t\022\033\n\023price_sheet_ver"
-    "sion\030\004 \001(\007\022\023\n\013price_sheet\030\010 \001(\014\"\206\001\n\024CMsg"
-    "UpdateItemSchema\022\022\n\nitems_game\030\001 \001(\014\022\033\n\023"
-    "item_schema_version\030\002 \001(\007\022%\n\035items_game_"
-    "url_DEPRECATED2013\030\003 \001(\t\022\026\n\016items_game_u"
-    "rl\030\004 \001(\t\"!\n\013CMsgGCError\022\022\n\nerror_text\030\001 "
-    "\001(\t\"\035\n\033CMsgRequestInventoryRefresh\".\n\017CM"
-    "sgConVarValue\022\014\n\004name\030\001 \001(\t\022\r\n\005value\030\002 \001"
-    "(\t\"9\n\024CMsgReplicateConVars\022!\n\007convars\030\001 "
-    "\003(\0132\020.CMsgConVarValue\"\216\001\n\013CMsgUseItem\022\017\n"
-    "\007item_id\030\001 \001(\004\022\027\n\017target_steam_id\030\002 \001(\006\022"
-    "\037\n\027gift__potential_targets\030\003 \003(\r\022\030\n\020duel"
-    "__class_lock\030\004 \001(\r\022\032\n\022initiator_steam_id"
-    "\030\005 \001(\006\"d\n\033CMsgReplayUploadedToYouTube\022\023\n"
-    "\013youtube_url\030\001 \001(\t\022\034\n\024youtube_account_na"
-    "me\030\002 \001(\t\022\022\n\nsession_id\030\003 \001(\004\".\n\027CMsgCons"
-    "umableExhausted\022\023\n\013item_def_id\030\001 \001(\005\"\236\001\n"
-    " CMsgItemAcknowledged__DEPRECATED\022\022\n\nacc"
-    "ount_id\030\001 \001(\r\022\021\n\tinventory\030\002 \001(\r\022\021\n\tdef_"
-    "index\030\003 \001(\r\022\017\n\007quality\030\004 \001(\r\022\016\n\006rarity\030\005"
-    " \001(\r\022\016\n\006origin\030\006 \001(\r\022\017\n\007item_id\030\007 \001(\004\"\235\001"
-    "\n\024CMsgSetItemPositions\022:\n\016item_positions"
-    "\030\001 \003(\0132\".CMsgSetItemPositions.ItemPositi"
-    "on\032I\n\014ItemPosition\022\026\n\016legacy_item_id\030\001 \001"
-    "(\r\022\020\n\010position\030\002 \001(\r\022\017\n\007item_id\030\003 \001(\004\"\270\001"
-    "\n\021CMsgGCReportAbuse\022\027\n\017target_steam_id\030\001"
-    " \001(\006\022\023\n\013description\030\004 \001(\t\022\013\n\003gid\030\005 \001(\004\022\022"
-    "\n\nabuse_type\030\002 \001(\r\022\024\n\014content_type\030\003 \001(\r"
-    "\022\035\n\025target_game_server_ip\030\006 \001(\007\022\037\n\027targe"
-    "t_game_server_port\030\007 \001(\r\"[\n\031CMsgGCReport"
-    "AbuseResponse\022\027\n\017target_steam_id\030\001 \001(\006\022\016"
-    "\n\006result\030\002 \001(\r\022\025\n\rerror_message\030\003 \001(\t\"f\n"
-    "\032CMsgGCNameItemNotification\022\026\n\016player_st"
-    "eamid\030\001 \001(\006\022\026\n\016item_def_index\030\002 \001(\r\022\030\n\020i"
-    "tem_name_custom\030\003 \001(\t\"\266\001\n\037CMsgGCClientDi"
-    "splayNotification\022+\n#notification_title_"
-    "localization_key\030\001 \001(\t\022*\n\"notification_b"
-    "ody_localization_key\030\002 \001(\t\022\033\n\023body_subst"
-    "ring_keys\030\003 \003(\t\022\035\n\025body_substring_values"
-    "\030\004 \003(\t\"1\n\027CMsgGCShowItemsPickedUp\022\026\n\016pla"
-    "yer_steamid\030\001 \001(\006\"|\n CMsgGCIncrementKill"
-    "CountResponse\022\037\n\021killer_account_id\030\001 \001(\r"
-    "B\004\200\246\035\001\022\021\n\tnum_kills\030\002 \001(\r\022\020\n\010item_def\030\003 "
-    "\001(\r\022\022\n\nlevel_type\030\004 \001(\r\"\217\001\n\030CSOEconItemD"
-    "ropRateBonus\022\022\n\naccount_id\030\001 \001(\r\022\027\n\017expi"
-    "ration_date\030\002 \001(\007\022\r\n\005bonus\030\003 \001(\002\022\023\n\013bonu"
-    "s_count\030\004 \001(\r\022\017\n\007item_id\030\005 \001(\004\022\021\n\tdef_in"
-    "dex\030\006 \001(\r\"p\n\031CSOEconItemLeagueViewPass\022\030"
-    "\n\naccount_id\030\001 \001(\rB\004\200\246\035\001\022\027\n\tleague_id\030\002 "
-    "\001(\rB\004\200\246\035\001\022\r\n\005admin\030\003 \001(\r\022\021\n\titemindex\030\004 "
-    "\001(\r\"O\n\026CSOEconItemEventTicket\022\022\n\naccount"
-    "_id\030\001 \001(\r\022\020\n\010event_id\030\002 \001(\r\022\017\n\007item_id\030\003"
-    " \001(\004\"A\n\'CMsgGCItemPreviewItemBoughtNotif"
-    "ication\022\026\n\016item_def_index\030\001 \001(\r\"+\n\031CMsgG"
-    "CStorePurchaseCancel\022\016\n\006txn_id\030\001 \001(\004\"3\n!"
-    "CMsgGCStorePurchaseCancelResponse\022\016\n\006res"
-    "ult\030\001 \001(\r\"-\n\033CMsgGCStorePurchaseFinalize"
-    "\022\016\n\006txn_id\030\001 \001(\004\"G\n#CMsgGCStorePurchaseF"
-    "inalizeResponse\022\016\n\006result\030\001 \001(\r\022\020\n\010item_"
-    "ids\030\002 \003(\004\"I\n\033CMsgGCBannedWordListRequest"
-    "\022\031\n\021ban_list_group_id\030\001 \001(\r\022\017\n\007word_id\030\002"
-    " \001(\r\"\034\n\032CMsgGCRequestAnnouncements\"\202\001\n\"C"
-    "MsgGCRequestAnnouncementsResponse\022\032\n\022ann"
-    "ouncement_title\030\001 \001(\t\022\024\n\014announcement\030\002 "
-    "\001(\t\022\027\n\017nextmatch_title\030\003 \001(\t\022\021\n\tnextmatc"
-    "h\030\004 \001(\t\"X\n\020CMsgGCBannedWord\022\017\n\007word_id\030\001"
-    " \001(\r\022%\n\tword_type\030\002 \001(\0162\022.GC_BannedWordT"
-    "ype\022\014\n\004word\030\003 \001(\t\"_\n\034CMsgGCBannedWordLis"
-    "tResponse\022\031\n\021ban_list_group_id\030\001 \001(\r\022$\n\t"
-    "word_list\030\002 \003(\0132\021.CMsgGCBannedWord\"U\n!CM"
-    "sgGCToGCBannedWordListBroadcast\0220\n\tbroad"
-    "cast\030\001 \001(\0132\035.CMsgGCBannedWordListRespons"
-    "e\"3\n\037CMsgGCToGCBannedWordListUpdated\022\020\n\010"
-    "group_id\030\001 \001(\r\"\222\001\n.CSOEconDefaultEquippe"
-    "dDefinitionInstanceClient\022\030\n\naccount_id\030"
-    "\001 \001(\rB\004\200\246\035\001\022\027\n\017item_definition\030\002 \001(\r\022\026\n\010"
-    "class_id\030\003 \001(\rB\004\200\246\035\001\022\025\n\007slot_id\030\004 \001(\rB\004\200"
-    "\246\035\001\"\?\n\027CMsgGCToGCDirtySDOCache\022\020\n\010sdo_ty"
-    "pe\030\001 \001(\r\022\022\n\nkey_uint64\030\002 \001(\004\"G\n\037CMsgGCTo"
-    "GCDirtyMultipleSDOCache\022\020\n\010sdo_type\030\001 \001("
-    "\r\022\022\n\nkey_uint64\030\002 \003(\004\"H\n\021CMsgGCCollectIt"
-    "em\022\032\n\022collection_item_id\030\001 \001(\004\022\027\n\017subjec"
-    "t_item_id\030\002 \001(\004\"\024\n\022CMsgSDONoMemcached\"/\n"
-    "\033CMsgGCToGCUpdateSQLKeyValue\022\020\n\010key_name"
-    "\030\001 \001(\t\"-\n\031CMsgGCToGCIsTrustedServer\022\020\n\010s"
-    "team_id\030\001 \001(\006\"7\n!CMsgGCToGCIsTrustedServ"
-    "erResponse\022\022\n\nis_trusted\030\001 \001(\010\"8\n!CMsgGC"
-    "ToGCBroadcastConsoleCommand\022\023\n\013con_comma"
-    "nd\030\001 \001(\t\"4\n\032CMsgGCServerVersionUpdated\022\026"
-    "\n\016server_version\030\001 \001(\r\"4\n\032CMsgGCClientVe"
-    "rsionUpdated\022\026\n\016client_version\030\001 \001(\r\" \n\036"
-    "CMsgGCToGCWebAPIAccountChanged\"^\n\"CMsgGC"
-    "ToGCRequestPassportItemGrant\022\020\n\010steam_id"
-    "\030\001 \001(\006\022\021\n\tleague_id\030\002 \001(\r\022\023\n\013reward_flag"
-    "\030\003 \001(\005\"\350\004\n\022CMsgGameServerInfo\022\035\n\025server_"
-    "public_ip_addr\030\001 \001(\007\022\036\n\026server_private_i"
-    "p_addr\030\002 \001(\007\022\023\n\013server_port\030\003 \001(\r\022\026\n\016ser"
-    "ver_tv_port\030\004 \001(\r\022\022\n\nserver_key\030\005 \001(\t\022\032\n"
-    "\022server_hibernation\030\006 \001(\010\022@\n\013server_type"
-    "\030\007 \001(\0162\036.CMsgGameServerInfo.ServerType:\013"
-    "UNSPECIFIED\022\025\n\rserver_region\030\010 \001(\r\022\026\n\016se"
-    "rver_loadavg\030\t \001(\002\022 \n\030server_tv_broadcas"
-    "t_time\030\n \001(\002\022\030\n\020server_game_time\030\013 \001(\002\022\'"
-    "\n\037server_relay_connected_steam_id\030\014 \001(\006\022"
-    "\027\n\017relay_slots_max\030\r \001(\r\022\030\n\020relays_conne"
-    "cted\030\016 \001(\005\022\037\n\027relay_clients_connected\030\017 "
-    "\001(\005\022$\n\034relayed_game_server_steam_id\030\020 \001("
-    "\006\022\032\n\022parent_relay_count\030\021 \001(\r\022\026\n\016tv_secr"
-    "et_code\030\022 \001(\006\"2\n\nServerType\022\017\n\013UNSPECIFI"
-    "ED\020\000\022\010\n\004GAME\020\001\022\t\n\005PROXY\020\002*\307\003\n\nEGCBaseMsg"
-    "\022\032\n\025k_EMsgGCSystemMessage\020\241\037\022\035\n\030k_EMsgGC"
-    "ReplicateConVars\020\242\037\022\032\n\025k_EMsgGCConVarUpd"
-    "ated\020\243\037\022\024\n\017k_EMsgGCInQueue\020\250\037\022\032\n\025k_EMsgG"
-    "CInviteToParty\020\225#\022\036\n\031k_EMsgGCInvitationC"
-    "reated\020\226#\022 \n\033k_EMsgGCPartyInviteResponse"
-    "\020\227#\022\032\n\025k_EMsgGCKickFromParty\020\230#\022\027\n\022k_EMs"
-    "gGCLeaveParty\020\231#\022\034\n\027k_EMsgGCServerAvaila"
-    "ble\020\232#\022\"\n\035k_EMsgGCClientConnectToServer\020"
-    "\233#\022\033\n\026k_EMsgGCGameServerInfo\020\234#\022\022\n\rk_EMs"
-    "gGCError\020\235#\022%\n k_EMsgGCReplay_UploadedTo"
-    "YouTube\020\236#\022\037\n\032k_EMsgGCLANServerAvailable"
-    "\020\237#*Y\n\027EGCBaseProtoObjectTypes\022\036\n\031k_EPro"
-    "toObjectPartyInvite\020\351\007\022\036\n\031k_EProtoObject"
-    "LobbyInvite\020\352\007*T\n\021GC_BannedWordType\022\037\n\033G"
-    "C_BANNED_WORD_DISABLE_WORD\020\000\022\036\n\032GC_BANNE"
-    "D_WORD_ENABLE_WORD\020\001B\005H\001\200\001\000", 8707);
+    "\014sticker_wear\030\005 \001(\002\"S\n\027CMsgModifyItemAtt"
+    "ribute\022\017\n\007item_id\030\001 \001(\004\022\023\n\013attr_defidx\030\002"
+    " \001(\r\022\022\n\nattr_value\030\003 \001(\r\"]\n\025CMsgApplySta"
+    "tTrakSwap\022\024\n\014tool_item_id\030\001 \001(\004\022\026\n\016item_"
+    "1_item_id\030\002 \001(\004\022\026\n\016item_2_item_id\030\003 \001(\004\""
+    "J\n\024CMsgApplyStrangePart\022\034\n\024strange_part_"
+    "item_id\030\001 \001(\004\022\024\n\014item_item_id\030\002 \001(\004\"K\n\027C"
+    "MsgApplyPennantUpgrade\022\027\n\017upgrade_item_i"
+    "d\030\001 \001(\004\022\027\n\017pennant_item_id\030\002 \001(\004\"C\n\023CMsg"
+    "ApplyEggEssence\022\027\n\017essence_item_id\030\001 \001(\004"
+    "\022\023\n\013egg_item_id\030\002 \001(\004\"M\n\024CSOEconItemAttr"
+    "ibute\022\021\n\tdef_index\030\001 \001(\r\022\r\n\005value\030\002 \001(\r\022"
+    "\023\n\013value_bytes\030\003 \001(\014\":\n\023CSOEconItemEquip"
+    "ped\022\021\n\tnew_class\030\001 \001(\r\022\020\n\010new_slot\030\002 \001(\r"
+    "\"\237\003\n\013CSOEconItem\022\n\n\002id\030\001 \001(\004\022\022\n\naccount_"
+    "id\030\002 \001(\r\022\021\n\tinventory\030\003 \001(\r\022\021\n\tdef_index"
+    "\030\004 \001(\r\022\020\n\010quantity\030\005 \001(\r\022\r\n\005level\030\006 \001(\r\022"
+    "\017\n\007quality\030\007 \001(\r\022\020\n\005flags\030\010 \001(\r:\0010\022\016\n\006or"
+    "igin\030\t \001(\r\022\023\n\013custom_name\030\n \001(\t\022\023\n\013custo"
+    "m_desc\030\013 \001(\t\022(\n\tattribute\030\014 \003(\0132\025.CSOEco"
+    "nItemAttribute\022#\n\rinterior_item\030\r \001(\0132\014."
+    "CSOEconItem\022\025\n\006in_use\030\016 \001(\010:\005false\022\020\n\005st"
+    "yle\030\017 \001(\r:\0010\022\026\n\013original_id\030\020 \001(\004:\0010\022,\n\016"
+    "equipped_state\030\022 \003(\0132\024.CSOEconItemEquipp"
+    "ed\022\016\n\006rarity\030\023 \001(\r\"a\n\033CMsgAdjustItemEqui"
+    "ppedState\022\017\n\007item_id\030\001 \001(\004\022\021\n\tnew_class\030"
+    "\002 \001(\r\022\020\n\010new_slot\030\003 \001(\r\022\014\n\004swap\030\004 \001(\010\"\"\n"
+    "\rCMsgSortItems\022\021\n\tsort_type\030\001 \001(\r\"^\n\020CSO"
+    "EconClaimCode\022\022\n\naccount_id\030\001 \001(\r\022\021\n\tcod"
+    "e_type\030\002 \001(\r\022\025\n\rtime_acquired\030\003 \001(\r\022\014\n\004c"
+    "ode\030\004 \001(\t\"E\n\024CMsgStoreGetUserData\022\033\n\023pri"
+    "ce_sheet_version\030\001 \001(\007\022\020\n\010currency\030\002 \001(\005"
+    "\"\231\001\n\034CMsgStoreGetUserDataResponse\022\016\n\006res"
+    "ult\030\001 \001(\005\022\033\n\023currency_deprecated\030\002 \001(\005\022\032"
+    "\n\022country_deprecated\030\003 \001(\t\022\033\n\023price_shee"
+    "t_version\030\004 \001(\007\022\023\n\013price_sheet\030\010 \001(\014\"\206\001\n"
+    "\024CMsgUpdateItemSchema\022\022\n\nitems_game\030\001 \001("
+    "\014\022\033\n\023item_schema_version\030\002 \001(\007\022%\n\035items_"
+    "game_url_DEPRECATED2013\030\003 \001(\t\022\026\n\016items_g"
+    "ame_url\030\004 \001(\t\"!\n\013CMsgGCError\022\022\n\nerror_te"
+    "xt\030\001 \001(\t\"\035\n\033CMsgRequestInventoryRefresh\""
+    ".\n\017CMsgConVarValue\022\014\n\004name\030\001 \001(\t\022\r\n\005valu"
+    "e\030\002 \001(\t\"9\n\024CMsgReplicateConVars\022!\n\007conva"
+    "rs\030\001 \003(\0132\020.CMsgConVarValue\"\216\001\n\013CMsgUseIt"
+    "em\022\017\n\007item_id\030\001 \001(\004\022\027\n\017target_steam_id\030\002"
+    " \001(\006\022\037\n\027gift__potential_targets\030\003 \003(\r\022\030\n"
+    "\020duel__class_lock\030\004 \001(\r\022\032\n\022initiator_ste"
+    "am_id\030\005 \001(\006\"d\n\033CMsgReplayUploadedToYouTu"
+    "be\022\023\n\013youtube_url\030\001 \001(\t\022\034\n\024youtube_accou"
+    "nt_name\030\002 \001(\t\022\022\n\nsession_id\030\003 \001(\004\".\n\027CMs"
+    "gConsumableExhausted\022\023\n\013item_def_id\030\001 \001("
+    "\005\"\236\001\n CMsgItemAcknowledged__DEPRECATED\022\022"
+    "\n\naccount_id\030\001 \001(\r\022\021\n\tinventory\030\002 \001(\r\022\021\n"
+    "\tdef_index\030\003 \001(\r\022\017\n\007quality\030\004 \001(\r\022\016\n\006rar"
+    "ity\030\005 \001(\r\022\016\n\006origin\030\006 \001(\r\022\017\n\007item_id\030\007 \001"
+    "(\004\"\235\001\n\024CMsgSetItemPositions\022:\n\016item_posi"
+    "tions\030\001 \003(\0132\".CMsgSetItemPositions.ItemP"
+    "osition\032I\n\014ItemPosition\022\026\n\016legacy_item_i"
+    "d\030\001 \001(\r\022\020\n\010position\030\002 \001(\r\022\017\n\007item_id\030\003 \001"
+    "(\004\"\270\001\n\021CMsgGCReportAbuse\022\027\n\017target_steam"
+    "_id\030\001 \001(\006\022\023\n\013description\030\004 \001(\t\022\013\n\003gid\030\005 "
+    "\001(\004\022\022\n\nabuse_type\030\002 \001(\r\022\024\n\014content_type\030"
+    "\003 \001(\r\022\035\n\025target_game_server_ip\030\006 \001(\007\022\037\n\027"
+    "target_game_server_port\030\007 \001(\r\"[\n\031CMsgGCR"
+    "eportAbuseResponse\022\027\n\017target_steam_id\030\001 "
+    "\001(\006\022\016\n\006result\030\002 \001(\r\022\025\n\rerror_message\030\003 \001"
+    "(\t\"f\n\032CMsgGCNameItemNotification\022\026\n\016play"
+    "er_steamid\030\001 \001(\006\022\026\n\016item_def_index\030\002 \001(\r"
+    "\022\030\n\020item_name_custom\030\003 \001(\t\"\266\001\n\037CMsgGCCli"
+    "entDisplayNotification\022+\n#notification_t"
+    "itle_localization_key\030\001 \001(\t\022*\n\"notificat"
+    "ion_body_localization_key\030\002 \001(\t\022\033\n\023body_"
+    "substring_keys\030\003 \003(\t\022\035\n\025body_substring_v"
+    "alues\030\004 \003(\t\"1\n\027CMsgGCShowItemsPickedUp\022\026"
+    "\n\016player_steamid\030\001 \001(\006\"|\n CMsgGCIncremen"
+    "tKillCountResponse\022\037\n\021killer_account_id\030"
+    "\001 \001(\rB\004\200\246\035\001\022\021\n\tnum_kills\030\002 \001(\r\022\020\n\010item_d"
+    "ef\030\003 \001(\r\022\022\n\nlevel_type\030\004 \001(\r\"\217\001\n\030CSOEcon"
+    "ItemDropRateBonus\022\022\n\naccount_id\030\001 \001(\r\022\027\n"
+    "\017expiration_date\030\002 \001(\007\022\r\n\005bonus\030\003 \001(\002\022\023\n"
+    "\013bonus_count\030\004 \001(\r\022\017\n\007item_id\030\005 \001(\004\022\021\n\td"
+    "ef_index\030\006 \001(\r\"p\n\031CSOEconItemLeagueViewP"
+    "ass\022\030\n\naccount_id\030\001 \001(\rB\004\200\246\035\001\022\027\n\tleague_"
+    "id\030\002 \001(\rB\004\200\246\035\001\022\r\n\005admin\030\003 \001(\r\022\021\n\titemind"
+    "ex\030\004 \001(\r\"O\n\026CSOEconItemEventTicket\022\022\n\nac"
+    "count_id\030\001 \001(\r\022\020\n\010event_id\030\002 \001(\r\022\017\n\007item"
+    "_id\030\003 \001(\004\"A\n\'CMsgGCItemPreviewItemBought"
+    "Notification\022\026\n\016item_def_index\030\001 \001(\r\"+\n\031"
+    "CMsgGCStorePurchaseCancel\022\016\n\006txn_id\030\001 \001("
+    "\004\"3\n!CMsgGCStorePurchaseCancelResponse\022\016"
+    "\n\006result\030\001 \001(\r\"-\n\033CMsgGCStorePurchaseFin"
+    "alize\022\016\n\006txn_id\030\001 \001(\004\"G\n#CMsgGCStorePurc"
+    "haseFinalizeResponse\022\016\n\006result\030\001 \001(\r\022\020\n\010"
+    "item_ids\030\002 \003(\004\"I\n\033CMsgGCBannedWordListRe"
+    "quest\022\031\n\021ban_list_group_id\030\001 \001(\r\022\017\n\007word"
+    "_id\030\002 \001(\r\"\034\n\032CMsgGCRequestAnnouncements\""
+    "\202\001\n\"CMsgGCRequestAnnouncementsResponse\022\032"
+    "\n\022announcement_title\030\001 \001(\t\022\024\n\014announceme"
+    "nt\030\002 \001(\t\022\027\n\017nextmatch_title\030\003 \001(\t\022\021\n\tnex"
+    "tmatch\030\004 \001(\t\"X\n\020CMsgGCBannedWord\022\017\n\007word"
+    "_id\030\001 \001(\r\022%\n\tword_type\030\002 \001(\0162\022.GC_Banned"
+    "WordType\022\014\n\004word\030\003 \001(\t\"_\n\034CMsgGCBannedWo"
+    "rdListResponse\022\031\n\021ban_list_group_id\030\001 \001("
+    "\r\022$\n\tword_list\030\002 \003(\0132\021.CMsgGCBannedWord\""
+    "U\n!CMsgGCToGCBannedWordListBroadcast\0220\n\t"
+    "broadcast\030\001 \001(\0132\035.CMsgGCBannedWordListRe"
+    "sponse\"3\n\037CMsgGCToGCBannedWordListUpdate"
+    "d\022\020\n\010group_id\030\001 \001(\r\"\222\001\n.CSOEconDefaultEq"
+    "uippedDefinitionInstanceClient\022\030\n\naccoun"
+    "t_id\030\001 \001(\rB\004\200\246\035\001\022\027\n\017item_definition\030\002 \001("
+    "\r\022\026\n\010class_id\030\003 \001(\rB\004\200\246\035\001\022\025\n\007slot_id\030\004 \001"
+    "(\rB\004\200\246\035\001\"\?\n\027CMsgGCToGCDirtySDOCache\022\020\n\010s"
+    "do_type\030\001 \001(\r\022\022\n\nkey_uint64\030\002 \001(\004\"G\n\037CMs"
+    "gGCToGCDirtyMultipleSDOCache\022\020\n\010sdo_type"
+    "\030\001 \001(\r\022\022\n\nkey_uint64\030\002 \003(\004\"H\n\021CMsgGCColl"
+    "ectItem\022\032\n\022collection_item_id\030\001 \001(\004\022\027\n\017s"
+    "ubject_item_id\030\002 \001(\004\"\024\n\022CMsgSDONoMemcach"
+    "ed\"/\n\033CMsgGCToGCUpdateSQLKeyValue\022\020\n\010key"
+    "_name\030\001 \001(\t\"-\n\031CMsgGCToGCIsTrustedServer"
+    "\022\020\n\010steam_id\030\001 \001(\006\"7\n!CMsgGCToGCIsTruste"
+    "dServerResponse\022\022\n\nis_trusted\030\001 \001(\010\"8\n!C"
+    "MsgGCToGCBroadcastConsoleCommand\022\023\n\013con_"
+    "command\030\001 \001(\t\"4\n\032CMsgGCServerVersionUpda"
+    "ted\022\026\n\016server_version\030\001 \001(\r\"4\n\032CMsgGCCli"
+    "entVersionUpdated\022\026\n\016client_version\030\001 \001("
+    "\r\" \n\036CMsgGCToGCWebAPIAccountChanged\"^\n\"C"
+    "MsgGCToGCRequestPassportItemGrant\022\020\n\010ste"
+    "am_id\030\001 \001(\006\022\021\n\tleague_id\030\002 \001(\r\022\023\n\013reward"
+    "_flag\030\003 \001(\005\"\350\004\n\022CMsgGameServerInfo\022\035\n\025se"
+    "rver_public_ip_addr\030\001 \001(\007\022\036\n\026server_priv"
+    "ate_ip_addr\030\002 \001(\007\022\023\n\013server_port\030\003 \001(\r\022\026"
+    "\n\016server_tv_port\030\004 \001(\r\022\022\n\nserver_key\030\005 \001"
+    "(\t\022\032\n\022server_hibernation\030\006 \001(\010\022@\n\013server"
+    "_type\030\007 \001(\0162\036.CMsgGameServerInfo.ServerT"
+    "ype:\013UNSPECIFIED\022\025\n\rserver_region\030\010 \001(\r\022"
+    "\026\n\016server_loadavg\030\t \001(\002\022 \n\030server_tv_bro"
+    "adcast_time\030\n \001(\002\022\030\n\020server_game_time\030\013 "
+    "\001(\002\022\'\n\037server_relay_connected_steam_id\030\014"
+    " \001(\006\022\027\n\017relay_slots_max\030\r \001(\r\022\030\n\020relays_"
+    "connected\030\016 \001(\005\022\037\n\027relay_clients_connect"
+    "ed\030\017 \001(\005\022$\n\034relayed_game_server_steam_id"
+    "\030\020 \001(\006\022\032\n\022parent_relay_count\030\021 \001(\r\022\026\n\016tv"
+    "_secret_code\030\022 \001(\006\"2\n\nServerType\022\017\n\013UNSP"
+    "ECIFIED\020\000\022\010\n\004GAME\020\001\022\t\n\005PROXY\020\002*\307\003\n\nEGCBa"
+    "seMsg\022\032\n\025k_EMsgGCSystemMessage\020\241\037\022\035\n\030k_E"
+    "MsgGCReplicateConVars\020\242\037\022\032\n\025k_EMsgGCConV"
+    "arUpdated\020\243\037\022\024\n\017k_EMsgGCInQueue\020\250\037\022\032\n\025k_"
+    "EMsgGCInviteToParty\020\225#\022\036\n\031k_EMsgGCInvita"
+    "tionCreated\020\226#\022 \n\033k_EMsgGCPartyInviteRes"
+    "ponse\020\227#\022\032\n\025k_EMsgGCKickFromParty\020\230#\022\027\n\022"
+    "k_EMsgGCLeaveParty\020\231#\022\034\n\027k_EMsgGCServerA"
+    "vailable\020\232#\022\"\n\035k_EMsgGCClientConnectToSe"
+    "rver\020\233#\022\033\n\026k_EMsgGCGameServerInfo\020\234#\022\022\n\r"
+    "k_EMsgGCError\020\235#\022%\n k_EMsgGCReplay_Uploa"
+    "dedToYouTube\020\236#\022\037\n\032k_EMsgGCLANServerAvai"
+    "lable\020\237#*Y\n\027EGCBaseProtoObjectTypes\022\036\n\031k"
+    "_EProtoObjectPartyInvite\020\351\007\022\036\n\031k_EProtoO"
+    "bjectLobbyInvite\020\352\007*T\n\021GC_BannedWordType"
+    "\022\037\n\033GC_BANNED_WORD_DISABLE_WORD\020\000\022\036\n\032GC_"
+    "BANNED_WORD_ENABLE_WORD\020\001B\005H\001\200\001\000", 8792);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "base_gcmessages.proto", &protobuf_RegisterTypes);
   CGCStorePurchaseInit_LineItem::default_instance_ = new CGCStorePurchaseInit_LineItem();
@@ -2190,6 +2216,7 @@ void protobuf_AddDesc_base_5fgcmessages_2eproto() {
   CMsgDevNewItemRequest::default_instance_ = new CMsgDevNewItemRequest();
   CMsgIncrementKillCountAttribute::default_instance_ = new CMsgIncrementKillCountAttribute();
   CMsgApplySticker::default_instance_ = new CMsgApplySticker();
+  CMsgModifyItemAttribute::default_instance_ = new CMsgModifyItemAttribute();
   CMsgApplyStatTrakSwap::default_instance_ = new CMsgApplyStatTrakSwap();
   CMsgApplyStrangePart::default_instance_ = new CMsgApplyStrangePart();
   CMsgApplyPennantUpgrade::default_instance_ = new CMsgApplyPennantUpgrade();
@@ -2268,6 +2295,7 @@ void protobuf_AddDesc_base_5fgcmessages_2eproto() {
   CMsgDevNewItemRequest::default_instance_->InitAsDefaultInstance();
   CMsgIncrementKillCountAttribute::default_instance_->InitAsDefaultInstance();
   CMsgApplySticker::default_instance_->InitAsDefaultInstance();
+  CMsgModifyItemAttribute::default_instance_->InitAsDefaultInstance();
   CMsgApplyStatTrakSwap::default_instance_->InitAsDefaultInstance();
   CMsgApplyStrangePart::default_instance_->InitAsDefaultInstance();
   CMsgApplyPennantUpgrade::default_instance_->InitAsDefaultInstance();
@@ -9283,6 +9311,294 @@ void CMsgApplySticker::Swap(CMsgApplySticker* other) {
   ::google::protobuf::Metadata metadata;
   metadata.descriptor = CMsgApplySticker_descriptor_;
   metadata.reflection = CMsgApplySticker_reflection_;
+  return metadata;
+}
+
+
+// ===================================================================
+
+#ifndef _MSC_VER
+const int CMsgModifyItemAttribute::kItemIdFieldNumber;
+const int CMsgModifyItemAttribute::kAttrDefidxFieldNumber;
+const int CMsgModifyItemAttribute::kAttrValueFieldNumber;
+#endif  // !_MSC_VER
+
+CMsgModifyItemAttribute::CMsgModifyItemAttribute()
+  : ::google::protobuf::Message() {
+  SharedCtor();
+}
+
+void CMsgModifyItemAttribute::InitAsDefaultInstance() {
+}
+
+CMsgModifyItemAttribute::CMsgModifyItemAttribute(const CMsgModifyItemAttribute& from)
+  : ::google::protobuf::Message() {
+  SharedCtor();
+  MergeFrom(from);
+}
+
+void CMsgModifyItemAttribute::SharedCtor() {
+  _cached_size_ = 0;
+  item_id_ = GOOGLE_ULONGLONG(0);
+  attr_defidx_ = 0u;
+  attr_value_ = 0u;
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+}
+
+CMsgModifyItemAttribute::~CMsgModifyItemAttribute() {
+  SharedDtor();
+}
+
+void CMsgModifyItemAttribute::SharedDtor() {
+  if (this != default_instance_) {
+  }
+}
+
+void CMsgModifyItemAttribute::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const ::google::protobuf::Descriptor* CMsgModifyItemAttribute::descriptor() {
+  protobuf_AssignDescriptorsOnce();
+  return CMsgModifyItemAttribute_descriptor_;
+}
+
+const CMsgModifyItemAttribute& CMsgModifyItemAttribute::default_instance() {
+  if (default_instance_ == NULL) protobuf_AddDesc_base_5fgcmessages_2eproto();
+  return *default_instance_;
+}
+
+CMsgModifyItemAttribute* CMsgModifyItemAttribute::default_instance_ = NULL;
+
+CMsgModifyItemAttribute* CMsgModifyItemAttribute::New() const {
+  return new CMsgModifyItemAttribute;
+}
+
+void CMsgModifyItemAttribute::Clear() {
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    item_id_ = GOOGLE_ULONGLONG(0);
+    attr_defidx_ = 0u;
+    attr_value_ = 0u;
+  }
+  ::memset(_has_bits_, 0, sizeof(_has_bits_));
+  mutable_unknown_fields()->Clear();
+}
+
+bool CMsgModifyItemAttribute::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!(EXPRESSION)) return false
+  ::google::protobuf::uint32 tag;
+  while ((tag = input->ReadTag()) != 0) {
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // optional uint64 item_id = 1;
+      case 1: {
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
+                 input, &item_id_)));
+          set_has_item_id();
+        } else {
+          goto handle_uninterpreted;
+        }
+        if (input->ExpectTag(16)) goto parse_attr_defidx;
+        break;
+      }
+
+      // optional uint32 attr_defidx = 2;
+      case 2: {
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT) {
+         parse_attr_defidx:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 input, &attr_defidx_)));
+          set_has_attr_defidx();
+        } else {
+          goto handle_uninterpreted;
+        }
+        if (input->ExpectTag(24)) goto parse_attr_value;
+        break;
+      }
+
+      // optional uint32 attr_value = 3;
+      case 3: {
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT) {
+         parse_attr_value:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 input, &attr_value_)));
+          set_has_attr_value();
+        } else {
+          goto handle_uninterpreted;
+        }
+        if (input->ExpectAtEnd()) return true;
+        break;
+      }
+
+      default: {
+      handle_uninterpreted:
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          return true;
+        }
+        DO_(::google::protobuf::internal::WireFormat::SkipField(
+              input, tag, mutable_unknown_fields()));
+        break;
+      }
+    }
+  }
+  return true;
+#undef DO_
+}
+
+void CMsgModifyItemAttribute::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // optional uint64 item_id = 1;
+  if (has_item_id()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(1, this->item_id(), output);
+  }
+
+  // optional uint32 attr_defidx = 2;
+  if (has_attr_defidx()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(2, this->attr_defidx(), output);
+  }
+
+  // optional uint32 attr_value = 3;
+  if (has_attr_value()) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(3, this->attr_value(), output);
+  }
+
+  if (!unknown_fields().empty()) {
+    ::google::protobuf::internal::WireFormat::SerializeUnknownFields(
+        unknown_fields(), output);
+  }
+}
+
+::google::protobuf::uint8* CMsgModifyItemAttribute::SerializeWithCachedSizesToArray(
+    ::google::protobuf::uint8* target) const {
+  // optional uint64 item_id = 1;
+  if (has_item_id()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt64ToArray(1, this->item_id(), target);
+  }
+
+  // optional uint32 attr_defidx = 2;
+  if (has_attr_defidx()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(2, this->attr_defidx(), target);
+  }
+
+  // optional uint32 attr_value = 3;
+  if (has_attr_value()) {
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(3, this->attr_value(), target);
+  }
+
+  if (!unknown_fields().empty()) {
+    target = ::google::protobuf::internal::WireFormat::SerializeUnknownFieldsToArray(
+        unknown_fields(), target);
+  }
+  return target;
+}
+
+int CMsgModifyItemAttribute::ByteSize() const {
+  int total_size = 0;
+
+  if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    // optional uint64 item_id = 1;
+    if (has_item_id()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::UInt64Size(
+          this->item_id());
+    }
+
+    // optional uint32 attr_defidx = 2;
+    if (has_attr_defidx()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::UInt32Size(
+          this->attr_defidx());
+    }
+
+    // optional uint32 attr_value = 3;
+    if (has_attr_value()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::UInt32Size(
+          this->attr_value());
+    }
+
+  }
+  if (!unknown_fields().empty()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
+        unknown_fields());
+  }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void CMsgModifyItemAttribute::MergeFrom(const ::google::protobuf::Message& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  const CMsgModifyItemAttribute* source =
+    ::google::protobuf::internal::dynamic_cast_if_available<const CMsgModifyItemAttribute*>(
+      &from);
+  if (source == NULL) {
+    ::google::protobuf::internal::ReflectionOps::Merge(from, this);
+  } else {
+    MergeFrom(*source);
+  }
+}
+
+void CMsgModifyItemAttribute::MergeFrom(const CMsgModifyItemAttribute& from) {
+  GOOGLE_CHECK_NE(&from, this);
+  if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
+    if (from.has_item_id()) {
+      set_item_id(from.item_id());
+    }
+    if (from.has_attr_defidx()) {
+      set_attr_defidx(from.attr_defidx());
+    }
+    if (from.has_attr_value()) {
+      set_attr_value(from.attr_value());
+    }
+  }
+  mutable_unknown_fields()->MergeFrom(from.unknown_fields());
+}
+
+void CMsgModifyItemAttribute::CopyFrom(const ::google::protobuf::Message& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void CMsgModifyItemAttribute::CopyFrom(const CMsgModifyItemAttribute& from) {
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool CMsgModifyItemAttribute::IsInitialized() const {
+
+  return true;
+}
+
+void CMsgModifyItemAttribute::Swap(CMsgModifyItemAttribute* other) {
+  if (other != this) {
+    std::swap(item_id_, other->item_id_);
+    std::swap(attr_defidx_, other->attr_defidx_);
+    std::swap(attr_value_, other->attr_value_);
+    std::swap(_has_bits_[0], other->_has_bits_[0]);
+    _unknown_fields_.Swap(&other->_unknown_fields_);
+    std::swap(_cached_size_, other->_cached_size_);
+  }
+}
+
+::google::protobuf::Metadata CMsgModifyItemAttribute::GetMetadata() const {
+  protobuf_AssignDescriptorsOnce();
+  ::google::protobuf::Metadata metadata;
+  metadata.descriptor = CMsgModifyItemAttribute_descriptor_;
+  metadata.reflection = CMsgModifyItemAttribute_reflection_;
   return metadata;
 }
 

@@ -15,7 +15,7 @@
 #     csarm_tier2_connect) is gone together with its normalization dance
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-R=${1:-$REPO_DIR}
+R="$(cd "${1:-$REPO_DIR}" && pwd)"   # absolute: later steps cd into c15/
 MIRROR=${MIRROR:-https://github.com/RileyKun/cstrike15_src-2019.git}
 PINNED_SHA=a4c7aaea259319aca272839f688a3f4d9fe1cb2c
 OLD_MIRROR=${OLD_MIRROR:-https://github.com/perilouswithadollarsign/cstrike15_src.git}
