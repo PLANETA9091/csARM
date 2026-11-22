@@ -1,0 +1,31 @@
+From: csARM <csarm@localhost>
+Subject: [PATCH] blit: never draw the blit into a 0x0 viewport
+
+On Android (NOX11, EGL wrapper only) gl4es never learns the window size:
+mainfbo_width/height stay 0, so glBlitFramebuffer() drew the quad with a
+0x0 viewport and moved no pixels.  ToGL presents every frame through this
+blit, so a fully loaded map stayed black.  Fall back to the destination rect.
+---
+ src/gl/framebuffers.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+--- a/src/gl/framebuffers.c
++++ b/src/gl/framebuffers.c
+@@ -1498,6 +1498,17 @@
+         fbowidth  = glstate->fbo.fbo_draw->width;
+         fboheight = glstate->fbo.fbo_draw->height;
+     }
++    // csARM: on Android there is no eglSurface/refreshMainFBO (NOX11 build),
++    // so mainfbo_width/height stay 0 and the blit below drew into a 0x0
++    // viewport - a silent no-op.  ToGL presents every frame exactly this way
++    // (render to an offscreen RT, glBlitFramebuffer to the window), so the
++    // engine ran a fully loaded map with a black screen.  Fall back to the
++    // blit destination rectangle.
++    if (fbowidth == 0 || fboheight == 0)
++    {
++        fbowidth  = abs( dstX1 - dstX0 );
++        fboheight = abs( dstY1 - dstY0 );
++    }
+     GLint vp[4];
+     memcpy(vp, &glstate->raster.viewport, sizeof(vp));
+     gl4es_glViewport(0, 0, fbowidth, fboheight);
