@@ -98,7 +98,12 @@ build_one() {
   [ -z "$F" ] && return 0
   [ -f "$R/c15/$F" ] || return 0
   local obj="$OUT/$(echo "$F" | tr '/' '_').o"
-  [ -s "$obj" ] && return 0
+  # Recompile when the object is missing OR older than its source (and than
+  # any of our headers that changed).  "exists" alone silently reused stale
+  # objects while editing - the classic "my fix does nothing" trap.
+  if [ -s "$obj" ] && [ "$obj" -nt "$R/c15/$F" ] && [ "$obj" -nt "$SCRIPT_DIR/protocompat.h" ]; then
+    return 0
+  fi
   local st="$DEF"; case "$F" in *.c) st="${DEF/-std=gnu++17/-std=gnu11}" ;; esac
   # CCACHE=1 (ci.yml round 86): prefix the compiler with ccache for per-TU
   # incremental builds across patch changes.  ccache passes flags through
