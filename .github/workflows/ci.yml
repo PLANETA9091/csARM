@@ -1107,6 +1107,7 @@ jobs:
       # ClearBuffers -> SetViewport -> glViewport dereferenced the NULL
       # current_fb that upstream gl4es leaves behind.  Runs in ~2s.
       - name: gl4es bound-FBO deletion regression (on-device unit test)
+        if: needs.gl4es.result == 'success'
         run: |
           if [ -d "${ANDROID_NDK_LATEST_HOME:-}" ]; then
             export NDKROOT="$ANDROID_NDK_LATEST_HOME"
