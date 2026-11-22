@@ -5079,72 +5079,101 @@ diff -ruN a/togl/dxabstract.cpp b/togl/dxabstract.cpp
  	GLMPRINTF(("-X- IDirect3DDevice9::SetViewport : minZ %f, maxZ %f",pViewport->MinZ, pViewport->MaxZ ));
  	
  	gl.m_ViewportBox.x		= pViewport->X;
-diff -ruN a/engine/host_state.cpp b/engine/host_state.cpp
---- a/engine/host_state.cpp
-+++ b/engine/host_state.cpp
-@@ -44,6 +44,12 @@
- #endif
+diff -ruN a/engine/cmd.cpp b/engine/cmd.cpp
+--- a/engine/cmd.cpp
++++ b/engine/cmd.cpp
+@@ -33,6 +33,12 @@
+ #include "tier0/vprof.h"
  
  // memdbgon must be the last include file in a .cpp file!!!
 +#ifdef __ANDROID__
 +#include <android/log.h>
-+#define CSARM_HOST(...) __android_log_print( ANDROID_LOG_INFO, "CSARM_HOST", __VA_ARGS__ )
++#define CSARM_CBUF( ... ) __android_log_print( ANDROID_LOG_INFO, "CSARM_CBUF", __VA_ARGS__ )
 +#else
-+#define CSARM_HOST(...) ((void)0)
++#define CSARM_CBUF( ... ) ((void)0)
 +#endif
  #include "tier0/memdbgon.h"
  
- extern bool		g_bAbortServerSet;
-@@ -367,6 +373,11 @@
  
- void CHostState::SetState( HOSTSTATES newState, bool clearNext )
+@@ -185,6 +191,18 @@
+ void Cbuf_AddText( ECommandTarget_t eTarget, const char *pText, cmd_source_t cmdSource, int nTickDelay )
  {
-+	// csARM round 87: every host-state transition.  Run #242 reached
-+	// HS_RUN frames with +map ar_dizzy queued but Host_NewGame never
-+	// fired - without this trace the four silent State_NewGame exits
-+	// are indistinguishable from "command never executed".
-+	CSARM_HOST( "SetState %d -> %d (level \"%s\")", (int)m_currentState, (int)newState, m_levelName );
- 	m_currentState = newState;
- 	if ( clearNext )
- 	{
-@@ -416,6 +427,7 @@
- 	bool bSplitScreenConnect = m_bSplitScreenConnect;
- 	m_bSplitScreenConnect = false;
- 	materials->OnDebugEvent( "CHostState::State_NewGame" );
-+	CSARM_HOST( "State_NewGame: level=\"%s\" mapGroup=\"%s\"", m_levelName, m_mapGroupName );
- 
- 	if ( Host_ValidGame() )
- 	{
-@@ -428,20 +440,32 @@
- 		if ( !serverGameClients )
- 		{
- 			Warning( "Can't start game, no valid server.dll loaded\n" );
-+			CSARM_HOST( "State_NewGame: FAILED - no serverGameClients after SV_InitGameDLL" );
- 		}
- 		else
- 		{
- 			if ( modelloader->Map_IsValid( m_levelName ) )
- 			{
-+				CSARM_HOST( "State_NewGame: Map_IsValid ok, calling Host_NewGame" );
- 				if ( Host_NewGame( m_levelName, m_mapGroupName, false, m_bBackgroundLevel, bSplitScreenConnect ) )
- 				{
- 					// succesfully started the new game
-+					CSARM_HOST( "State_NewGame: Host_NewGame ok" );
- 					SetState( HS_RUN, true );
- 					return;
- 				}
-+				CSARM_HOST( "State_NewGame: Host_NewGame FAILED" );
-+			}
-+			else
-+			{
-+				CSARM_HOST( "State_NewGame: FAILED - Map_IsValid rejected \"%s\"", m_levelName );
- 			}
- 		}
- 	}
-+	else
+ 	LOCK_COMMAND_BUFFER();
++	// csARM round 88: run #243 CSARM_HOST showed State_NewGame never ran
++	// while cvars from csarm.args applied - so the COMMAND part of the
++	// startup queue is the suspect.  Log the first adds and anything
++	// carrying "+map" to see whether it is ever queued.
 +	{
-+		CSARM_HOST( "State_NewGame: FAILED - Host_ValidGame() false" );
++		static int s_nAdds = 0;
++		s_nAdds++;
++		if ( s_nAdds <= 8 || ( pText && V_strstr( pText, "+map" ) != NULL ) )
++		{
++			CSARM_CBUF( "AddText #%d target=%d src=%d [%s]", s_nAdds, (int)eTarget, (int)cmdSource, pText ? pText : "(null)" );
++		}
 +	}
+ 	if ( !s_CommandBuffer[ eTarget ].AddText( pText, cmdSource, nTickDelay ) )
+ 	{
+ 		ConMsg( "Cbuf_AddText: buffer overflow\n" );
+@@ -231,6 +249,18 @@
+ //-----------------------------------------------------------------------------
+ static void Cbuf_ExecuteCommand( ECommandTarget_t eTarget, const CCommand &args )
+ {
++	// csARM round 88: pair of the AddText trace - if a command is queued
++	// but never appears here, Cbuf_Execute is not draining the buffer
++	// (frame loop ordering / LOCK issue); if it appears, the next hop is
++	// Cmd_ExecuteCommand -> CC_Map.
++	{
++		static int s_nExecs = 0;
++		s_nExecs++;
++		if ( s_nExecs <= 40 || ( args.ArgC() > 0 && V_strstr( args.Arg( 0 ), "map" ) != NULL ) )
++		{
++			CSARM_CBUF( "Exec #%d [%s]", s_nExecs, args.GetCommandString() );
++		}
++	}
+ 	// Add the command text to the ETW stream to give better context to traces.
+ 	ETWMark( args.GetCommandString() );
  
- 	SCR_EndLoadingPlaque();
+diff -ruN a/filesystem/basefilesystem.cpp b/filesystem/basefilesystem.cpp
+--- a/filesystem/basefilesystem.cpp
++++ b/filesystem/basefilesystem.cpp
+@@ -103,6 +103,12 @@
+ #define IsDvdDevPathString( x ) false
+ #endif
  
++#ifdef __ANDROID__
++#include <android/log.h>
++#define CSARM_FS_LOG( ... ) __android_log_print( ANDROID_LOG_INFO, "CSARM_FS", __VA_ARGS__ )
++#else
++#define CSARM_FS_LOG( ... ) ((void)0)
++#endif
+ // memdbgon must be the last include file in a .cpp file!!!
+ #include "tier0/memdbgon.h"
+ 
+@@ -1290,6 +1296,11 @@
+ 		return;
+ 	}
+ 
++	// csARM round 88: run #242/#243 - VCS lookups fail with the full depot
++	// staged and pak01_dir.vpk PRESENT (16M).  Log every actual mount so
++	// the logcat shows whether the auto-mount chain ever reaches here.
++	CSARM_FS_LOG( "AddVPKFile: %s", pBasename );
++
+ #ifdef SUPPORT_VPK
+ 	char nameBuf[MAX_PATH];
+ 	Q_MakeAbsolutePath( nameBuf, sizeof( nameBuf ), pBasename );
+@@ -2943,6 +2954,7 @@
+ 				{
+ 					char newVPK[MAX_PATH];
+ 					sprintf( newVPK, "%s/pak%02d_dir.vpk", szUpdatePath, i );
++					CSARM_FS_LOG( "automount probe (dlc): %s", newVPK );
+ 					// we will fopen to bypass pathing, etc
+ 					FILE *pstdiofile = fopen( newVPK, "rb" );
+ 					if ( pstdiofile )
+@@ -2972,6 +2984,7 @@
+ 	{
+ 		char newVPK[MAX_PATH];
+ 		sprintf( newVPK, "%s/pak%02d_dir.vpk", pPath, i );
++		CSARM_FS_LOG( "automount probe: %s", newVPK );
+ 		// we will fopen to bypass pathing, etc
+ 		FILE *pstdiofile = fopen( newVPK, "rb" );
+ 		if ( pstdiofile )
