@@ -5333,7 +5333,17 @@ diff -ruN a/engine/host_state.cpp b/engine/host_state.cpp
  	char szMapName[_MAX_PATH];
  	Q_StripExtension( pMapName, szMapName, sizeof(szMapName) );
  	Q_strncpy( g_HostState.m_levelName, szMapName, sizeof( g_HostState.m_levelName ) );
-@@ -377,6 +384,10 @@
+@@ -367,6 +374,9 @@
+ 
+ void CHostState::SetState( HOSTSTATES newState, bool clearNext )
+ {
++	// csARM round 87: every host-state transition; pairs with the
++	// SetNextState trace to show request -> consumption end to end.
++	CSARM_HOST( "SetState %d -> %d (level \"%s\")", (int)m_currentState, (int)newState, m_levelName );
+ 	m_currentState = newState;
+ 	if ( clearNext )
+ 	{
+@@ -377,6 +387,10 @@
  void CHostState::SetNextState( HOSTSTATES next )
  {
  	Assert( m_currentState == HS_RUN );
@@ -5344,6 +5354,62 @@ diff -ruN a/engine/host_state.cpp b/engine/host_state.cpp
  	m_nextState = next;
  }
  
+@@ -416,6 +430,7 @@
+ 	bool bSplitScreenConnect = m_bSplitScreenConnect;
+ 	m_bSplitScreenConnect = false;
+ 	materials->OnDebugEvent( "CHostState::State_NewGame" );
++	CSARM_HOST( "State_NewGame: level=\"%s\" mapGroup=\"%s\"", m_levelName, m_mapGroupName );
+ 
+ 	if ( Host_ValidGame() )
+ 	{
+@@ -428,20 +443,32 @@
+ 		if ( !serverGameClients )
+ 		{
+ 			Warning( "Can't start game, no valid server.dll loaded\n" );
++			CSARM_HOST( "State_NewGame: FAILED - no serverGameClients after SV_InitGameDLL" );
+ 		}
+ 		else
+ 		{
+ 			if ( modelloader->Map_IsValid( m_levelName ) )
+ 			{
++				CSARM_HOST( "State_NewGame: Map_IsValid ok, calling Host_NewGame" );
+ 				if ( Host_NewGame( m_levelName, m_mapGroupName, false, m_bBackgroundLevel, bSplitScreenConnect ) )
+ 				{
+ 					// succesfully started the new game
++					CSARM_HOST( "State_NewGame: Host_NewGame ok" );
+ 					SetState( HS_RUN, true );
+ 					return;
+ 				}
++				CSARM_HOST( "State_NewGame: Host_NewGame FAILED" );
++			}
++			else
++			{
++				CSARM_HOST( "State_NewGame: FAILED - Map_IsValid rejected \"%s\"", m_levelName );
+ 			}
+ 		}
+ 	}
++	else
++	{
++		CSARM_HOST( "State_NewGame: FAILED - Host_ValidGame() false" );
++	}
+ 
+ 	SCR_EndLoadingPlaque();
+ 
+@@ -780,6 +807,14 @@
+ 
+ 		int oldState = m_currentState;
+ 
++		// csARM round 90: trace every pending transition the dispatcher
++		// sees (pairs with the SetNextState log; a request that is set
++		// but never logged here means the dispatcher never observed it).
++		if ( m_nextState != m_currentState )
++		{
++			CSARM_HOST( "FrameUpdate: current=%d next=%d (pending)", (int)m_currentState, (int)m_nextState );
++		}
++
+ 		// execute the current state (and transition to the next state if not in HS_RUN)
+ 		switch( m_currentState )
+ 		{
 diff -ruN a/engine/host_cmd.cpp b/engine/host_cmd.cpp
 --- a/engine/host_cmd.cpp
 +++ b/engine/host_cmd.cpp
