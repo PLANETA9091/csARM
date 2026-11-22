@@ -1459,6 +1459,14 @@ jobs:
           "$ADB" -s emulator-5554 shell am force-stop $APP || true
           sleep 3
           "$ADB" -s emulator-5554 logcat -c || true
+          # Keep a dedicated host-state/command trace: the engine spews far more
+          # than the 4MB main buffer during the probe window, so the one-shot
+          # `logcat -d` snapshots below lose exactly the startup transitions we
+          # need (which +command ran, which host state moved).  A live filtered
+          # stream writes straight to a file and survives rotation.
+          "$ADB" -s emulator-5554 logcat -v time -s CSARM_HOST CSARM_DBG > host_trace.txt 2>&1 &
+          echo $! > host_trace.pid
+          sleep 1
           "$ADB" -s emulator-5554 shell am start -n $APP/.CSARMActivity || true
           # --- 4. wait for map progress / fail / death (diagnostic-first) ---
           LIMIT=700; PROG=""; LAUNCH_S=""
@@ -1585,6 +1593,9 @@ jobs:
           cp -f logcat_map.txt logcat_snap.txt crash_map.txt map2.png probe_logs/ 2>/dev/null || true
           echo "=== map probe: last rolling logcat snapshot ==="
           [ -f logcat_snap.txt ] && grep -a "CSARM" logcat_snap.txt | tail -35 || echo "(no snapshot)"
+          echo "=== map probe: host transitions + executed startup commands ==="
+          sed -i 's/^/  /' host_trace.txt 2>/dev/null || true
+          tail -60 host_trace.txt 2>/dev/null || echo "(no host trace)"
           echo "=== map probe: frames ==="
           echo "CSARM_FRAME lines: $(grep -c CSARM_FRAME logcat_map.txt || true)"
           echo "=== map probe: verdict ==="
@@ -1617,6 +1628,7 @@ jobs:
           else
             echo "::warning::map probe: no server-spawn markers — diagnostics in logcat_map.txt"
           fi
+          kill "$(cat host_trace.pid 2>/dev/null)" 2>/dev/null || true
 
       - name: Assert library load (x86_64)
         if: always()
@@ -1671,6 +1683,7 @@ jobs:
           fi
           grep -q "CSARM_MAIN_EXIT" $L && echo "launcher exit: $(grep CSARM_MAIN_EXIT $L | head -1)" || true
           kill "$(cat logcat.pid 2>/dev/null)" 2>/dev/null || true
+          kill "$(cat host_trace.pid 2>/dev/null)" 2>/dev/null || true
 
       - name: Upload boot artifacts
         if: always()
@@ -1696,6 +1709,7 @@ jobs:
             engine_console.log
             console_live.txt
             logcat_snap.txt
+            host_trace.txt
           if-no-files-found: ignore
 
   # Job 3: aarch64 math/unit tests under qemu (validates NEON math patches)
