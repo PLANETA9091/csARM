@@ -26,7 +26,6 @@ for pb in genproto/*.pb.cc; do
   echo "[genproto] $(basename "$pb")" | tee -a "$LOG"
   $CC -c -fPIC -O1 -w -std=gnu++17 $PBINC -D_POSIX=1 -DLINUX=1 -DGNUC=1 -DENGINE_DLL=1 "$pb" -o "$obj" >> "$LOG" 2>&1
 done
-
 LFLAGS="-shared -fPIC -fuse-ld=lld -stdlib=libc++ -Wl,--gc-sections -Wl,-z,max-page-size=16384"
 # CreateInterface is the Valve factory entry point — it is only ever reached
 # through dlsym("CreateInterface") (Sys_GetFactory), the linker never sees an
@@ -62,6 +61,10 @@ else
 fi
 # LTO=1 (must match trybuild.sh) -> ThinLTO at link; soname passed separately
 if [ "${LTO:-0}" = "1" ]; then LFLAGS="$LFLAGS -flto=thin"; fi
+# QUICK_LIB is the local edit->device loop: skip the ThinLTO optimization
+# pipeline (lld still consumes bitcode objects, it just links them as-is).
+# Codegen differences do not matter for "does the fix work" iterations.
+if [ -n "${QUICK_LIB:-}" ]; then LFLAGS="$LFLAGS -Wl,--lto-O0"; fi
 
 # g_bInitMemory stub (see EXCLUDE_RE note) — referenced by tier0/tier1 objects.
 # tier0/mem_helpers.cpp ALSO defines CalcHeapUsed() and DoApplyMemoryInitializations()
@@ -146,6 +149,7 @@ else
 fi
 # engine middleware stubs (jpeg / Phonon / DSound voice capture)
 GLUE_ENG_O=""
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_engine.cpp.o" ]; then
 # -I c15/public: glue_engine.cpp includes <phonon/phonon.h> (2019 tree ships
 # the Steam Audio SDK header under public/phonon) to stub the ipl* API with
 # real signatures, and "tier1/utlbuffer.h" for the EmitJSONString definition
@@ -156,6 +160,9 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing -I "$R/c15/public"
   -DPOSIX -D_POSIX -DLINUX -D_LINUX -DLINUXALL -DGNUC -DCOMPILER_GCC \
   -DPLATFORM_64BITS -DX64BITS -D__ANDROID__ -DANDROID \
   -o "$OUTDIR/glue_engine.cpp.o" "$SCRIPT_DIR/glue_engine.cpp" 2>>"$LOG" && GLUE_ENG_O="$OUTDIR/glue_engine.cpp.o"
+else
+GLUE_ENG_O="$OUTDIR/glue_engine.cpp.o"
+fi
 # soundsystem glue (windows-only device factories)
 GLUE_SND_O=""
 # round 80: SHADER_DLL_INTERFACE_VERSION ("ShaderDLL004") export for
@@ -168,6 +175,7 @@ GLUE_SND_O=""
 # never reach SetupShaderDictionary, every material falls back to the error
 # material and DrawStartupGraphic SIGSEGVs (run #232, fault 0x1c).
 STDSHADER_EXP_O=""
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/stdshader_export.cpp.o" ]; then
 $CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing \
   -include "$SCRIPT_DIR/protocompat.h" \
   -DDX_TO_GL_ABSTRACTION -DCSARM_GL_SHIM -DX64BITS -DPOSIX=1 -DLINUX=1 -D_LINUX=1 -DGNUC=1 \
@@ -179,6 +187,9 @@ $CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing \
   -o "$OUTDIR/stdshader_export.cpp.o" "$SCRIPT_DIR/stdshader_export.cpp" 2>>"$LOG" \
   && STDSHADER_EXP_O="$OUTDIR/stdshader_export.cpp.o" \
   || echo "[glue] WARN: stdshader_export.cpp.o failed — libstdshader_dx9 will not answer ShaderDLL004" | tee -a "$LOG"
+else
+STDSHADER_EXP_O="$OUTDIR/stdshader_export.cpp.o"
+fi
 # soundsystem glue (windows-only device factories)
 GLUE_SND_O=""
 if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_soundsystem.cpp.o" ]; then
@@ -687,12 +698,25 @@ link_so() {
   for d in $deps; do ldeps="$ldeps -L$OUTDIR -l$d"; done
   local SNDG=""
   case "$name" in libsoundsystem.so) [ -n "$GLUE_SND_O" ] && SNDG="$GLUE_SND_O" ;; esac
+  # Incremental link: nothing to do when the .so is newer than every input
+  # object (FORCE_LINK=1 relinks unconditionally).  This makes a "full" link
+  # pass a few seconds when only one module was rebuilt.
+  if [ -f "$OUTDIR/$name" ] && [ "${FORCE_LINK:-0}" != "1" ]; then
+    local stale=0 o
+    for o in "${objs[@]}"; do
+      if [ "$o" -nt "$OUTDIR/$name" ]; then stale=1; break; fi
+    done
+    if [ "$stale" = "0" ]; then
+      echo "[link] $name up to date" >> "$LOG"
+      return 0
+    fi
+  fi
   echo "[link] $name  objs=$total  deps=[$deps]" | tee -a "$LOG"
   $CC $LFLAGS $WRAPS -Wl,-soname,"$name" -o "$OUTDIR/$name" "${objs[@]}" $ldeps $FT $SNDG -ldl -llog -lm -lc -lz 2>>"$LOG"
   # capture the link status BEFORE record_link() runs — a function call resets
   # $?, and with the old order every failed link printed "OK" and the missing
   # .so only surfaced later as und-gate "unresolved" noise (x64 libcrypto++).
-  local rc=$?
+  local rc=$?;
   record_link "$name" "${objs[*]} $SNDG" "$deps" "-ldl -llog -lm -lc -lz"
   if [ $rc -ne 0 ]; then echo "   LINK FAILED: $name" | tee -a "$LOG"; else echo "   OK: $name" | tee -a "$LOG"; fi
   if [ $rc -eq 0 ] && [ -n "${STRIPBIN:-}" ] && [ "${STRIP:-0}" = "1" ]; then "$STRIPBIN" --strip-debug "$OUTDIR/$name" || true; fi
@@ -737,12 +761,16 @@ link_so libkv3.so "" kv3lib || true
 # glue_matchmaking.cpp.  Needs -I common (imatchframework.h ->
 # xbox/xboxstubs.h) and -ltier1 (ReconnectInterface).
 MMGLUE_O=""
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_matchmaking.cpp.o" ]; then
 $CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing \
   -DPOSIX -D_POSIX -DLINUX -D_LINUX -DLINUXALL -DGNUC -DCOMPILER_GCC \
   -DPLATFORM_64BITS -DX64BITS -D__ANDROID__ -DANDROID \
   -I "$R/c15/public" -I "$R/c15/public/tier0" -I "$R/c15/public/tier1" -I "$R/c15/common" \
   -I "$R/c15/thirdparty" -I "$R/c15/thirdparty/sse2neon" \
   -o "$OUTDIR/glue_matchmaking.cpp.o" "$SCRIPT_DIR/glue_matchmaking.cpp" 2>>"$LOG" && MMGLUE_O="$OUTDIR/glue_matchmaking.cpp.o"
+else
+MMGLUE_O="$OUTDIR/glue_matchmaking.cpp.o"
+fi
 if [ -n "$MMGLUE_O" ]; then
   $CC $LFLAGS -Wl,-soname,libmatchmaking.so -o "$OUTDIR/libmatchmaking.so" "$MMGLUE_O" -L"$OUTDIR" -ltier0 -ltier1 -ldl -llog -lm -lc 2>>"$LOG" \
     && echo "[link] libmatchmaking.so (stub)" | tee -a "$LOG" || true
@@ -760,12 +788,16 @@ fi
 #  -I public: vphysics_interface.h (mathlib/vector.h -> sse2neon on ARM),
 #  -I common: vphysics/player_controller.h chain, -ltier1 (ReconnectInterface).
 VPGLUE_O=""
+if [ -z "${QUICK_LIB:-}" ] || [ ! -s "$OUTDIR/glue_vphysics.cpp.o" ]; then
 $CC -c -fPIC -O1 -w -std=gnu++17 -Wno-register -Wno-narrowing \
   -DPOSIX -D_POSIX -DLINUX -D_LINUX -DLINUXALL -DGNUC -DCOMPILER_GCC \
   -DPLATFORM_64BITS -DX64BITS -D__ANDROID__ -DANDROID \
   -I "$R/c15/public" -I "$R/c15/public/tier0" -I "$R/c15/public/tier1" -I "$R/c15/common" \
   -I "$R/c15/thirdparty" -I "$R/c15/thirdparty/sse2neon" \
   -o "$OUTDIR/glue_vphysics.cpp.o" "$SCRIPT_DIR/glue_vphysics.cpp" 2>>"$LOG" && VPGLUE_O="$OUTDIR/glue_vphysics.cpp.o"
+else
+VPGLUE_O="$OUTDIR/glue_vphysics.cpp.o"
+fi
 # csARM round 35: fail LOUD.  The compile above is the whole point of the
 # module (boot hard-fails at CModelLoader::Init without VPhysicsCollision007),
 # and a silent skip ships an APK with no vphysics at all: run #171 built
@@ -826,7 +858,8 @@ link_so libstdshader_dx9.so "tier0 tier1 mathlib vstdlib shaderlib" stdshader_dx
 
 # 3. Engine (+ protobuf messages + SDL2)
 GENPROTO_OBJS=$(ls obj/genproto/*.o 2>/dev/null)
-if [ -n "$GENPROTO_OBJS" ] && [ -f "$OUTDIR/libmathlib.so" ]; then
+# QUICK_LIB=libengine.so -> relink engine too (deps already in out/).
+if [ -z "${QUICK_LIB:-}" ] || [ "$QUICK_LIB" = "libengine.so" ] && [ -n "$GENPROTO_OBJS" ] && [ -f "$OUTDIR/libmathlib.so" ]; then
   echo "[link] libengine.so (engine + genproto)" | tee -a "$LOG"
   ENGINE_TAIL="-ldl -llog -lm -lc -lz -landroid -lEGL -lGLESv2 -lOpenSLES"
   ENGINE_BASE_OBJS=$(ls obj/engine/*.o 2>/dev/null)
