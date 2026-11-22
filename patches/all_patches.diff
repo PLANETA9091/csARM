@@ -5354,7 +5354,19 @@ diff -ruN a/engine/host.cpp b/engine/host.cpp
  	VPROF_BUDGET( "_Host_RunFrame_Server", VPROF_BUDGETGROUP_GAME );
  	VPROF_INCREMENT_COUNTER( "ticks", 1 );
  
-@@ -3345,6 +3369,15 @@
+@@ -3315,6 +3339,11 @@
+ 
+ void _Host_RunFrame_Server_Async( int numticks )
+ {
++	// csARM round 93: distinguish "hang inside the server frame"
++	// from "hang before it" after the inline dispatch.
++	extern int g_csarmStateLog;
++	static int s_nCSARMsa = 0;
++	if ( g_csarmStateLog && s_nCSARMsa < 40 ) { s_nCSARMsa++; CSARM_HOST( "frame: server-async #%d", s_nCSARMsa ); }
+ #ifdef VPROF_ENABLED
+ 	if ( vprof_server_thread.GetBool() )
+ 	{
+@@ -3345,6 +3374,15 @@
  
  void _Host_RunFrame_Client( bool framefinished )
  {
@@ -5370,7 +5382,7 @@ diff -ruN a/engine/host.cpp b/engine/host.cpp
  #ifndef DEDICATED
  	VPROF( "_Host_RunFrame_Client" );
  
-@@ -3423,6 +3456,15 @@
+@@ -3423,6 +3461,15 @@
  
  void _Host_RunFrame_Render()
  {
@@ -5386,7 +5398,7 @@ diff -ruN a/engine/host.cpp b/engine/host.cpp
  #ifndef DEDICATED
  	VPROF( "_Host_RunFrame_Render" );
  
-@@ -3576,6 +3618,15 @@
+@@ -3576,6 +3623,15 @@
  
  void _Host_RunFrame_Sound()
  {
@@ -5402,6 +5414,28 @@ diff -ruN a/engine/host.cpp b/engine/host.cpp
  #ifndef DEDICATED
  
  	if ( g_pSoundJob )
+@@ -4472,12 +4528,15 @@
+ 			pGameJob = (CJob*)1;
+ #else
+ 
+-			pGameJob = new CFunctorJob( CreateFunctor( _Host_RunFrame_Server_Async, serverticks ) );
+-			if ( IsX360() )
+-			{
+-				pGameJob->SetServiceThread( g_nServerThread );
+-			}
+-			g_pThreadPool->AddJob( pGameJob );
++			// csARM round 93: run #249 - the frame markers stop between
++			// the client calls and the render segment: the server frame is
++			// queued to g_pThreadPool and the main thread then sits in
++			// WaitForFinishAndRelease() forever (the pool job never
++			// completes in the port; likely the MDL cache coarse lock
++			// held by the main thread).  Run the server frame inline
++			// instead; the wait block below is skipped with pGameJob NULL.
++			_Host_RunFrame_Server_Async( serverticks );
++			pGameJob = NULL;
+ #endif
+ #if LOG_FRAME_OUTPUT
+ 			if ( !cl.IsPaused() || !sv.IsPaused() )
 diff -ruN a/engine/host_state.cpp b/engine/host_state.cpp
 --- a/engine/host_state.cpp
 +++ b/engine/host_state.cpp
