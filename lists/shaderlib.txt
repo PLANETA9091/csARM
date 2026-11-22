@@ -1,0 +1,3 @@
+materialsystem/shaderlib/BaseShader.cpp
+materialsystem/shaderlib/ShaderDLL.cpp
+materialsystem/shaderlib/shaderlib_cvar.cpp

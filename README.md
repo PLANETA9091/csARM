@@ -69,6 +69,15 @@ bash test/local_probe.sh ar_dizzy          # реальный рендер: +map
 bash test/symbolize.sh android/libs/x86_64 .local/probe/logcat_map.txt
 ```
 
+Важно про локальный контент: полный depot — ~30 GB, а AVD по умолчанию имеет
+16 GB userdata, поэтому локально реально держать только `cstrike/maps` +
+`cstrike/cfg` (+ `steam.inf`). Движок в таком окружении доходит до
+`CHostState::State_Run`, но полноценный map-load (VPK/шейдеры/материалы)
+проверяется на CI, где контент ставится в 40 GB раздел. Для движковых правок
+локальный цикл — компиляция (`test/local_build.sh`), линковка, APK
+(`test/local_apk.sh`) и `test/local_boot.sh`; для крашей рендера —
+`test/local_gl4es_fbo.sh` (не требует контента вообще).
+
 `test/local_probe.sh` печатает вердикт (маркеры `Host_NewGame`/`Loading map`,
 SIGSEGV-бэктрейс с адресами) и складывает полные логи в `.local/probe/`.
 `test/symbolize.sh` разворачивает `lib*.so+offset` в `файл:строка` по

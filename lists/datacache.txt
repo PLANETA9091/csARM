@@ -1,0 +1,12 @@
+public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
+datacache/datacache.cpp
+datacache/mdlcache.cpp
+datacache/mdlcombine.cpp
+datacache/vtfcombine.cpp
+datacache/resourceaccesscontrol.cpp
+datacache/precachesystem.cpp
+public/studio.cpp
+public/studio_virtualmodel.cpp
+common/studiobyteswap.cpp
+utils/common/datalinker.cpp

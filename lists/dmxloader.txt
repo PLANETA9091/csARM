@@ -1,0 +1,6 @@
+dmxloader/dmxattribute.cpp
+dmxloader/dmxelement.cpp
+dmxloader/dmxloader.cpp
+dmxloader/dmxloadertext.cpp
+dmxloader/dmxserializationdictionary.cpp
+dmxloader/utlsoacontainer_serialization.cpp

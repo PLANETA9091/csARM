@@ -1,0 +1,6 @@
+bonesetup/bone_setup.cpp
+bonesetup/bone_ik.cpp
+bonesetup/bone_utils.cpp
+bonesetup/bone_decode.cpp
+bonesetup/bone_constraints.cpp
+public/jigglebones.cpp

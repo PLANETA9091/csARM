@@ -1,0 +1,10 @@
+public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
+common/debug_dll_check.cpp
+public/sentence.cpp
+public/phonemeconverter.cpp
+soundsystem/snd_audio_source.cpp
+soundsystem/snd_io.cpp
+soundsystem/snd_os.cpp
+soundsystem/snd_wave_mixer.cpp
+soundsystem/soundsystem.cpp

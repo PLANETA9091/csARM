@@ -1,0 +1,14 @@
+public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
+studiorender/studiorender.cpp
+studiorender/studiorendercontext.cpp
+studiorender/flexrenderdata.cpp
+studiorender/r_studio.cpp
+studiorender/r_studiodecal.cpp
+studiorender/r_studiodraw.cpp
+studiorender/r_studiodraw_computeflexedvertex.cpp
+studiorender/r_studioflex.cpp
+studiorender/r_studiosubd.cpp
+studiorender/r_studiosubd_patches.cpp
+studiorender/r_studiogettriangles.cpp
+studiorender/r_studiolight.cpp

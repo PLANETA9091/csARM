@@ -1,0 +1,5 @@
+public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
+localize/localize.cpp
+public/registry.cpp
+public/UnicodeFileHelpers.cpp

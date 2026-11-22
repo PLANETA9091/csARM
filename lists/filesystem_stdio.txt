@@ -1,0 +1,11 @@
+public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
+filesystem/basefilesystem.cpp
+filesystem/basefilesystemasync.cpp
+filesystem/filetracker.cpp
+filesystem/filesystemasync.cpp
+filesystem/filesystem_stdio.cpp
+public/kevvaluescompiler.cpp
+public/zip_utils.cpp
+filesystem/QueuedLoader.cpp
+filesystem/linux_support.cpp

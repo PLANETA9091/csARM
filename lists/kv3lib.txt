@@ -1,0 +1,14 @@
+kv3lib/keyvalues3.cpp
+kv3lib/keyvalues3_oldschematext.cpp
+kv3lib/keyvalues3_textreader.cpp
+kv3lib/keyvalues3_textwriter.cpp
+kv3lib/keyvalues3_binaryreader.cpp
+kv3lib/keyvalues3_binarywriter.cpp
+kv3lib/keyvalues3_kv1textreader.cpp
+kv3lib/keyvalues3_kv1textwriter.cpp
+kv3lib/kv3transfer.cpp
+kv3lib/kv3schemahelpers.cpp
+kv3lib/kv3format_manager.cpp
+kv3lib/kv3formats.cpp
+kv3lib/blockcompress.cpp
+kv3lib/utltokenizer.cpp

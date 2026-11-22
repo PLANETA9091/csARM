@@ -1,0 +1,9 @@
+public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
+vguimatsurface/Clip2D.cpp
+vguimatsurface/Cursor.cpp
+public/filesystem_helpers.cpp
+vguimatsurface/Input.cpp
+vguimatsurface/MatSystemSurface.cpp
+vgui2/src/vgui_key_translation.cpp
+public/vgui_controls/vgui_controls.cpp

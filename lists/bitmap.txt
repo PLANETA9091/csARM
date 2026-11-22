@@ -1,0 +1,14 @@
+bitmap/bitmap.cpp
+bitmap/colorconversion.cpp
+bitmap/floatbitmap.cpp
+bitmap/floatbitmap2.cpp
+bitmap/floatbitmap3.cpp
+bitmap/floatbitmap_bilateralfilter.cpp
+bitmap/floatcubemap.cpp
+bitmap/imageformat.cpp
+bitmap/psd.cpp
+bitmap/psheet.cpp
+bitmap/resample.cpp
+bitmap/tgaloader.cpp
+bitmap/texturepacker.cpp
+bitmap/tgawriter.cpp

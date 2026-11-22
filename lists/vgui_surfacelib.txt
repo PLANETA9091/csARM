@@ -1,0 +1,7 @@
+vgui2/vgui_surfacelib/BitmapFont.cpp
+vgui2/vgui_surfacelib/FontAmalgam.cpp
+vgui2/vgui_surfacelib/fontmanager.cpp
+vgui2/vgui_surfacelib/FontEffects.cpp
+vgui2/vgui_surfacelib/fonttexturecache.cpp
+vgui2/vgui_surfacelib/texturedictionary.cpp
+vgui2/vgui_surfacelib/linuxfont.cpp

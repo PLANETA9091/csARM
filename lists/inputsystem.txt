@@ -1,0 +1,8 @@
+public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
+inputsystem/inputstacksystem.cpp
+inputsystem/inputsystem.cpp
+inputsystem/joystick_linux.cpp
+inputsystem/steamcontroller.cpp
+inputsystem/key_translation.cpp
+common/platforminputdevice.cpp

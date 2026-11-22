@@ -1,0 +1,10 @@
+particles/builtin_constraints.cpp
+particles/builtin_initializers.cpp
+particles/builtin_particle_emitters.cpp
+particles/builtin_particle_forces.cpp
+particles/addbuiltin_ops.cpp
+particles/builtin_particle_ops.cpp
+particles/builtin_particle_render_ops.cpp
+particles/particle_snapshot.cpp
+particles/particle_sort.cpp
+particles/particles.cpp

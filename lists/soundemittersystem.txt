@@ -1,0 +1,4 @@
+public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
+soundemittersystem/soundemittersystembase.cpp
+public/SoundParametersInternal.cpp

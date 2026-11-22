@@ -1,0 +1,5 @@
+tier3/tier3.cpp
+tier3/mdlutils.cpp
+tier3/choreoutils.cpp
+tier3/scenetokenprocessor.cpp
+tier3/studiohdrstub.cpp

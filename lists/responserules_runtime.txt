@@ -1,0 +1,7 @@
+responserules/runtime/rrrlib.cpp
+responserules/runtime/response_types.cpp
+responserules/runtime/response_types_internal.cpp
+responserules/runtime/response_system.cpp
+responserules/runtime/rr_speechconcept.cpp
+responserules/runtime/rr_response.cpp
+responserules/runtime/criteriaset.cpp
