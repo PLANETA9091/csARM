@@ -5578,68 +5578,29 @@ diff -ruN a/engine/host_cmd.cpp b/engine/host_cmd.cpp
 diff -ruN a/engine/gl_screen.cpp b/engine/gl_screen.cpp
 --- a/engine/gl_screen.cpp
 +++ b/engine/gl_screen.cpp
-@@ -38,6 +38,12 @@
- #endif
+@@ -162,10 +162,20 @@
+ 		host_framecount++;
+ 		g_ClientGlobalVariables.framecount = host_framecount;
+ 		// Ensure the screen is painted to reflect the loading state
+-		SCR_UpdateScreen();
++		// csARM round 95: the two nested SCR_UpdateScreen() calls here
++		// each performed a FULL render + eglSwapBuffers INSIDE the +map
++		// command (swap within the frame render path).  With the pinned
++		// SwiftShader libEGL (window swap = ANativeWindow_lock blit)
++		// one of these nested swaps leaked the window lock: run #251's
++		// very next present failed with "Surface::lock failed, already
++		// locked" and every present after it - permanent black screen.
++		// The loading plaque is painted by the regular frame's
++		// SCR_UpdateScreen (scr_engineevent_loadingstarted drives it)
++		// one frame later; no nested swap, no lock leak.
++		// SCR_UpdateScreen();
+ 		host_framecount++;
+ 		g_ClientGlobalVariables.framecount = host_framecount;
+-		SCR_UpdateScreen();
++		// SCR_UpdateScreen();
  
- // memdbgon must be the last include file in a .cpp file!!!
-+#ifdef __ANDROID__
-+#include <android/log.h>
-+#define CSARM_HOST( ... ) __android_log_print( ANDROID_LOG_INFO, "CSARM_HOST", __VA_ARGS__ )
-+#else
-+#define CSARM_HOST( ... ) ((void)0)
-+#endif
- #include "tier0/memdbgon.h"
+ 		g_ClientGlobalVariables.frametime = GetBaseLocalClient().GetFrameTime();
  
- ConVar g_cv_miniprofiler_dump( "miniprofiler_dump", "0" );
-@@ -84,6 +90,12 @@
- //-----------------------------------------------------------------------------
- void SCR_BeginLoadingPlaque( const char *levelName /*= NULL*/ )
- {
-+	// csARM round 91: run #247 - the engine hung inside this function
-+	// (State_Run case HS_NEW_GAME called it; the SetState(4->5) log that
-+	// follows it never appeared and the frame loop went silent for the
-+	// whole probe window, no crash).  Log every drain so the next run
-+	// names the exact blocking call.
-+	CSARM_HOST( "SCR_BeginLoadingPlaque enter level=\"%s\" drawloading=%d", levelName ? levelName : "(null)", (int)scr_drawloading );
- 	if( demo_debug.GetBool() )
- 		Msg( "%.2f SCR_BeginLoadingPlaque(%d)\n", Plat_FloatTime(), int( scr_drawloading ) );
- 	if ( !scr_drawloading )
-@@ -102,6 +114,7 @@
- 
- 		// force QMS to serialize during loading
- 		Host_AllowQueuedMaterialSystem( false );
-+		CSARM_HOST( "SCR_Begin: QMS-serialize done" );
- 
- 		scr_drawloading = true;
- 
-@@ -112,6 +125,7 @@
- 		//we can play main menu music.
- //		S_PreventSound( true ); //this will stop audio from reaching the mixer until SCR_EndLoadingPlaque is called.
- 		S_OnLoadScreen( true );
-+		CSARM_HOST( "SCR_Begin: sound done" );
- 
- 		if ( g_ClientDLL )
- 		{
-@@ -120,7 +134,9 @@
- 		}
- 
- 		g_pFileSystem->AsyncFinishAll();
-+		CSARM_HOST( "SCR_Begin: AsyncFinishAll done" );
- 		g_pMDLCache->FinishPendingLoads();
-+		CSARM_HOST( "SCR_Begin: MDLCache done" );
- 
- 		// redraw with no console and the loading plaque
- 		Con_ClearNotify();
-@@ -133,7 +149,9 @@
- 		}
- 
- 		// let everybody know we're starting loading
-+		CSARM_HOST( "SCR_Begin: calling OnLevelLoadingStarted" );
- 		EngineVGui()->OnLevelLoadingStarted( levelName, HostState_IsTransitioningToLoad() );
-+		CSARM_HOST( "SCR_Begin: OnLevelLoadingStarted done" );
- 		scr_engineevent_loadingstarted = true;
- 		g_pMatchFramework->GetEventsSubscription()->BroadcastEvent( new KeyValues(
- 			"OnEngineLevelLoadingStarted", "name", levelName ) );
 diff -ruN a/materialsystem/cmaterialsystem.cpp b/materialsystem/cmaterialsystem.cpp
 --- a/materialsystem/cmaterialsystem.cpp
 +++ b/materialsystem/cmaterialsystem.cpp
