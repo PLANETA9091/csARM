@@ -345,3 +345,32 @@ at server-spawn with the render stack resident.
    green while the map probe boots the real renderer.
 2. Longer-horizon leak watch: probe window is at 480s post-progress.
 3. Arm64 on-device smoke (the APK ships; CI exercises x86_64 + arm64-translation).
+
+## Local test loop (no CI round trip)
+
+Everything the boot job does is scripted under `test/` and documented in
+README ("Локальный тестовый цикл").  What matters for debugging:
+
+| script | what it proves |
+|--------|----------------|
+| `test/local_emu.sh up` | x86_64 AOSP ATD under KVM boots (it repairs the `disk.dataPartition.path=<temp>` trap that makes current emulators boot without `/data`) |
+| `test/local_stage.sh <dir-with-cstrike>` | depot staged into the app sandbox, `adb root` path, `steam.inf` guarantee |
+| `test/local_boot.sh [s]` | LauncherMain reached, no self-exit/tombstone in the window |
+| `test/local_probe.sh [map]` | real renderer + `+map`, verdict + backtrace, logs in `.local/probe/` |
+| `test/local_gl4es_fbo.sh` | 2s, content-free: bind an FBO, delete it, `glViewport` |
+| `test/symbolize.sh <libs> <log>` | `lib*.so+offset` -> `file:line` |
+
+Both crash fixes below were found and verified through this loop
+(`#238-241` glViewport NULL `current_fb`, and the pre-tess IB read that only
+faults when the allocation happens to start on a guard page).
+
+## Known-good build inputs
+
+- NDK: whatever `ANDROID_NDK_LATEST_HOME` points at (NDK 30.0.16248370 /
+  LLVM 21 on the runners).  Objects are ThinLTO bitcode: linking them with an
+  older `ld.lld` fails with "Unknown attribute kind (102)", so a local
+  rebuild-from-CI-artifacts needs the same or a newer NDK.  The build job now
+  logs the exact version.
+- `genproto/` is committed and must be regenerated (`build/setup_proto.sh`,
+  protoc 2.5.0) whenever `protoroot/*.proto` changes - CI regenerates it every
+  run, so a stale committed copy only breaks local/clone builds.
