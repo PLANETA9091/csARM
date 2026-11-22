@@ -5606,3 +5606,83 @@ diff -ruN a/engine/gl_screen.cpp b/engine/gl_screen.cpp
  		scr_engineevent_loadingstarted = true;
  		g_pMatchFramework->GetEventsSubscription()->BroadcastEvent( new KeyValues(
  			"OnEngineLevelLoadingStarted", "name", levelName ) );
+diff -ruN a/materialsystem/cmaterialsystem.cpp b/materialsystem/cmaterialsystem.cpp
+--- a/materialsystem/cmaterialsystem.cpp
++++ b/materialsystem/cmaterialsystem.cpp
+@@ -4510,11 +4510,20 @@
+ 
+ 	if ( m_ThreadMode == MATERIAL_SINGLE_THREADED )
+ 	{
+-		for ( int i = 0; i < m_threadEvents.Count(); i++ )
++		// csARM: iterate over a SNAPSHOT of the queue.  Handling an event can
++		// post the same event again (CShaderDeviceDx8::ReleaseResources() ->
++		// ShaderUtil()->OnThreadEvent(SHADER_THREAD_RELEASE_RESOURCES)), which
++		// makes "i < m_threadEvents.Count()" never terminate: EndFrame never
++		// returns, CHostState::State_Run never reaches its m_nextState switch
++		// and the map load queued by "+map" is never started (engine sits in
++		// HS_RUN forever, black screen).  Events posted during handling are
++		// simply handled on the next frame.
++		int nThreadEvents = m_threadEvents.Count();
++		for ( int i = 0; i < nThreadEvents; i++ )
+ 		{
+ 			g_pShaderDevice->HandleThreadEvent(m_threadEvents[i]);
+ 		}
+-		m_threadEvents.RemoveAll();
++		m_threadEvents.RemoveMultiple( 0, nThreadEvents );
+ 	}
+ 
+ 	if ( m_ThreadMode == MATERIAL_SINGLE_THREADED || m_ThreadMode == MATERIAL_QUEUED_SINGLE_THREADED )
+diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/shaderapidx9/vertexshaderdx8.cpp
+--- a/materialsystem/shaderapidx9/vertexshaderdx8.cpp
++++ b/materialsystem/shaderapidx9/vertexshaderdx8.cpp
+@@ -4447,14 +4447,30 @@
+ 
+ HardwareShader_t CShaderManager::GetVertexShader( VertexShader_t vs, int dynIdx )
+ {
++	// csARM: the depot carries no compiled shader bytecode (.vcs), so a shader
++	// that the material asked for can have no dict entry / no combo array.
++	// The stock code indexed it blindly and the loading-screen draw crashed at
++	// CShaderManager::GetVertexShader+7 (SIGSEGV at 0x0) right after
++	// SCR_BeginLoadingPlaque.  Report "no hardware shader" instead - callers
++	// skip the draw.
++	if ( !m_VertexShaderDict.IsValidIndex( vs ) )
++		return INVALID_HARDWARE_SHADER;
+ 	ShaderLookup_t &vshLookup = m_VertexShaderDict[vs];
++	if ( !vshLookup.m_ShaderStaticCombos.m_pHardwareShaders )
++		return INVALID_HARDWARE_SHADER;
+ 	HardwareShader_t dxshader = vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[dynIdx];
+ 	return dxshader;
+ }
+ 
+ HardwareShader_t CShaderManager::GetPixelShader( PixelShader_t ps, int dynIdx )
+ {
++	// csARM: see GetVertexShader - missing .vcs shaders must not dereference
++	// an empty dict slot.
++	if ( !m_PixelShaderDict.IsValidIndex( ps ) )
++		return INVALID_HARDWARE_SHADER;
+ 	ShaderLookup_t &pshLookup = m_PixelShaderDict[ps];
++	if ( !pshLookup.m_ShaderStaticCombos.m_pHardwareShaders )
++		return INVALID_HARDWARE_SHADER;
+ 	HardwareShader_t dxshader = pshLookup.m_ShaderStaticCombos.m_pHardwareShaders[dynIdx];
+ 	return dxshader;
+ }
+diff -ruN a/materialsystem/shaderapidx9/shaderapidx8.cpp b/materialsystem/shaderapidx9/shaderapidx8.cpp
+--- a/materialsystem/shaderapidx9/shaderapidx8.cpp
++++ b/materialsystem/shaderapidx9/shaderapidx8.cpp
+@@ -5232,10 +5232,14 @@
+ 
+ 		PixelShader_t ps = pShadowShaderState->m_PixelShader;
+ 		HardwareShader_t hps = ShaderManager()->GetPixelShader( ps, dynPSIdx );
+-		ShaderManager()->SetPixelShaderState_Internal( hps, 0 );
+-		
+ 		VertexShader_t vs = pShadowShaderState->m_VertexShader;
+ 		HardwareShader_t hvs = ShaderManager()->GetVertexShader( vs, dynVSIdx );
++		// csARM: no compiled shader bytecode in the depot -> nothing to bind;
++		// skip the draw instead of binding NULL (was a SIGSEGV in
++		// CShaderManager::GetPixelShader on the loading screen).
++		if ( hps == INVALID_HARDWARE_SHADER || hvs == INVALID_HARDWARE_SHADER )
++			return;
++		ShaderManager()->SetPixelShaderState_Internal( hps, 0 );
+ 		ShaderManager()->SetVertexShaderState_Internal( hvs, 0 );
+ 		
+ 		if ( pMesh )
