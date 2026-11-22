@@ -5686,3 +5686,65 @@ diff -ruN a/materialsystem/shaderapidx9/shaderapidx8.cpp b/materialsystem/shader
  		ShaderManager()->SetVertexShaderState_Internal( hvs, 0 );
  		
  		if ( pMesh )
+diff -ruN a/filesystem/basefilesystem.cpp b/filesystem/basefilesystem.cpp
+--- a/filesystem/basefilesystem.cpp
++++ b/filesystem/basefilesystem.cpp
+@@ -2991,16 +2991,34 @@
+ 		CSARM_FS_LOG( "automount probe: %s", newVPK );
+ 		// we will fopen to bypass pathing, etc
+ 		FILE *pstdiofile = fopen( newVPK, "rb" );
+-		if ( pstdiofile )
+-		{
+-			fclose( pstdiofile );
+-			sprintf( newVPK, "%s/pak%02d.vpk", pPath, i );
+-			AddVPKFile( newVPK );
+-		}
+-		else
++		if ( !pstdiofile )
+ 		{
++			// csARM: CS:GO's platform archive is not "pak01_dir.vpk" but
++			// "<dirname>_pak01_dir.vpk" (platform/platform_pak01_dir.vpk holds
++			// the 524 compiled shaders).  The generic scan above never mounted
++			// it, so the PLATFORM search path stayed empty and every stdshader
++			// "failed loading" - a perfectly loaded map with a black screen.
++			// AddVPKFile() strips ".vpk" and "_dir" itself and re-opens
++			// "<base>_dir.vpk", so handing it the dir file is fine.
++			char szDirName[MAX_PATH];
++			V_FileBase( pPath, szDirName, sizeof( szDirName ) );
++			if ( szDirName[0] )
++			{
++				sprintf( newVPK, "%s/%s_pak%02d_dir.vpk", pPath, szDirName, i );
++				pstdiofile = fopen( newVPK, "rb" );
++				if ( pstdiofile )
++				{
++					fclose( pstdiofile );
++					CSARM_FS_LOG( "automount prefixed: %s", newVPK );
++					AddVPKFile( newVPK );
++					continue;
++				}
++			}
+ 			break;
+ 		}
++		fclose( pstdiofile );
++		sprintf( newVPK, "%s/pak%02d.vpk", pPath, i );
++		AddVPKFile( newVPK );
+ 	}
+ #endif
+ 
+diff -ruN a/game/client/cstrike15/gameui/vguisystemmoduleloader.cpp b/game/client/cstrike15/gameui/vguisystemmoduleloader.cpp
+--- a/game/client/cstrike15/gameui/vguisystemmoduleloader.cpp
++++ b/game/client/cstrike15/gameui/vguisystemmoduleloader.cpp
+@@ -182,7 +182,12 @@
+ 		CSysModule *mod = g_pFullFileSystem->LoadModule(dllPath, "EXECUTABLE_PATH");
+ 		if (!mod)
+ 		{
+-			Error("Platform Error: bad module '%s', not loading\n", it->GetString("dll"));
++			// csARM: the platform menu modules (serverbrowser_client, friends,
++			// ...) are not part of the port.  Error() here called
++			// Plat_ExitProcess while the loading plaque was up, so the map
++			// never finished loading (CSARM_EXIT_HIT code=0 right after
++			// SCR_Begin: OnLevelLoadingStarted done).  Skip the module.
++			Warning("Platform Error: bad module '%s', not loading\n", it->GetString("dll"));
+ 			bSuccess = false;
+ 			continue;
+ 		}

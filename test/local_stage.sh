@@ -39,6 +39,17 @@ if ADB shell id 2>/dev/null | grep -q uid=0; then
   echo "adb root OK — pushing into the app sandbox"
   ADB shell "mkdir -p /data/data/$APP/files"
   ADB push "$SRC/cstrike" "/data/data/$APP/files/cstrike" | tail -1
+  # compiled Valve shaders (shaders/vsh|psh|fxc/*.vcs) live NEXT TO cstrike in a
+  # real depot (csgo/shaders).  The engine looks for them through the GAME
+  # search path, so stage them under cstrike/ (and keep the depot layout too).
+  if [ -d "$SRC/shaders" ]; then
+    ADB shell "mkdir -p /data/data/$APP/files/cstrike/shaders"
+    ADB push "$SRC/shaders/." "/data/data/$APP/files/cstrike/shaders/" | tail -1
+    echo "staged $(find "$SRC/shaders" -name '*.vcs' | wc -l) .vcs shaders"
+  else
+    echo "WARNING: content has no shaders/ directory — the engine will run with"
+    echo "         no shader bytecode (maps load, nothing renders)."
+  fi
   [ -d "$SRC/platform" ] && ADB push "$SRC/platform" "/data/data/$APP/files/cstrike/platform" | tail -1
   UID_=$(ADB shell dumpsys package "$APP" | sed -n 's/.*userId=\([0-9]*\).*/\1/p' | head -1 | tr -d '\r')
   [ -n "$UID_" ] && ADB shell "chown -R $UID_:$UID_ /data/data/$APP/files/cstrike"
