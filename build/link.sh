@@ -736,7 +736,7 @@ link_so libmathlib.so "tier0 tier1" mathlib mathlib_extra || true
 link_so libtier2.so  "tier0 tier1" tier2 || true
 
 # 2. Subsystems
-link_so libappframework.so "tier0 tier1" appframework || true
+link_so libappframework.so "tier0 tier1 togl" appframework || true
 link_so libdatacache.so    "tier0 tier1 vstdlib" datacache || true
 link_so libstudiorender.so "tier0 tier1 mathlib vstdlib" studiorender || true
 link_so libsoundemittersystem.so "tier0 tier1 mathlib vstdlib" soundemittersystem || true

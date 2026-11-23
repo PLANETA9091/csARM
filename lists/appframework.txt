@@ -1,3 +1,4 @@
 appframework/AppSystemGroup.cpp
 public/filesystem_init.cpp
 appframework/posixapp.cpp
+appframework/sdlmgr.cpp

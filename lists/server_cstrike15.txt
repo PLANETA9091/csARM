@@ -1,4 +1,5 @@
 public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
 common/protobuf_helpers.cpp
 game/shared/achievement_saverestore.cpp
 game/shared/achievementmgr.cpp
@@ -111,6 +112,9 @@ game/server/cplane.cpp
 game/server/CRagdollMagnet.cpp
 game/server/cvisibilitymonitor.cpp
 game/server/damagemodifier.cpp
+game/shared/dangerzone_controller.cpp
+game/shared/grassburn.cpp
+game/shared/prop_counter.cpp
 game/shared/death_pose.cpp
 game/shared/debugoverlay_shared.cpp
 game/shared/decals.cpp
@@ -194,6 +198,7 @@ game/server/gameweaponmanager.cpp
 game/server/genericactor.cpp
 game/server/genericmonster.cpp
 game/server/gib.cpp
+game/server/global_chatter.cpp
 game/server/global_event_log.cpp
 game/server/globals.cpp
 game/server/globalstate.cpp
@@ -274,6 +279,7 @@ game/server/point_playermoveconstraint.cpp
 game/shared/point_posecontroller.cpp
 game/server/point_spotlight.cpp
 game/server/point_template.cpp
+game/server/point_worldtext.cpp
 game/server/pointanglesensor.cpp
 game/server/PointAngularVelocitySensor.cpp
 game/server/pointhurt.cpp
@@ -365,6 +371,7 @@ game/server/weight_button.cpp
 game/server/world.cpp
 game/shared/mp_shareddefs.cpp
 game/server/vote_controller.cpp
+game/server/world_vgui_text.cpp
 public/closedcaptions.cpp
 common/compiledcaptionswap.cpp
 public/collisionutils.cpp
@@ -479,6 +486,7 @@ game/server/team_objectiveresource.cpp
 game/server/team_spawnpoint.cpp
 game/server/server_log_http_dispatcher.cpp
 game/shared/teamplayroundbased_gamerules.cpp
+game/shared/cstrike15/cstrike15_matchmaking_utils.cpp
 game/shared/cstrike15/cstrike15_item_inventory.cpp
 game/shared/cstrike15/cstrike15_item_system.cpp
 game/shared/cstrike15/cstrike15_item_schema.cpp
@@ -510,6 +518,8 @@ game/server/cstrike15/cs_team.cpp
 game/server/cstrike15/cs_vehicle_jeep.cpp
 game/shared/cstrike15/cs_weapon_parse.cpp
 game/shared/cstrike15/flashbang_projectile.cpp
+game/shared/cstrike15/snowball_projectile.cpp
+game/shared/cstrike15/snowball_pile.cpp
 game/server/cstrike15/func_bomb_target.cpp
 game/server/cstrike15/func_buy_zone.cpp
 game/server/cstrike15/func_hostage_rescue.cpp
@@ -538,6 +548,16 @@ game/server/cstrike15/cs_voteissues.cpp
 game/shared/cstrike15/gametypes.cpp
 public/XZip.cpp
 public/XUnzip.cpp
+game/shared/cstrike15/cs_gamerules_survival.cpp
+game/server/cstrike15/cs_survival_funfacts.cpp
+game/shared/cstrike15/cs_survival_funfact_types.cpp
+game/shared/cstrike15/item_cash.cpp
+game/server/cstrike15/br_config.cpp
+game/shared/cstrike15/dronegun.cpp
+game/shared/cstrike15/drone.cpp
+game/shared/cstrike15/env_gascanister_shared.cpp
+game/server/cstrike15/survival_spawn_point.cpp
+game/server/cstrike15/info_map_region.cpp
 game/shared/cstrike15/weapon_basecsgrenade.cpp
 game/shared/cstrike15/weapon_c4.cpp
 game/shared/cstrike15/weapon_csbase.cpp
@@ -545,9 +565,14 @@ game/shared/cstrike15/weapon_csbasegun.cpp
 game/shared/cstrike15/weapon_deagle.cpp
 game/shared/cstrike15/weapon_elite.cpp
 game/shared/cstrike15/weapon_flashbang.cpp
+game/shared/cstrike15/weapon_snowball.cpp
 game/shared/cstrike15/weapon_hegrenade.cpp
 game/shared/cstrike15/weapon_ironsightcontroller.cpp
 game/shared/cstrike15/weapon_knife.cpp
+game/shared/cstrike15/weapon_melee.cpp
+game/shared/cstrike15/weapon_fists.cpp
+game/shared/cstrike15/weapon_tablet.cpp
+game/shared/cstrike15/weapon_breachcharge.cpp
 game/shared/cstrike15/weapon_m3.cpp
 game/shared/cstrike15/weapon_sg552.cpp
 game/shared/cstrike15/weapon_smokegrenade.cpp
@@ -560,6 +585,9 @@ game/shared/cstrike15/weapon_sensorgrenade.cpp
 game/shared/cstrike15/weapon_nova.cpp
 game/shared/cstrike15/weapon_baseitem.cpp
 game/shared/cstrike15/item_healthshot.cpp
+game/shared/cstrike15/item_dogtags.cpp
+game/shared/cstrike15/br_items.cpp
+game/server/cstrike15/cs_planted_c4_survival.cpp
 game/server/cstrike15/Effects/inferno.cpp
 game/server/cstrike15/Effects/chicken.cpp
 game/shared/cstrike15/infernoshared.cpp
@@ -599,6 +627,7 @@ game/server/cstrike15/bot/states/cs_bot_open_door.cpp
 game/server/cstrike15/bot/states/cs_bot_plant_bomb.cpp
 game/server/cstrike15/bot/states/cs_bot_use_entity.cpp
 game/server/cstrike15/bot/states/cs_bot_escape_from_flames.cpp
+game/server/cstrike15/bot/states/cs_bot_move_to_play_area.cpp
 game/shared/cstrike15/bot/bot.cpp
 game/shared/cstrike15/bot/bot_hide.cpp
 game/shared/cstrike15/bot/bot_manager.cpp
@@ -611,3 +640,4 @@ game/server/cstrike15/cs_nav_area.cpp
 game/server/cstrike15/cs_nav_generate.cpp
 game/server/cstrike15/cs_nav_mesh.cpp
 game/server/cstrike15/cs_nav_path.cpp
+common/imageutils.cpp

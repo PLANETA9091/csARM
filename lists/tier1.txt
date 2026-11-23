@@ -1,5 +1,6 @@
 tier1/appinstance.cpp
 tier1/bitbuf.cpp
+tier1/bitstring.cpp
 tier1/newbitbuf.cpp
 tier1/byteswap.cpp
 tier1/characterset.cpp
@@ -13,6 +14,7 @@ tier1/datamanager.cpp
 tier1/diff.cpp
 tier1/exprevaluator.cpp
 tier1/generichash.cpp
+tier1/floatprint.cpp
 tier1/interface.cpp
 tier1/keyvalues.cpp
 tier1/keyvaluesjson.cpp
@@ -35,6 +37,7 @@ tier1/timeutils.cpp
 tier1/uniqueid.cpp
 tier1/utlbuffer.cpp
 tier1/utlbufferutil.cpp
+tier1/utlpointers.cpp
 tier1/utlsoacontainer.cpp
 tier1/utlstring.cpp
 tier1/utlstringtoken.cpp
@@ -43,4 +46,3 @@ tier1/miniprofiler_hash.cpp
 tier1/sparsematrix.cpp
 tier1/memoverride_dummy.cpp
 tier1/pathmatch.cpp
-interfaces/interfaces.cpp

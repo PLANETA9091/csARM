@@ -1,4 +1,5 @@
 public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
 unitlib/unitlib.cpp
 tier0/assert_dialog.cpp
 tier0/commandline.cpp
@@ -33,6 +34,7 @@ tier0/threadtools.cpp
 tier0/tslist.cpp
 tier0/vatoms.cpp
 tier0/vprof.cpp
+tier0/vprof_telemetry3.cpp
 tier0/vtuneinterface.cpp
 tier0/win32consoleio.cpp
 tier1/pathmatch.cpp

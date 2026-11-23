@@ -1,4 +1,5 @@
 public/tier0/memoverride.cpp
+public/tier0/crtoverride.cpp
 vstdlib/coroutine.cpp
 vstdlib/cvar.cpp
 vstdlib/jobthread.cpp

@@ -12,6 +12,7 @@ mathlib/ssenoise.cpp
 mathlib/anorms.cpp
 mathlib/bumpvects.cpp
 mathlib/IceKey.cpp
+mathlib/hexes.cpp
 mathlib/kdop.cpp
 mathlib/imagequant.cpp
 mathlib/spherical.cpp
