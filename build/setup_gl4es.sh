@@ -93,6 +93,20 @@ sed -i 's@    return egl_eglCreateContext(dpy, config, share_context, (hardext.e
 grep -q "eglCreateContext dpy=" src/egl/egl.c || { echo "::error::egl.c CreateContext patch failed"; exit 1; }
 sed -i 's@    return egl_eglCreateWindowSurface(dpy, config, win, attrib_list);@    EGLSurface _csarm_surf = egl_eglCreateWindowSurface(dpy, config, win, attrib_list);\n    CSARM_EGLW_LOG("eglCreateWindowSurface dpy=%p cfg=%p win=%p -> %p", dpy, config, win, _csarm_surf);\n    return _csarm_surf;@' src/egl/egl.c
 grep -q "eglCreateWindowSurface dpy=" src/egl/egl.c || { echo "::error::egl.c CreateWindowSurface patch failed"; exit 1; }
+# csARM round 99: probe the ENGINE's draw framebuffer at swap time.  The
+# SDL-side SwapProbe never fired (run #255: EGL_CreateSurface logged once,
+# SwapProbe zero) because the engine swaps through its own EGL - this
+# gl4es egl.c passthrough - not through SDL.  Probe gl4es_eglSwapBuffers:
+# every 200th swap, dlsym(RTLD_DEFAULT) the in-process gl4es GL and read
+# three 3x3 patches (quarter/half/three-quarter of the viewport) of the
+# CURRENT draw framebuffer (default backbuffer or the togl FBO, whatever
+# is bound) right before the passthrough.  rgb != 0 = the GL pipeline has
+# content and the present/compositor chain loses it; rgb == 0 = the
+# render never drew.  Verified locally (gcc -fsyntax-only, r99 verified).
+sed -i 's@^EGLBoolean gl4es_eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) [{]@#include <dlfcn.h>\n/* csARM round 99: probe the engine GL draw framebuffer at swap time.\n * SDL SwapProbe never fired (run #255): the engine swaps through its own\n * EGL - this gl4es egl.c passthrough - not through SDL.  Read the bound\n * framebuffer via the in-process gl4es GL (RTLD_DEFAULT). */\nEGLBoolean gl4es_eglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {@' src/egl/egl.c
+grep -q "csARM round 99: probe the engine GL draw framebuffer" src/egl/egl.c || { echo "::error::egl.c r99 dlfcn patch failed"; exit 1; }
+sed -i 's@    return egl_eglSwapBuffers(dpy, surface);@    /* csARM round 99: probe the draw framebuffer at present time */\n    {\n        static int s_nSwapCount = 0;\n        s_nSwapCount++;\n        if ( ( s_nSwapCount % 200 ) == 1 )\n        {\n            void ( *pGetIV )( unsigned int, int * ) = ( void ( * )( unsigned int, int * ) )dlsym( RTLD_DEFAULT, "glGetIntegerv" );\n            void ( *pReadPx )( int, int, int, int, unsigned int, unsigned int, void * ) = ( void ( * )( int, int, int, int, unsigned int, unsigned int, void * ) )dlsym( RTLD_DEFAULT, "glReadPixels" );\n            unsigned char px[3][9];\n            int vp[4];\n            vp[0] = vp[1] = vp[2] = vp[3] = 0;\n            if ( pGetIV ) pGetIV( 0x0BA2 /*GL_VIEWPORT*/, vp );\n            if ( pReadPx \&\& vp[2] > 0 \&\& vp[3] > 0 )\n            {\n                int i;\n                for ( i = 0; i < 3; i++ )\n                    pReadPx( vp[0] + vp[2] * ( i + 1 ) / 4, vp[1] + vp[3] * ( i + 1 ) / 4, 3, 3, 0x1908 /*GL_RGBA*/, 0x1401 /*GL_UNSIGNED_BYTE*/, px[i] );\n                CSARM_EGLW_LOG( "SwapProbe #%d vp=%dx%d A=%02x%02x%02x B=%02x%02x%02x C=%02x%02x%02x", s_nSwapCount, vp[2], vp[3], px[0][0], px[0][1], px[0][2], px[1][0], px[1][1], px[1][2], px[2][0], px[2][1], px[2][2] );\n            }\n        }\n    }\n    return egl_eglSwapBuffers(dpy, surface);@' src/egl/egl.c
+grep -q "SwapProbe #" src/egl/egl.c || { echo "::error::egl.c r99 swap probe patch failed"; exit 1; }
 # loader.c (compiled into libGL.so): same macro + open_lib/load_libs
 sed -i 's@#include "loader.h"@#include "loader.h"\n\n#if defined(ANDROID) || defined(__ANDROID__)\n#include <android/log.h>\n/* csARM round 75: EGL-chain instrumentation (see ci.yml) */\n#define CSARM_EGLW_LOG(...) __android_log_print(ANDROID_LOG_INFO, "CSARM_EGLW", __VA_ARGS__)\n#else\n#define CSARM_EGLW_LOG(...) do {} while (0)\n#endif@' src/gl/loader.c
 grep -q "CSARM_EGLW_LOG" src/gl/loader.c || { echo "::error::loader.c log macro patch failed"; exit 1; }
