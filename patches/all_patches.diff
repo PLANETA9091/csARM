@@ -5034,6 +5034,73 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  
  		if ( pFileCache->IsOldVersion() )
  		{ 
+@@ -3394,18 +3420,56 @@
+ 		int nStaticComboIdx = pFileCache->FindCombo( lookup.m_nStaticIndex / pFileCache->m_Header.m_nDynamicCombos );
+ 		if ( nStaticComboIdx == -1 )
+ 		{
+-			g_pFullFileSystem->Close( hFile );
+-			lookup.m_Flags |= SHADER_FAILED_LOAD;
+-			const char *pShaderName;
+-			pShaderName = m_ShaderSymbolTable.String( pFileCache->m_Filename );
+-			DevWarning( "*************************************************\n" );
+-			DevWarning( "Shader '%s' - Couldn't load combo %d of shader (dyn=%d)\n", pShaderName, lookup.m_nStaticIndex, pFileCache->m_Header.m_nDynamicCombos );
+-			BitchAboutSkippedCombo( pShaderName, lookup.m_nStaticIndex / pFileCache->m_Header.m_nDynamicCombos, -1 );
+-			DevWarning( "*************************************************\n" );
+-			Assert( 0 );
+-			return false;
++			// csARM round 96: retail .vcs files prune skipped static combos,
++			// while a shader DLL built from the 2019 sources can still request
++			// them (combo numbering drift; run #252: lightmappedgeneric_ps30
++			// wanted static combo 35.7M against 99257 compiled records ->
++			// FindCombo()==-1 -> SHADER_FAILED_LOAD -> null pixel shader ->
++			// permanent black world).  Fall back to the nearest COMPILED
++			// static combo instead of failing the whole shader: records are
++			// sorted by id, so binary search for the last id <= requested
++			// and clamp to a valid [offset_i, offset_{i+1}) window.  Reduced
++			// flag fidelity beats a black screen; CSARM_SHDR logs each hit.
++			uint32 nRequest = ( uint32 )( lookup.m_nStaticIndex / pFileCache->m_Header.m_nDynamicCombos );
++			int nCount = pFileCache->m_Header.m_nNumStaticCombos;
++			int nLo = 0, nHi = nCount;
++			while ( nLo < nHi )
++			{
++				int nMid = ( nLo + nHi ) / 2;
++				if ( pFileCache->m_StaticComboRecords[nMid].m_nStaticComboID <= nRequest )
++					nLo = nMid + 1;
++				else
++					nHi = nMid;
++			}
++			nStaticComboIdx = nLo - 1;
++			if ( nStaticComboIdx < 0 )
++				nStaticComboIdx = 0;
++			if ( nStaticComboIdx > nCount - 2 )
++				nStaticComboIdx = nCount - 2;
++			if ( nStaticComboIdx < 0 )
++			{
++				// degenerate vcs (fewer than two records): fall back to file bounds
++				nStaticComboIdx = 0;
++				uint32 nFileSize = ( uint32 )g_pFullFileSystem->Size( hFile );
++				g_pFullFileSystem->Seek( hFile, 0, FILESYSTEM_SEEK_HEAD );
++				CSARM_SHDR( "VCS combo-fallback degenerate \"%s\": req=%u recs=%d end=filesize=%u",
++					m_ShaderSymbolTable.String( pFileCache->m_Filename ), nRequest, nCount, nFileSize );
++				nStartingOffset = pFileCache->m_StaticComboRecords[0].m_nFileOffset;
++				nEndingOffset = nFileSize;
++				lookup.m_Flags &= ~SHADER_FAILED_LOAD;
++				CSARM_SHDR( "VCS combo-fallback ok \"%s\": rec 0 file=%u..%u",
++					m_ShaderSymbolTable.String( pFileCache->m_Filename ),
++					(unsigned)nStartingOffset, (unsigned)nEndingOffset );
++				// jump past the shared tail (same code as the normal path below)
++				goto haveComboWindow;
++			}
++			CSARM_SHDR( "VCS combo-fallback \"%s\": req=%u -> compiled id=%u (rec %d/%d)",
++				m_ShaderSymbolTable.String( pFileCache->m_Filename ), nRequest,
++				(unsigned)pFileCache->m_StaticComboRecords[nStaticComboIdx].m_nStaticComboID,
++				nStaticComboIdx, nCount );
+ 		}
+ 
++	haveComboWindow:
+ 		nStartingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx].m_nFileOffset;
+ 		nEndingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx+1].m_nFileOffset;
+ 	}
 diff -ruN a/togl/dxabstract.cpp b/togl/dxabstract.cpp
 --- a/togl/dxabstract.cpp
 +++ b/togl/dxabstract.cpp
