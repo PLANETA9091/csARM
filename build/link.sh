@@ -741,6 +741,11 @@ link_so libtier2.so  "tier0 tier1" tier2 || true
 # without the SDL2 dep both link jobs died on undefined symbols
 # (run #257 arm64: LINK FAILED libappframework.so -> liblauncher.so
 # cascade; the SDL2 dep token is the same one vguimatsurface/vgui use).
+# csARM round 102: and ba09447's togl dep hit the ORDER trap - libtogl.so
+# linked ~35s LATER (it sat with the render libs below), so ld.lld died on
+# "unable to find library -ltogl" in BOTH link jobs (#257 arm64, #258
+# both; link.log artifact).  Link togl BEFORE appframework.
+link_so libtogl.so "tier0 tier1 vstdlib mathlib tier2" togl || true
 link_so libappframework.so "tier0 tier1 togl SDL2" appframework || true
 link_so libdatacache.so    "tier0 tier1 vstdlib" datacache || true
 link_so libstudiorender.so "tier0 tier1 mathlib vstdlib" studiorender || true
@@ -857,7 +862,9 @@ link_so libshaderapiempty.so "tier0 tier1 mathlib vstdlib tier2" shaderapiempty 
 #                       macOS-style POSIX name shadersystem::LoadShaderDLL
 #                       looks for ("stdshader_dx9" + DLL_EXT_STRING)
 # ----------------------------------------------------------------------------
-link_so libtogl.so "tier0 tier1 vstdlib mathlib tier2" togl || true
+# csARM round 102: libtogl.so moved up (before libappframework.so) — see
+# the Subsystems comment; the old line here made appframework's togl dep
+# a dangling -ltogl.
 link_so libshaderapidx9.so "tier0 tier1 vstdlib mathlib tier2 bzip2 bitmap vtf togl" shaderapidx9 || true
 link_so libstdshader_dx9.so "tier0 tier1 mathlib vstdlib shaderlib" stdshader_dx9 || true
 
