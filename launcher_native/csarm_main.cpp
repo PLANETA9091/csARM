@@ -467,8 +467,13 @@ extern "C" int SDL_main(int argc, char *argv[])
             setenv("SDL_VIDEO_EGL_DRIVER", gl4esEgl.c_str(), 1);
             if (stat(swGles.c_str(), &st) == 0)
                 setenv("LIBGL_GLES", swGles.c_str(), 1);
-            if (stat(swEgl.c_str(), &st) == 0)
-                setenv("LIBGL_EGL", swEgl.c_str(), 1);
+            // csARM round 100: the wrapper's EGL backend MUST be the REAL
+            // system EGL by ABSOLUTE path.  A bare "libEGL.so" (or the
+            // bundled NDK copy) would soname-match the wrapper itself once
+            // it is resident under soname libEGL.so (below) - recursion.
+            // The bundled NDK libEGL.so stays dead weight; goldfish EGL is
+            // what gl4es has been driving all along.
+            setenv("LIBGL_EGL", "/system/lib64/libEGL.so", 1);
             // csARM round 74: pin the ES backend version.  gl4es's
             // eglCreateContext wrapper picks the attrib list from
             // hardext.esversion, and GetHardwareExtensions never updates
@@ -520,6 +525,22 @@ extern "C" int SDL_main(int argc, char *argv[])
             else
             {
                 LOGI("CSARM_EGL preload: no libGL.so in %s - wrapper will not load", libDir.c_str());
+            }
+            // csARM round 100: preload the EGL WRAPPER with RTLD_GLOBAL.
+            // The wrapper now carries SONAME "libEGL.so" (setup_gl4es.sh
+            // bakes it via SUFFIX ".so").  The ENGINE's own EGL
+            // (CSDLMgr::CreateHiddenGameWindow -> CEGL) dlopen()s
+            // "libEGL.so" by NAME; bionic resolves that to
+            // /system/lib64/libEGL.so (goldfish) unless the soname is
+            // already resident - the #202-era maps proved exactly that.
+            // A resident wrapper means the engine's create/MakeCurrent/
+            // swap ALL land in our instrumented passthrough: the SwapProbe
+            // finally fires and the manual present (gl4es_eglSwapBuffers,
+            // round 100) can show frames without the broken goldfish swap.
+            {
+                void *hEglW = dlopen(gl4esEgl.c_str(), RTLD_NOW | RTLD_GLOBAL);
+                LOGI("CSARM_EGL preload: wrapper dlopen(%s) -> %p (%s)",
+                     gl4esEgl.c_str(), hEglW, hEglW ? "ok soname=libEGL.so resident" : (dlerror() ? dlerror() : "failed"));
             }
         }
         else if (stat(swEgl.c_str(), &st) == 0)
