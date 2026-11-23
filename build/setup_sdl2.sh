@@ -125,10 +125,30 @@ if ! grep -q "csARM round 76" "$SRCDIR/src/video/SDL_egl.c"; then
   grep -q "GLES backend dlopen NULL" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r76 gles-fail patch failed"; exit 1; }
   sed -i 's@            return SDL_SetError("Could not load EGL library");@            CSARM_SDLEGL_LOG("EGL_LoadLibrary FAILED: EGL driver dlopen NULL (path=%s)", path ? path : "(null)");\n            return SDL_SetError("Could not load EGL library");@' "$SRCDIR/src/video/SDL_egl.c"
   grep -q "EGL driver dlopen NULL" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r76 egl-fail patch failed"; exit 1; }
+fi
+
+# csARM round 97: late SDL patches live under their OWN cache guards.  The
+# round-62 idempotence guard skips the WHOLE block once the cached source
+# carries round 62, so every patch added after the cache was built never
+# applied (run #253: the r95 CreateSurface log was silently missing while
+# every r75/r76 log still showed - a warm-cache trap for future patches).
+if ! grep -q "EGL_CreateSurface #" "$SRCDIR/src/video/SDL_egl.c"; then
   # csARM round 95: log every EGL window surface creation (the "second
   # surface" theory for the SwiftShader Surface::lock leak - run #251).
   sed -i 's@    return _this->egl_data->eglCreateWindowSurface(@    { static int s_nSurf = 0; s_nSurf++; CSARM_SDLEGL_LOG("EGL_CreateSurface #%d win=%p", s_nSurf, window); }\n    return _this->egl_data->eglCreateWindowSurface(@' "$SRCDIR/src/video/SDL_egl.c"
   grep -q "EGL_CreateSurface #" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r95 create-surface log patch failed"; exit 1; }
+fi
+if ! grep -q "SwapProbe #" "$SRCDIR/src/video/SDL_egl.c"; then
+  # csARM round 97: framebuffer probe at present time.  Run #253: the engine
+  # renders without a single GL/shader error (shader files load, the v6 dup
+  # tables resolve the combo drift, no Surface::lock spam) yet EVERY screen
+  # is black - including the plain boot console, so this predates the map.
+  # Probe the CURRENT draw framebuffer (backbuffer or a bound FBO) right
+  # before eglSwapBuffers: SwapProbe rgb != 0 means the GL pipeline has
+  # content and the present/compositor chain loses it; rgb == 0 means the
+  # render never drew.
+  sed -i 's@    _this->egl_data->eglSwapBuffers(_this->egl_data->egl_display, egl_surface);@    /* csARM round 97: probe the draw framebuffer at present time */\n    {\n        static int s_nSwapCount = 0;\n        s_nSwapCount++;\n        if ( ( s_nSwapCount % 200 ) == 1 )\n        {\n            typedef int CSARM_GLint;\n            typedef unsigned int CSARM_GLenum;\n            typedef unsigned int CSARM_GLsizei;\n            void ( *pGetIV )( CSARM_GLenum, CSARM_GLint * ) = ( void ( * )( CSARM_GLenum, CSARM_GLint * ) )_this->GL_GetProcAddress( _this, "glGetIntegerv" );\n            void ( *pReadPx )( CSARM_GLint, CSARM_GLint, CSARM_GLsizei, CSARM_GLsizei, CSARM_GLenum, CSARM_GLenum, void * ) = ( void ( * )( CSARM_GLint, CSARM_GLint, CSARM_GLsizei, CSARM_GLsizei, CSARM_GLenum, CSARM_GLenum, void * ) )_this->GL_GetProcAddress( _this, "glReadPixels" );\n            unsigned char px[3][9];\n            CSARM_GLint vp[4];\n            vp[0] = vp[1] = vp[2] = vp[3] = 0;\n            if ( pGetIV ) pGetIV( 0x0BA2 /*GL_VIEWPORT*/, vp );\n            if ( pReadPx \&\& vp[2] > 0 \&\& vp[3] > 0 )\n            {\n                int i;\n                for ( i = 0; i < 3; i++ )\n                    pReadPx( vp[0] + vp[2] * ( i + 1 ) / 4, vp[1] + vp[3] * ( i + 1 ) / 4, 3, 3, 0x1908 /*GL_RGBA*/, 0x1401 /*GL_UNSIGNED_BYTE*/, px[i] );\n                CSARM_SDLEGL_LOG( "SwapProbe #%d vp=%dx%d A=%02x%02x%02x B=%02x%02x%02x C=%02x%02x%02x", s_nSwapCount, vp[2], vp[3], px[0][0], px[0][1], px[0][2], px[1][0], px[1][1], px[1][2], px[2][0], px[2][1], px[2][2] );\n            }\n        }\n    }\n    _this->egl_data->eglSwapBuffers(_this->egl_data->egl_display, egl_surface);@' "$SRCDIR/src/video/SDL_egl.c"
+  grep -q "SwapProbe #" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r97 swap probe patch failed"; exit 1; }
 fi
 
 export PATH="$NDKROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
