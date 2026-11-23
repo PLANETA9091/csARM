@@ -736,7 +736,12 @@ link_so libmathlib.so "tier0 tier1" mathlib mathlib_extra || true
 link_so libtier2.so  "tier0 tier1" tier2 || true
 
 # 2. Subsystems
-link_so libappframework.so "tier0 tier1 togl" appframework || true
+# csARM round 101: ba09447 added appframework/sdlmgr.cpp (CSDLMgr) to the
+# appframework objects and the togl dep, but CSDLMgr calls SDL_ functions -
+# without the SDL2 dep both link jobs died on undefined symbols
+# (run #257 arm64: LINK FAILED libappframework.so -> liblauncher.so
+# cascade; the SDL2 dep token is the same one vguimatsurface/vgui use).
+link_so libappframework.so "tier0 tier1 togl SDL2" appframework || true
 link_so libdatacache.so    "tier0 tier1 vstdlib" datacache || true
 link_so libstudiorender.so "tier0 tier1 mathlib vstdlib" studiorender || true
 link_so libsoundemittersystem.so "tier0 tier1 mathlib vstdlib" soundemittersystem || true
