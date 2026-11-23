@@ -132,10 +132,18 @@ fi
 # carries round 62, so every patch added after the cache was built never
 # applied (run #253: the r95 CreateSurface log was silently missing while
 # every r75/r76 log still showed - a warm-cache trap for future patches).
+if grep -q 'CSARM_SDLEGL_LOG("EGL_CreateSurface #%d win=%p", s_nSurf, window)' "$SRCDIR/src/video/SDL_egl.c"; then
+  # csARM round 98: the r95 log referenced the wrong parameter (the fn is
+  # SDL_EGL_CreateSurface(_THIS, NativeWindowType nw) - run #254 died on
+  # SDL_egl.c:543 'use of undeclared identifier window').  The warm runner
+  # cache already carries the broken line, so rewrite it in place instead
+  # of relying on the fresh-cache guard below.
+  sed -i 's@CSARM_SDLEGL_LOG("EGL_CreateSurface #%d win=%p", s_nSurf, window)@CSARM_SDLEGL_LOG("EGL_CreateSurface #%d nw=%p", s_nSurf, nw)@' "$SRCDIR/src/video/SDL_egl.c"
+fi
 if ! grep -q "EGL_CreateSurface #" "$SRCDIR/src/video/SDL_egl.c"; then
   # csARM round 95: log every EGL window surface creation (the "second
   # surface" theory for the SwiftShader Surface::lock leak - run #251).
-  sed -i 's@    return _this->egl_data->eglCreateWindowSurface(@    { static int s_nSurf = 0; s_nSurf++; CSARM_SDLEGL_LOG("EGL_CreateSurface #%d win=%p", s_nSurf, window); }\n    return _this->egl_data->eglCreateWindowSurface(@' "$SRCDIR/src/video/SDL_egl.c"
+  sed -i 's@    return _this->egl_data->eglCreateWindowSurface(@    { static int s_nSurf = 0; s_nSurf++; CSARM_SDLEGL_LOG("EGL_CreateSurface #%d nw=%p", s_nSurf, nw); }\n    return _this->egl_data->eglCreateWindowSurface(@' "$SRCDIR/src/video/SDL_egl.c"
   grep -q "EGL_CreateSurface #" "$SRCDIR/src/video/SDL_egl.c" || { echo "SDL_egl.c r95 create-surface log patch failed"; exit 1; }
 fi
 if ! grep -q "SwapProbe #" "$SRCDIR/src/video/SDL_egl.c"; then
