@@ -744,12 +744,14 @@ jobs:
 
       - name: Configure + build (ES/EGL only)
         run: |
-          # csARM round 108: the cache-hit check now verifies the round 107
-          # CSARM_FBA marker INSIDE the binary - a stale cached bundle
-          # (pre-patch libs) is treated as a miss and rebuilt, so a source
-          # patch can never again be silently shadowed by the output cache
-          # (run #264 shipped unpatched libs with a green pipeline).
-          if [ -f "bundle/${{ matrix.abi }}/libEGL.so" ] && [ -f "bundle/${{ matrix.abi }}/libGLESv2.so" ] && strings "bundle/${{ matrix.abi }}/libEGL.so" | grep -q CSARM_FBA; then
+          # csARM round 108/110: the cache-hit check verifies the round 107
+          # CSARM_FBA marker INSIDE the binaries - a stale cached bundle
+          # (pre-patch libs) is treated as a miss and rebuilt.  Round 110:
+          # the FrameBufferAndroid code (src/Main) links into libGLESv2, not
+          # libEGL - check BOTH libs (run #266: the libEGL-only probe saw no
+          # marker in the perfectly good ss6 bundle, declared a false miss,
+          # and ran cmake with no cloned source directory).
+          if [ -f "bundle/${{ matrix.abi }}/libEGL.so" ] && [ -f "bundle/${{ matrix.abi }}/libGLESv2.so" ] && { strings "bundle/${{ matrix.abi }}/libEGL.so" | grep -q CSARM_FBA || strings "bundle/${{ matrix.abi }}/libGLESv2.so" | grep -q CSARM_FBA; }; then
             echo "SwiftShader cache hit — build skipped"
             exit 0
           fi
