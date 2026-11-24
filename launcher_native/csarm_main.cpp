@@ -494,15 +494,16 @@ extern "C" int SDL_main(int argc, char *argv[])
             // every GL entry point silently no-ops on unwritten out
             // params).  LIBGL_ES=2 keeps the whole chain ES2.
             setenv("LIBGL_ES", "2", 1);
-            // csARM round 103: skip gl4es's constructor hardware test
-            // entirely (init.c: gl4es_notest = IsEnvVarTrue("LIBGL_NOTEST")).
-            // The test creates a Pbuffer context on the backend and strstr's
-            // its extension strings - a backend that returns NULL strings
-            // SEGVs the libGL dlopen (run #259).  The notest path sets every
-            // value the togl/FBO gate needs from the esversion==2 defaults
-            // (hardext.fbo=1, maxvattrib=16, maxtex=8 - the run #207 gate
-            // stays satisfied), and boots faster.
-            setenv("LIBGL_NOTEST", "1", 1);
+            // csARM round 104: LIBGL_NOTEST=1 (round 103) is RETIRED.  The
+            // notest defaults render as "GL4ES using an unknown renderer"
+            // with a 289-char-shorter extension list (run #260: ext_len
+            // 1905 vs #256's tested 2194) and the engine bailed at
+            // POSTINITIALIZATION with steamApplication.Run()==3 before any
+            // map load - it gates on the tested capability set.  With
+            // round 103's CONSISTENT SwiftShader pair (EGL+GLES both
+            // bundled SwiftShader) the constructor's hardware test is safe
+            // again - it ran uncrashed for rounds 61-99 on exactly this
+            // pair; the #259 SEGV came from the round-100 goldfish MIX.
             LOGI("CSARM_EGL pin: gl4es wrapper=%s gles=%s egl=%s",
                  getenv("SDL_VIDEO_EGL_DRIVER") ? getenv("SDL_VIDEO_EGL_DRIVER") : "-",
                  getenv("LIBGL_GLES") ? getenv("LIBGL_GLES") : "-",
