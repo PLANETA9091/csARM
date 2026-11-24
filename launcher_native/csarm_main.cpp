@@ -452,7 +452,15 @@ extern "C" int SDL_main(int argc, char *argv[])
         std::string libDir = nativeLibDir();
         struct stat st;
         std::string gl4esEgl = libDir + "/libEGLgl4es.so";
-        std::string swEgl    = libDir + "/libEGL.so";
+        // csARM round 106: build_apk.sh ships the WRAPPER as libEGL.so and
+        // renames the bundled SwiftShader EGL to libEGL_sw.so, so the
+        // engine's own EGL resolution (the round 95 "pinned SwiftShader
+        // libEGL" swap path that bypassed the resident wrapper and leaked
+        // the window lock, runs #251/#262) lands on the wrapper with its
+        // swap probe + manual present.  LIBGL_EGL points the wrapper's
+        // gl4es backend at the RENAMED SwiftShader EGL; the GLES backend
+        // (libGLESv2.so) keeps its original name.
+        std::string swEgl    = libDir + "/libEGL_sw.so";
         std::string swGles   = libDir + "/libGLESv2.so";
         if (stat(gl4esEgl.c_str(), &st) == 0)
         {

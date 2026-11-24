@@ -111,6 +111,26 @@ for ABI in arm64-v8a x86_64; do
       else
         echo "WARNING: gl4es($ABI) has no libEGLgl4es.so - real renderer will run contextless"
       fi
+      # csARM round 106: the ENGINE resolves its present to the APK's
+      # libEGL.so directly (round 95 evidence: "the pinned SwiftShader
+      # libEGL - window swap = ANativeWindow_lock blit"; runs #251/#262
+      # lock-fail=133: that swap path leaks the window lock and every
+      # present after it fails - permanent black screen), bypassing the
+      # resident wrapper entirely (SwapProbe=0 even with the r105
+      # unconditional probe).  Ship the WRAPPER as libEGL.so so EVERY
+      # EGL resolution in the process - SDL pin, engine swap, FBO diag,
+      # bare soname dlopens - lands on the wrapper, whose swap probe +
+      # manual present (rounds 100/105) finally sees the engine's
+      # frames.  SwiftShader EGL keeps serving as the wrapper's
+      # LIBGL_EGL backend under its new name libEGL_sw.so (csarm_main
+      # round 106 pins it there); its soname stays libEGL.so but the
+      # wrapper is already resident, so bare-name lookups resolve to
+      # the wrapper first.
+      if [ -f "$A/lib/$ABI/libEGLgl4es.so" ] && [ -f "$A/lib/$ABI/libEGL.so" ]; then
+        mv "$A/lib/$ABI/libEGL.so" "$A/lib/$ABI/libEGL_sw.so"
+        cp "$A/lib/$ABI/libEGLgl4es.so" "$A/lib/$ABI/libEGL.so"
+        echo "round106($ABI): libEGL.so=wrapper, libEGL_sw.so=SwiftShader EGL"
+      fi
     fi
     NLIB=$(ls "$A/lib/$ABI"/*.so 2>/dev/null | wc -l)
     echo "native libs [$ABI]: $NLIB"
