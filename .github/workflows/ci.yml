@@ -682,6 +682,48 @@ jobs:
           PYEOF
           N=$(grep -c 'CSARM_SSRT' src/Reactor/ExecutableMemory.cpp); [ "$N" -ge 5 ] || { echo "::error::ExecutableMemory SSRT patch failed (found $N)"; exit 1; }
           grep -q '^#if defined(__ANDROID__)$' src/Reactor/ExecutableMemory.cpp || { echo "::error::ExecutableMemory anon-path sed failed"; exit 1; }
+          # csARM round 107: THE BLACK-SCREEN ROOT CAUSE.  FrameBufferAndroid's
+          # NDK path (ANDROID_NDK_BUILD - our standalone build) locks the
+          # window with ANativeWindow_lock into `framebuffer` but NEVER
+          # releases it: unlock() refuses when `buffer` is NULL, and only the
+          # gralloc path ever sets `buffer`; blit()'s unlock/queueBuffer block
+          # is likewise gated on `buffer`.  FrameBuffer::copy() therefore does
+          # lock -> copy -> unlock(no-op) on EVERY eglSwapBuffers: the first
+          # present (the loading plaque) leaks the window lock, the frame
+          # never reaches the compositor, and every later present fails
+          # "Surface::lock failed, already locked" (runs #251-#262: 130-138
+          # lock-fails per run, permanent black screen).  Fix: unlock()/post
+          # whenever the NDK lock is held (framebuffer != null) regardless of
+          # buffer; ANativeWindow_unlockAndPost both releases the lock and
+          # posts the frame.  CSARM_FBA logging names the first locker if a
+          # holder still precedes us.
+          python3 - <<'PYEOF'
+          p = 'src/Main/FrameBufferAndroid.cpp'
+          s = open(p).read()
+
+          a = '#else\n#include <android/native_window.h>\n#endif'
+          assert a in s, 'include anchor missing'
+          s = s.replace(a, '#else\n#include <android/native_window.h>\n#include <android/log.h> /* csARM round 107: CSARM_FBA diagnostics */\n#endif', 1)
+
+          a = '\t\tANativeWindow_Buffer surfaceBuffer;\n\t\tif (ANativeWindow_lock(nativeWindow, &surfaceBuffer, nullptr) != 0) {\n\t\t\tTRACE("%s failed to lock buffer %p", __FUNCTION__, buffer);\n\t\t\treturn nullptr;\n\t\t}\n\t\tframebuffer = surfaceBuffer.bits;'
+          assert a in s, 'lock anchor missing'
+          b = '\t\tANativeWindow_Buffer surfaceBuffer;\n\t\tif (ANativeWindow_lock(nativeWindow, &surfaceBuffer, nullptr) != 0) {\n\t\t\t__android_log_print(ANDROID_LOG_INFO, "CSARM_FBA", "lock FAILED win=%p (leaked holder precedes us?)", nativeWindow);\n\t\t\tTRACE("%s failed to lock buffer %p", __FUNCTION__, buffer);\n\t\t\treturn nullptr;\n\t\t}\n\t\tframebuffer = surfaceBuffer.bits;\n\t\t{ static int csarmLocks = 0; if(++csarmLocks <= 5 || (csarmLocks % 500) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_FBA", "lock#%d win=%p %dx%d fmt=%d", csarmLocks, nativeWindow, surfaceBuffer.width, surfaceBuffer.height, surfaceBuffer.format); }'
+          s = s.replace(a, b, 1)
+
+          a = '\t\tif(!buffer)\n\t\t{\n\t\t\tTRACE("%s: badness unlock with no active buffer", __FUNCTION__);\n\t\t\treturn;\n\t\t}'
+          assert a in s, 'unlock guard anchor missing'
+          b = '\t\t// csARM round 107: the NDK path locks via framebuffer (ANativeWindow_lock),\n\t\t// buffer stays NULL - the old `if(!buffer)` guard made EVERY unlock a\n\t\t// no-op, leaking the window lock on the first present and blacking the\n\t\t// screen forever.  Release whenever either path holds a lock.\n\t\tif(!buffer && !framebuffer)\n\t\t{\n\t\t\tTRACE("%s: badness unlock with no active buffer", __FUNCTION__);\n\t\t\treturn;\n\t\t}'
+          s = s.replace(a, b, 1)
+
+          a = '#ifdef ANDROID_NDK_BUILD\n\t\tANativeWindow_unlockAndPost(nativeWindow);'
+          assert a in s, 'post anchor missing'
+          b = '#ifdef ANDROID_NDK_BUILD\n\t\tANativeWindow_unlockAndPost(nativeWindow);\n\t\t{ static int csarmPosts = 0; if(++csarmPosts <= 5 || (csarmPosts % 500) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_FBA", "post#%d win=%p", csarmPosts, nativeWindow); }\t// csARM round 107'
+          s = s.replace(a, b, 1)
+
+          open(p, 'w').write(s)
+          print('round 107 FrameBufferAndroid patches applied')
+          PYEOF
+          grep -q "csARM round 107" src/Main/FrameBufferAndroid.cpp && [ $(grep -c "csARM round 107" src/Main/FrameBufferAndroid.cpp) -ge 3 ] || { echo "::error::FrameBufferAndroid round 107 patch failed"; exit 1; }
 
       - name: Setup NDK (r27d — clang-21 of NDK 30 chokes on vendored LLVM-10)
         run: |

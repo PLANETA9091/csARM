@@ -111,26 +111,16 @@ for ABI in arm64-v8a x86_64; do
       else
         echo "WARNING: gl4es($ABI) has no libEGLgl4es.so - real renderer will run contextless"
       fi
-      # csARM round 106: the ENGINE resolves its present to the APK's
-      # libEGL.so directly (round 95 evidence: "the pinned SwiftShader
-      # libEGL - window swap = ANativeWindow_lock blit"; runs #251/#262
-      # lock-fail=133: that swap path leaks the window lock and every
-      # present after it fails - permanent black screen), bypassing the
-      # resident wrapper entirely (SwapProbe=0 even with the r105
-      # unconditional probe).  Ship the WRAPPER as libEGL.so so EVERY
-      # EGL resolution in the process - SDL pin, engine swap, FBO diag,
-      # bare soname dlopens - lands on the wrapper, whose swap probe +
-      # manual present (rounds 100/105) finally sees the engine's
-      # frames.  SwiftShader EGL keeps serving as the wrapper's
-      # LIBGL_EGL backend under its new name libEGL_sw.so (csarm_main
-      # round 106 pins it there); its soname stays libEGL.so but the
-      # wrapper is already resident, so bare-name lookups resolve to
-      # the wrapper first.
-      if [ -f "$A/lib/$ABI/libEGLgl4es.so" ] && [ -f "$A/lib/$ABI/libEGL.so" ]; then
-        mv "$A/lib/$ABI/libEGL.so" "$A/lib/$ABI/libEGL_sw.so"
-        cp "$A/lib/$ABI/libEGLgl4es.so" "$A/lib/$ABI/libEGL.so"
-        echo "round106($ABI): libEGL.so=wrapper, libEGL_sw.so=SwiftShader EGL"
-      fi
+      # csARM round 107 REVERTS round 106 (the wrapper-as-libEGL.so seat).
+      # The rename SEGV'd the -sw boot: SwiftShader's libGLESv2 resolves its
+      # context back through libEGL.so (the round 69 name-list), and with
+      # libEGL.so = the gl4es wrapper the exports gate found no
+      # libEGL_swiftshader symbol -> es2::getContextLocked faulted at 0x140
+      # from NULL inside call_constructors (run #263, the run #213
+      # signature).  SwiftShader's libEGL.so keeps its original name; the
+      # actual black-screen fix is the FrameBufferAndroid unlock patch
+      # (ci.yml round 107): the engine's present never needed the wrapper -
+      # it needed a WORKING unlockAndPost.
     fi
     NLIB=$(ls "$A/lib/$ABI"/*.so 2>/dev/null | wc -l)
     echo "native libs [$ABI]: $NLIB"
