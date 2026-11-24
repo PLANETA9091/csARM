@@ -467,13 +467,22 @@ extern "C" int SDL_main(int argc, char *argv[])
             setenv("SDL_VIDEO_EGL_DRIVER", gl4esEgl.c_str(), 1);
             if (stat(swGles.c_str(), &st) == 0)
                 setenv("LIBGL_GLES", swGles.c_str(), 1);
-            // csARM round 100: the wrapper's EGL backend MUST be the REAL
-            // system EGL by ABSOLUTE path.  A bare "libEGL.so" (or the
-            // bundled NDK copy) would soname-match the wrapper itself once
-            // it is resident under soname libEGL.so (below) - recursion.
-            // The bundled NDK libEGL.so stays dead weight; goldfish EGL is
-            // what gl4es has been driving all along.
-            setenv("LIBGL_EGL", "/system/lib64/libEGL.so", 1);
+            // csARM round 103: the wrapper's backend pair MUST be the BUNDLED
+            // SWIFTSHADER libs (as it was for rounds 61-99).  Round 100 pinned
+            // LIBGL_EGL to /system/lib64/libEGL.so (goldfish) to dodge the
+            // wrapper's own soname - that broke the pair: goldfish EGL created
+            // the display/context while glGetString resolved from the bundled
+            // SwiftShader libGLESv2.so, found NO current context of its own,
+            // returned NULL, and GetHardwareExtensions strstr(NULL)-SEGV'd the
+            // libGL dlopen (run #259: Fatal signal 11 in __strchr_chk via
+            // GetHardwareExtensions+2802 <- initialize_gl4es, fault addr 0x0).
+            // An ABSOLUTE path into the APK's native lib dir does NOT
+            // soname-match the resident wrapper (bionic compares the full
+            // requested name against sonames; only a bare "libEGL.so"
+            // matches), so the SwiftShader backend loads alongside it safely.
+            // The ENGINE's own bare dlopen("libEGL.so") still lands on the
+            // resident wrapper - the round 100 residency trick is untouched.
+            setenv("LIBGL_EGL", swEgl.c_str(), 1);
             // csARM round 74: pin the ES backend version.  gl4es's
             // eglCreateContext wrapper picks the attrib list from
             // hardext.esversion, and GetHardwareExtensions never updates
@@ -485,6 +494,15 @@ extern "C" int SDL_main(int argc, char *argv[])
             // every GL entry point silently no-ops on unwritten out
             // params).  LIBGL_ES=2 keeps the whole chain ES2.
             setenv("LIBGL_ES", "2", 1);
+            // csARM round 103: skip gl4es's constructor hardware test
+            // entirely (init.c: gl4es_notest = IsEnvVarTrue("LIBGL_NOTEST")).
+            // The test creates a Pbuffer context on the backend and strstr's
+            // its extension strings - a backend that returns NULL strings
+            // SEGVs the libGL dlopen (run #259).  The notest path sets every
+            // value the togl/FBO gate needs from the esversion==2 defaults
+            // (hardext.fbo=1, maxvattrib=16, maxtex=8 - the run #207 gate
+            // stays satisfied), and boots faster.
+            setenv("LIBGL_NOTEST", "1", 1);
             LOGI("CSARM_EGL pin: gl4es wrapper=%s gles=%s egl=%s",
                  getenv("SDL_VIDEO_EGL_DRIVER") ? getenv("SDL_VIDEO_EGL_DRIVER") : "-",
                  getenv("LIBGL_GLES") ? getenv("LIBGL_GLES") : "-",
