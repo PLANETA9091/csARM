@@ -527,7 +527,10 @@ jobs:
           # root cause, runs #251-#262); the ss5 cache returned pre-patch
           # libs and "cache hit - build skipped" silently shipped them
           # (run #264: CSARM_FBA=0 in logcat, lock-fail storm unchanged).
-          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss6
+          # -ss7: round 111 adds the content samplers (frame src/dst byte
+          # probes) - the ss6 bundle predates them and the marker guard
+          # cannot see the difference (the round 108 lesson, again).
+          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss7
 
       - name: Clone SwiftShader at known-good Android-capable revision
         run: |
@@ -729,6 +732,56 @@ jobs:
           print('round 107 FrameBufferAndroid patches applied')
           PYEOF
           grep -q "csARM round 107" src/Main/FrameBufferAndroid.cpp && [ $(grep -c "csARM round 107" src/Main/FrameBufferAndroid.cpp) -ge 3 ] || { echo "::error::FrameBufferAndroid round 107 patch failed"; exit 1; }
+          # csARM round 111: CONTENT SAMPLER - the engine posts 30fps but the
+          # screen is black (runs #265/#267); the decisive question is WHERE
+          # the content dies: (a) the engine's render surface itself is black
+          # (no shader library / device path draws nothing) or (b) the surface
+          # HAS content and the copy/post loses it.  Sample the SOURCE surface
+          # in FrameBuffer::copy (first row + middle row, first 4 bytes of
+          # each) and the DEST window buffer in FrameBufferAndroid::unlock
+          # (right before unlockAndPost) - logged every 500th frame.  If src
+          # bytes are all 00 the engine draws nothing; if src!=00 and dst==00
+          # the copy stage loses the image; if both are non-00 and the screen
+          # is still black the compositor/window side is at fault.
+          python3 - <<'PYEOF'
+          p = 'src/Main/FrameBuffer.cpp'
+          s = open(p).read()
+
+          a = '#include <stdio.h>\n#include <string.h>\n#include <time.h>'
+          assert a in s, 'FB include anchor missing'
+          s = s.replace(a, a + '\n#include <android/log.h> /* csARM round 111: content sampler */', 1)
+
+          a = '\t\trenderbuffer = source->lockInternal(0, 0, 0, sw::LOCK_READONLY, sw::PUBLIC);'
+          assert a in s, 'lockInternal anchor missing'
+          b = ('\t\trenderbuffer = source->lockInternal(0, 0, 0, sw::LOCK_READONLY, sw::PUBLIC);\n'
+               '\t\t{ // csARM round 111: sample the source - is the engine drawing at all?\n'
+               '\t\t\tstatic int csarmCopies = 0;\n'
+               '\t\t\tif (++csarmCopies <= 5 || (csarmCopies % 500) == 0) {\n'
+               '\t\t\t\tconst unsigned char *rb = (const unsigned char *)renderbuffer;\n'
+               '\t\t\t\tconst int midOff = (height / 2) * sourceStride;\n'
+               '\t\t\t\t__android_log_print(ANDROID_LOG_INFO, "CSARM_FBA", "frame#%d srcfmt=%d pitchB=%d row0=%02x%02x%02x%02x mid=%02x%02x%02x%02x",\n'
+               '\t\t\t\t\tcsarmCopies, source->getInternalFormat(), sourceStride,\n'
+               '\t\t\t\t\trb[0], rb[1], rb[2], rb[3],\n'
+               '\t\t\t\t\trb[midOff], rb[midOff + 1], rb[midOff + 2], rb[midOff + 3]);\n'
+               '\t\t\t}\n'
+               '\t\t}')
+          s = s.replace(a, b, 1)
+          open(p, 'w').write(s)
+          print('round 111 FrameBuffer sampler applied')
+          PYEOF
+          python3 - <<'PYEOF'
+          p = 'src/Main/FrameBufferAndroid.cpp'
+          s = open(p).read()
+
+          a = '\t\tif(!buffer && !framebuffer)'
+          assert a in s, 'unlock guard anchor missing'
+          b = ('\t\t{ static int csarmDsts = 0; if(framebuffer && (++csarmDsts <= 5 || (csarmDsts % 500) == 0)) { const unsigned char *db = (const unsigned char *)framebuffer; __android_log_print(ANDROID_LOG_INFO, "CSARM_FBA", "frame#%d dst row0=%02x%02x%02x%02x mid=%02x%02x%02x%02x", csarmDsts, db[0], db[1], db[2], db[3], db[(int)(stride/2)], db[(int)(stride/2)+1], db[(int)(stride/2)+2], db[(int)(stride/2)+3]); } } // csARM round 111\n'
+               '\t\tif(!buffer && !framebuffer)')
+          s = s.replace(a, b, 1)
+          open(p, 'w').write(s)
+          print('round 111 FrameBufferAndroid dst sampler applied')
+          PYEOF
+          grep -q "csARM round 111" src/Main/FrameBuffer.cpp && grep -q "csARM round 111" src/Main/FrameBufferAndroid.cpp || { echo "::error::round 111 sampler patch failed"; exit 1; }
 
       - name: Setup NDK (r27d — clang-21 of NDK 30 chokes on vendored LLVM-10)
         run: |
