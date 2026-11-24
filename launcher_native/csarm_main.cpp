@@ -16,6 +16,8 @@
 #include <jni.h>
 #include <android/log.h>
 #include <dlfcn.h>
+#include <sys/system_properties.h> // round 109: ro.kernel.qemu gate
+#include <ctype.h>                 // round 109: tolower in the renderer check
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -363,6 +365,86 @@ static void fillInterfaceRegistries()
 // engine from SDL_main onward: declare it the main thread once up front.
 extern "C" void DeclareCurrentThreadIsMainThread(void);
 
+// csARM round 109: hardware-GPU probe.  gl4es exists to bridge desktop GL to
+// MOBILE GLES2 HARDWARE (its whole upstream use case on Android).  The bundled
+// SwiftShader pair is the EMULATOR's software fallback: the emulator's system
+// stack is goldfish, whose EGL SEGVs in createNativeSync (run #202), so the
+// probe is gated on ro.kernel.qemu and NEVER runs there.  On real hardware the
+// system EGL/GLES are the vendor drivers (Adreno/Mali/PowerVR) - gl4es driving
+// the GPU is orders of magnitude faster than software rasterization (the
+// 120fps-class UI target).  The probe creates a 1x1 pbuffer context, reads
+// GL_RENDERER and rejects every software/emulated name; ANY failure falls back
+// to the SwiftShader pair.  Raw dlsym typedefs - no EGL headers needed.
+static bool csarmProbeHardwareGLES(std::string &rendererOut)
+{
+    rendererOut.clear();
+    void *degl = dlopen("/system/lib64/libEGL.so", RTLD_NOW | RTLD_LOCAL);
+    if (!degl)
+        return false;
+    typedef void *(*getDisplay_t)(unsigned long);
+    typedef unsigned (*initialize_t)(void *, int *, int *);
+    typedef unsigned (*chooseConfig_t)(void *, const int *, void **, int, int *);
+    typedef void *(*createPbuffer_t)(void *, void *, const int *);
+    typedef void *(*createContext_t)(void *, void *, void *, const int *);
+    typedef unsigned (*makeCurrent_t)(void *, void *, void *, void *);
+    typedef unsigned (*destroySurface_t)(void *, void *);
+    typedef unsigned (*destroyContext_t)(void *, void *);
+    typedef unsigned (*terminate_t)(void *);
+    getDisplay_t    eglGetDisplay         = (getDisplay_t)dlsym(degl, "eglGetDisplay");
+    initialize_t    eglInitialize         = (initialize_t)dlsym(degl, "eglInitialize");
+    chooseConfig_t  eglChooseConfig       = (chooseConfig_t)dlsym(degl, "eglChooseConfig");
+    createPbuffer_t eglCreatePbufferSurface = (createPbuffer_t)dlsym(degl, "eglCreatePbufferSurface");
+    destroySurface_t eglDestroySurface    = (destroySurface_t)dlsym(degl, "eglDestroySurface");
+    createContext_t eglCreateContext      = (createContext_t)dlsym(degl, "eglCreateContext");
+    makeCurrent_t   eglMakeCurrent        = (makeCurrent_t)dlsym(degl, "eglMakeCurrent");
+    destroyContext_t eglDestroyContext    = (destroyContext_t)dlsym(degl, "eglDestroyContext");
+    terminate_t     eglTerminate          = (terminate_t)dlsym(degl, "eglTerminate");
+    if (!eglGetDisplay || !eglInitialize || !eglChooseConfig || !eglCreatePbufferSurface ||
+        !eglCreateContext || !eglMakeCurrent || !eglDestroyContext || !eglTerminate)
+        { dlclose(degl); return false; }
+    void *dpy = eglGetDisplay(0 /* EGL_DEFAULT_DISPLAY */);
+    if (!dpy || !eglInitialize(dpy, nullptr, nullptr))
+        { dlclose(degl); return false; }
+    bool ok = false;
+    do {
+        // EGL_SURFACE_TYPE=PBUFFER(2)|WINDOW(4), EGL_RENDERABLE_TYPE=ES2(0x40),
+        // RGB8, EGL_NONE - raw constants keep this header-free.
+        const int cfgAttrs[] = { 0x3053, 6, 0x3040, 0x40, 0x3024, 8, 0x3025, 8, 0x3026, 8, 0x3038 };
+        void *cfg = nullptr; int ncfg = 0;
+        if (!eglChooseConfig(dpy, cfgAttrs, &cfg, 1, &ncfg) || ncfg < 1 || !cfg) break;
+        const int pbAttrs[] = { 0x3057, 1, 0x3058, 1, 0x3038 }; // WIDTH/HEIGHT 1x1
+        void *pb = eglCreatePbufferSurface(dpy, cfg, pbAttrs);
+        if (!pb) break;
+        const int ctxAttrs[] = { 0x3098, 2, 0x3038 }; // CONTEXT_CLIENT_VERSION 2
+        void *ctx = eglCreateContext(dpy, cfg, nullptr, ctxAttrs);
+        if (!ctx) { eglDestroySurface(dpy, pb); break; }
+        if (eglMakeCurrent(dpy, pb, pb, ctx)) {
+            void *g2 = dlopen("/system/lib64/libGLESv2.so", RTLD_NOW | RTLD_LOCAL);
+            typedef const char *(*getString_t)(unsigned);
+            getString_t glGetString = (getString_t)dlsym(g2 ? g2 : degl, "glGetString");
+            const char *rend = glGetString ? glGetString(0x1F01 /* GL_RENDERER */) : nullptr;
+            rendererOut = rend ? rend : "";
+            eglMakeCurrent(dpy, nullptr, nullptr, nullptr);
+        }
+        eglDestroyContext(dpy, ctx);
+        eglDestroySurface(dpy, pb);
+        ok = true;
+    } while (false);
+    eglTerminate(dpy);
+    dlclose(degl);
+    if (ok) {
+        std::string low = rendererOut;
+        for (size_t i = 0; i < low.size(); i++)
+            low[i] = (char)tolower((unsigned char)low[i]);
+        // any software/emulated fallback stack disqualifies the system pair
+        static const char *bads[] = { "swiftshader", "goldfish", "emul", "software", "angle", "llvmpipe", nullptr };
+        for (int i = 0; bads[i]; i++)
+            if (low.find(bads[i]) != std::string::npos) { LOGI("CSARM_HWP: renderer \"%s\" matches \"%s\" - software, rejecting", rendererOut.c_str(), bads[i]); return false; }
+        ok = !rendererOut.empty();
+    }
+    return ok;
+}
+
 extern "C" int SDL_main(int argc, char *argv[])
 {
     (void)argc; (void)argv;
@@ -407,6 +489,10 @@ extern "C" int SDL_main(int argc, char *argv[])
         args.push_back("+host_thread_mode");   args.push_back("2");
         args.push_back("+mat_queue_mode");     args.push_back("2");
         args.push_back("+cl_threaded_bone_setup"); args.push_back("1");
+        // csARM round 109: uncap the frame loop - the present rate is then
+        // bounded by the render speed only (the FBA post counter in the CI
+        // log is the fps metric; the default cap would mask the measurement)
+        args.push_back("+fps_max");            args.push_back("0");
     }
     std::vector<char*> argvVec;
     argvVec.push_back(strdup("csARM"));
@@ -470,6 +556,29 @@ extern "C" int SDL_main(int argc, char *argv[])
             // gl4es's LIBGL_GLES / LIBGL_EGL loader overrides (src/gl/loader.c)
             // - the whole stack stays in-process software, zero goldfish EGL.
             setenv("SDL_VIDEO_EGL_DRIVER", gl4esEgl.c_str(), 1);
+            // csARM round 109: ro.kernel.qemu gates the backend choice.  On
+            // the emulator -> the bundled SwiftShader pair, exactly as since
+            // round 103 (the emulator's system stack is goldfish, rejected
+            // by history: run #202).  On real hardware -> probe the vendor
+            // stack and let gl4es drive the GPU (see the round 109 comment
+            // above csarmProbeHardwareGLES); any probe failure or a software
+            // renderer string falls back to the SwiftShader pair.
+            char qv[92] = {0};
+            const long ql = __system_property_get("ro.kernel.qemu", qv);
+            const bool onEmulator = (ql > 0 && qv[0] != '\0' && qv[0] != '0');
+            std::string hwRenderer;
+            const bool hwGPU = !onEmulator && csarmProbeHardwareGLES(hwRenderer);
+            LOGI("CSARM_HWP: emulator=%d hardwareGPU=%d renderer=\"%s\"",
+                 onEmulator ? 1 : 0, hwGPU ? 1 : 0, hwRenderer.c_str());
+            if (hwGPU)
+            {
+                // the vendor pair: gl4es bridges desktop GL to the phone's
+                // hardware GLES2 - the 120fps-class UI path
+                setenv("LIBGL_GLES", "/system/lib64/libGLESv2.so", 1);
+                setenv("LIBGL_EGL", "/system/lib64/libEGL.so", 1);
+            }
+            else
+            {
             if (stat(swGles.c_str(), &st) == 0)
                 setenv("LIBGL_GLES", swGles.c_str(), 1);
             // csARM round 103: the wrapper's backend pair MUST be the BUNDLED
@@ -488,6 +597,7 @@ extern "C" int SDL_main(int argc, char *argv[])
             // The ENGINE's own bare dlopen("libEGL.so") still lands on the
             // resident wrapper - the round 100 residency trick is untouched.
             setenv("LIBGL_EGL", swEgl.c_str(), 1);
+            } // round 109: else (no hardware GPU -> the bundled SwiftShader pair)
             // csARM round 74: pin the ES backend version.  gl4es's
             // eglCreateContext wrapper picks the attrib list from
             // hardext.esversion, and GetHardwareExtensions never updates

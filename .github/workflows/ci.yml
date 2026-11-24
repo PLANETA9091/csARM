@@ -1575,8 +1575,40 @@ jobs:
           "$ADB" -s emulator-5554 exec-out screencap -p > map1.png || true
           sleep 6
           "$ADB" -s emulator-5554 exec-out screencap -p > map2.png || true
+          # csARM round 109: menu-watch.  The engine's load (materials,
+          # client dll, VGUI) outruns the old 12s capture window on software
+          # GL; keep the emulator up to 15 more minutes with spaced captures
+          # so the main menu lands in an artifact.  All best-effort.
+          sleep 300
+          "$ADB" -s emulator-5554 exec-out screencap -p > map3.png || true
+          sleep 300
+          "$ADB" -s emulator-5554 exec-out screencap -p > map4.png || true
+          sleep 300
+          "$ADB" -s emulator-5554 exec-out screencap -p > map5.png || true
           "$ADB" -s emulator-5554 logcat -d > logcat_map.txt || true
           "$ADB" -s emulator-5554 logcat -d -b crash > crash_map.txt || true
+          # csARM round 109: PRESENT fps metric from the FrameBufferAndroid
+          # counters (lock#/post# pairs carry timestamps) - the optimization
+          # yardstick: whole-window average + the last 120 seconds.
+          python3 - <<'PYEOF'
+          import re
+          rows = []
+          for line in open('logcat_map.txt', errors='replace'):
+              m = re.search(r'CSARM_FBA: post#(\d+) ', line)
+              t = re.search(r'(\d\d)-(\d\d) (\d\d:\d\d:\d\d)\.(\d\d\d)', line)
+              if m and t:
+                  secs = int(t.group(3)[:2])*3600 + int(t.group(3)[3:5])*60 + int(t.group(3)[6:8]) + int(t.group(4))/1000
+                  rows.append((secs, int(m.group(1))))
+          if len(rows) >= 2:
+              span = rows[-1][0] - rows[0][0]
+              n = rows[-1][1] - rows[0][1]
+              tail = [r for r in rows if r[0] >= rows[-1][0] - 120]
+              tspan = (tail[-1][0] - tail[0][0]) or 1
+              tn = tail[-1][1] - tail[0][1]
+              print(f"::notice::PRESENT fps avg={n/span:.1f} over {span:.0f}s ({n} posts); last120s={tn/tspan:.1f}")
+          else:
+              print("::notice::PRESENT fps=n/a (no CSARM_FBA posts)")
+          PYEOF
           # --- 4b. live-engine stack dump (run #172: the engine hung silently
           # for the whole 480s window right after NET_Init, before any map
           # marker or frame - the pidof death check cannot see a hang, and no
