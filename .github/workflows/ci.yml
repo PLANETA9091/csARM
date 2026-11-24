@@ -522,7 +522,12 @@ jobs:
           # third_party/marl's cmake_minimum_required failed configuring
           # (run #233); the previous cache expired (7-day idle TTL) which is
           # why the build re-ran at all.
-          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss5
+          # -ss6: round 107 patches FrameBufferAndroid's unlock() (the NDK
+          # path never released the window lock nor posted - THE black-screen
+          # root cause, runs #251-#262); the ss5 cache returned pre-patch
+          # libs and "cache hit - build skipped" silently shipped them
+          # (run #264: CSARM_FBA=0 in logcat, lock-fail storm unchanged).
+          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss6
 
       - name: Clone SwiftShader at known-good Android-capable revision
         run: |
@@ -739,7 +744,12 @@ jobs:
 
       - name: Configure + build (ES/EGL only)
         run: |
-          if [ -f "bundle/${{ matrix.abi }}/libEGL.so" ] && [ -f "bundle/${{ matrix.abi }}/libGLESv2.so" ]; then
+          # csARM round 108: the cache-hit check now verifies the round 107
+          # CSARM_FBA marker INSIDE the binary - a stale cached bundle
+          # (pre-patch libs) is treated as a miss and rebuilt, so a source
+          # patch can never again be silently shadowed by the output cache
+          # (run #264 shipped unpatched libs with a green pipeline).
+          if [ -f "bundle/${{ matrix.abi }}/libEGL.so" ] && [ -f "bundle/${{ matrix.abi }}/libGLESv2.so" ] && strings "bundle/${{ matrix.abi }}/libEGL.so" | grep -q CSARM_FBA; then
             echo "SwiftShader cache hit — build skipped"
             exit 0
           fi
