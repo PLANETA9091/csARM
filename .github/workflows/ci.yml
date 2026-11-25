@@ -530,7 +530,7 @@ jobs:
           # -ss7: round 111 adds the content samplers (frame src/dst byte
           # probes) - the ss6 bundle predates them and the marker guard
           # cannot see the difference (the round 108 lesson, again).
-          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss7
+          key: swiftshader-libs-${{ matrix.abi }}-02a91c9c-ss8
 
       - name: Clone SwiftShader at known-good Android-capable revision
         run: |
@@ -782,6 +782,40 @@ jobs:
           print('round 111 FrameBufferAndroid dst sampler applied')
           PYEOF
           grep -q "csARM round 111" src/Main/FrameBuffer.cpp && grep -q "csARM round 111" src/Main/FrameBufferAndroid.cpp || { echo "::error::round 111 sampler patch failed"; exit 1; }
+          # csARM round 112: DRAW/CLEAR COUNTERS in the Renderer.  The round
+          # 111 verdict: the engine's render surface is black itself (src
+          # bytes 00000000 on all 41500 frames) - the copy/post is innocent.
+          # Now count what the renderer actually receives: Renderer::draw
+          # (the ONLY draw entry for ES: gl4es -> SwiftShader libGLESv2 ->
+          # Renderer::draw) and Renderer::clear.  First 3 + every 1000th.
+          #   no CSARM_SSRD draw# lines at all -> the engine never issues GL
+          #     draws (SCR_UpdateScreen skip / shader library missing) ;
+          #   draw# lines present but the round 111 src bytes stay 00000000
+          #     -> the draws land in an RT that never resolves to the
+          #     backbuffer (FBO/present path) - instrument ToGL's Present.
+          python3 - <<'PYEOF'
+          p = 'src/Renderer/Renderer.cpp'
+          s = open(p).read()
+
+          a = '#include "Renderer.hpp"'
+          assert a in s, 'Renderer include anchor missing'
+          s = s.replace(a, a + '\n#include <android/log.h> /* csARM round 112: draw counters */', 1)
+
+          a = '\tvoid Renderer::draw(DrawType drawType, unsigned int indexOffset, unsigned int count, bool update)\n\t{\n'
+          assert a in s, 'Renderer::draw anchor missing'
+          b = (a +
+               '\t\t{ static int csarmDr = 0; if (++csarmDr <= 3 || (csarmDr % 1000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_SSRD", "draw#%d type=%d count=%u", csarmDr, (int)drawType, count); } // csARM round 112\n')
+          s = s.replace(a, b, 1)
+
+          a = '\tvoid Renderer::clear(void *value, Format format, Surface *dest, const Rect &clearRect, unsigned int rgbaMask)\n\t{\n'
+          assert a in s, 'Renderer::clear anchor missing'
+          b = (a +
+               '\t\t{ static int csarmCl = 0; if (++csarmCl <= 3 || (csarmCl % 1000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_SSRD", "clear#%d mask=%x", csarmCl, rgbaMask); } // csARM round 112\n')
+          s = s.replace(a, b, 1)
+          open(p, 'w').write(s)
+          print('round 112 Renderer counters applied')
+          PYEOF
+          grep -q "csARM round 112" src/Renderer/Renderer.cpp || { echo "::error::round 112 Renderer counters patch failed"; exit 1; }
 
       - name: Setup NDK (r27d — clang-21 of NDK 30 chokes on vendored LLVM-10)
         run: |

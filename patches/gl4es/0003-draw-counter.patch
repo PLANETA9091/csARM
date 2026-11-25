@@ -1,0 +1,21 @@
+--- a/src/gl/drawing.c
++++ b/src/gl/drawing.c
+@@ -0,3 +0,4 @@
+ #include "../glx/hardext.h"
++#include <android/log.h> /* csARM round 112: draw-call counters */
+ #include "array.h"
+ #include "enum_info.h"
+@@ -562,5 +562,6 @@ glDrawElements
+ 
+ 
++    { static int csarmN = 0; if (++csarmN <= 3 || (csarmN % 1000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "elem#%d mode=0x%x count=%d type=0x%x", csarmN, (int)mode, count, (int)type); } /* csARM round 112: draw counter */
+ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) {
+     DBG(printf("glDrawElements(%s, %d, %s, %p), vtx=%p map=%p, pending=%d\n", PrintEnum(mode), count, PrintEnum(type), indices, (glstate->vao->vertex)?glstate->vao->vertex->data:NULL, (glstate->vao->elements)?glstate->vao->elements->data:NULL, glstate->list.pending);)
+     // TODO: split for count > 65535?
+@@ -670,5 +670,6 @@ glDrawArrays
+ AliasExport(void,glDrawElements,,(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices));
+ 
++    { static int csarmN = 0; if (++csarmN <= 3 || (csarmN % 1000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "arr#%d mode=0x%x first=%d count=%d", csarmN, (int)mode, first, count); } /* csARM round 112: draw counter */
+ void APIENTRY_GL4ES gl4es_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
+     DBG(printf("glDrawArrays(%s, %d, %d), list=%p pending=%d\n", PrintEnum(mode), first, count, glstate->list.active, glstate->list.pending);)
+     // special check for QUADS and TRIANGLES that need multiple of 4 or 3 vertex...
