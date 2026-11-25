@@ -2,20 +2,55 @@
 +++ b/src/gl/drawing.c
 @@ -0,3 +0,4 @@
  #include "../glx/hardext.h"
-+#include <android/log.h> /* csARM round 112: draw-call counters */
++#include <android/log.h> /* csARM r112b draw-call counters */
  #include "array.h"
  #include "enum_info.h"
-@@ -562,5 +562,6 @@ glDrawElements
- 
- 
-+    { static int csarmN = 0; if (++csarmN <= 3 || (csarmN % 1000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "elem#%d mode=0x%x count=%d type=0x%x", csarmN, (int)mode, count, (int)type); } /* csARM round 112: draw counter */
- void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) {
-     DBG(printf("glDrawElements(%s, %d, %s, %p), vtx=%p map=%p, pending=%d\n", PrintEnum(mode), count, PrintEnum(type), indices, (glstate->vao->vertex)?glstate->vao->vertex->data:NULL, (glstate->vao->elements)?glstate->vao->elements->data:NULL, glstate->list.pending);)
-     // TODO: split for count > 65535?
-@@ -670,5 +670,6 @@ glDrawArrays
+@@ -670,5 +670,6 @@
  AliasExport(void,glDrawElements,,(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices));
  
-+    { static int csarmN = 0; if (++csarmN <= 3 || (csarmN % 1000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "arr#%d mode=0x%x first=%d count=%d", csarmN, (int)mode, first, count); } /* csARM round 112: draw counter */
++    { static int csarmN_arr = 0; if (++csarmN_arr <= 3 || (csarmN_arr % 500) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "arr#%d mode=0x%x first=%d count=%d", csarmN_arr, (int)mode, first, count); } /* csARM r112b counter arr */
  void APIENTRY_GL4ES gl4es_glDrawArrays(GLenum mode, GLint first, GLsizei count) {
      DBG(printf("glDrawArrays(%s, %d, %d), list=%p pending=%d\n", PrintEnum(mode), first, count, glstate->list.active, glstate->list.pending);)
      // special check for QUADS and TRIANGLES that need multiple of 4 or 3 vertex...
+@@ -562,5 +562,6 @@
+ 
+ 
++    { static int csarmN_elem = 0; if (++csarmN_elem <= 3 || (csarmN_elem % 500) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "elem#%d mode=0x%x count=%d type=0x%x", csarmN_elem, (int)mode, count, (int)type); } /* csARM r112b counter elem */
+ void APIENTRY_GL4ES gl4es_glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices) {
+     DBG(printf("glDrawElements(%s, %d, %s, %p), vtx=%p map=%p, pending=%d\n", PrintEnum(mode), count, PrintEnum(type), indices, (glstate->vao->vertex)?glstate->vao->vertex->data:NULL, (glstate->vao->elements)?glstate->vao->elements->data:NULL, glstate->list.pending);)
+     // TODO: split for count > 65535?
+@@ -458,5 +458,6 @@
+ #define MAX_BATCH  globals4es.maxbatch
+ 
++    { static int csarmN_range = 0; if (++csarmN_range <= 3 || (csarmN_range % 500) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "range#%d mode=0x%x start=%u end=%u count=%d type=0x%x", csarmN_range, (int)mode, start, end, count, (int)type); } /* csARM r112b counter range */
+ void APIENTRY_GL4ES gl4es_glDrawRangeElements(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void *indices) {
+     DBG(printf("glDrawRangeElements(%s, %i, %i, %i, %s, @%p), inlist=%i, pending=%d\n", PrintEnum(mode), start, end, count, PrintEnum(type), indices, (glstate->list.active)?1:0, glstate->list.pending);)
+     count = adjust_vertices(mode, count);
+@@ -773,5 +773,6 @@
+ AliasExport(void,glDrawArrays,EXT,(GLenum mode, GLint first, GLsizei count));
+ 
++    { static int csarmN_multiA = 0; if (++csarmN_multiA <= 3 || (csarmN_multiA % 500) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "multiA#%d mode=0x%x primcount=%d", csarmN_multiA, (int)mode, primcount); } /* csARM r112b counter multiA */
+ void APIENTRY_GL4ES gl4es_glMultiDrawArrays(GLenum mode, const GLint *firsts, const GLsizei *counts, GLsizei primcount)
+ {
+     DBG(printf("glMultiDrawArrays(%s, %p, %p, %d), list=%p pending=%d\n", PrintEnum(mode), firsts, counts, primcount, glstate->list.active, glstate->list.pending);)
+@@ -892,5 +892,6 @@
+ AliasExport(void,glMultiDrawArrays,,(GLenum mode, const GLint *first, const GLsizei *count, GLsizei primcount));
+ 
++    { static int csarmN_multiE = 0; if (++csarmN_multiE <= 3 || (csarmN_multiE % 500) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "multiE#%d mode=0x%x primcount=%d type=0x%x", csarmN_multiE, (int)mode, primcount, (int)type); } /* csARM r112b counter multiE */
+ void APIENTRY_GL4ES gl4es_glMultiDrawElements( GLenum mode, GLsizei *counts, GLenum type, const void * const *indices, GLsizei primcount)
+ {
+     DBG(printf("glMultiDrawElements(%s, %p, %s, %p, %d), list=%p pending=%d\n", PrintEnum(mode), counts, PrintEnum(type), indices, primcount, glstate->list.active, glstate->list.pending);)
+@@ -1325,5 +1325,6 @@
+ AliasExport(void,glDrawRangeElementsBaseVertex,ARB,(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void *indices, GLint basevertex));
+ 
++    { static int csarmN_instA = 0; if (++csarmN_instA <= 3 || (csarmN_instA % 500) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "instA#%d mode=0x%x first=%d count=%d primcount=%d", csarmN_instA, (int)mode, first, count, primcount); } /* csARM r112b counter instA */
+ void APIENTRY_GL4ES gl4es_glDrawArraysInstanced(GLenum mode, GLint first, GLsizei count, GLsizei primcount) {
+     DBG(printf("glDrawArraysInstanced(%s, %d, %d, %d), list=%p pending=%d\n", PrintEnum(mode), first, count, primcount, glstate->list.active, glstate->list.pending);)
+     count = adjust_vertices(mode, count);
+@@ -1422,5 +1422,6 @@
+ AliasExport(void,glDrawArraysInstanced,ARB,(GLenum mode, GLint first, GLsizei count, GLsizei primcount));
+ 
++    { static int csarmN_instE = 0; if (++csarmN_instE <= 3 || (csarmN_instE % 500) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4D", "instE#%d mode=0x%x count=%d type=0x%x primcount=%d", csarmN_instE, (int)mode, count, (int)type, primcount); } /* csARM r112b counter instE */
+ void APIENTRY_GL4ES gl4es_glDrawElementsInstanced(GLenum mode, GLsizei count, GLenum type, const void *indices, GLsizei primcount) {
+     DBG(printf("glDrawElementsInstanced(%s, %d, %s, %p, %d), list=%p pending=%d\n", PrintEnum(mode), count, PrintEnum(type), indices, primcount, glstate->list.active, glstate->list.pending);)
+     count = adjust_vertices(mode, count);

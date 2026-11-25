@@ -1674,6 +1674,14 @@ jobs:
           "$ADB" -s emulator-5554 exec-out screencap -p > map4.png || true
           sleep 300
           "$ADB" -s emulator-5554 exec-out screencap -p > map5.png || true
+          # csARM round 113: the #269 console shows the engine STILL precaching
+          # at the end of the 23min window (software emulation is slow) - give
+          # the load 10 more minutes; if draws start (menu/plaque render) the
+          # round 111 sampler flips src bytes non-00 and the menu lands here.
+          sleep 300
+          "$ADB" -s emulator-5554 exec-out screencap -p > map6.png || true
+          sleep 300
+          "$ADB" -s emulator-5554 exec-out screencap -p > map7.png || true
           "$ADB" -s emulator-5554 logcat -d > logcat_map.txt || true
           "$ADB" -s emulator-5554 logcat -d -b crash > crash_map.txt || true
           # csARM round 109: PRESENT fps metric from the FrameBufferAndroid
