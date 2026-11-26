@@ -1310,8 +1310,26 @@ jobs:
             find "$SRC" -name '*_dir.vpk' -size +1k 2>/dev/null | while read -r V; do
               python3 scripts/extract_vpk_shaders.py "$V" || true
             done
-            find "$SRC" -path '*/shaders/*' -name '*.vcs' 2>/dev/null | wc -l || true
+            NVCS=$(find "$SRC" -path '*/shaders/*' -name '*.vcs' 2>/dev/null | wc -l || true)
+            echo "loose shader VCS in depot: $NVCS"
             find "$SRC" -path '*/shaders/*' -name '*.vcs' 2>/dev/null | head -8
+            # round 118: hard proof of the whole black-screen chain.  The
+            # engine loads shader VCS (shaders/fxc/*.vcs, DX9 asm bytecode)
+            # and togl's dx9asmtogl2 translator turns them into GLSL at
+            # runtime (glbaseshaders.cfg is only an optional precompiled
+            # cache - mat_autoload_glshaders falls back to per-shader VCS).
+            # The server-side content depot carries ZERO VCS (round 117:
+            # pak01_dir.vpk 8825 entries + platform 160, no shader paths,
+            # confirmed #273/#274), so every combo is "invalid shader
+            # combo" -> null pixel shader -> SetProgramPair refuses ->
+            # ZERO glUseProgram in gl4es -> black screen forever.
+            # A client pak01_dir.vpk (any platform) uploaded to the
+            # game-content release fixes it - this guard fails FAST
+            # instead of burning 45 min on a boot that cannot paint.
+            if [ "$NVCS" -eq 0 ]; then
+              echo "::error::depot has NO compiled shader VCS (shaders/fxc/*.vcs) - the engine can never bind a program.  Upload a client pak01_dir.vpk or a shaders/ zip to the game-content release; the extractor ships them automatically."
+              exit 1
+            fi
             # full legacy depot is ~30.5 GB — a push-to-tmp + run-as copy would
             # need 2x that inside userdata. adb root (aosp_atd = userdebug)
             # lets us push straight into the app sandbox: one copy only.
