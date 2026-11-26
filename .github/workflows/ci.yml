@@ -1305,6 +1305,15 @@ jobs:
             python3 scripts/extract_vpk_shaders.py --list "$SRC/cstrike/pak01_dir.vpk" || true
             [ -f "$SRC/platform/platform_pak01_dir.vpk" ] && \
               python3 scripts/extract_vpk_shaders.py --list "$SRC/platform/platform_pak01_dir.vpk" || true
+            # round 119: the user committed pak01_dir.vpk straight into the
+            # repo (branch main).  Pull every *_dir.vpk from the checkout
+            # into the depot so the same extractor pipeline covers repo
+            # uploads, not just release assets.
+            echo "--- repo dir-vpks to merge into the depot ---"
+            find "$GITHUB_WORKSPACE" -name '*_dir.vpk' -not -path '*/\.git/*' 2>/dev/null
+            find "$GITHUB_WORKSPACE" -name '*_dir.vpk' -not -path '*/\.git/*' -size +1k 2>/dev/null | while read -r V; do
+              cp -n "$V" "$SRC/cstrike/" || true
+            done
             echo "--- every dir-vpk in the depot ---"
             find "$SRC" -name '*_dir.vpk' -size +1k 2>/dev/null | head -40
             find "$SRC" -name '*_dir.vpk' -size +1k 2>/dev/null | while read -r V; do
