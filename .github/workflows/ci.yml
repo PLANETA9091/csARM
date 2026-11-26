@@ -1293,11 +1293,25 @@ jobs:
             # pak01_dir.vpk; extract every shaders/*.vcs entry LOOSE next to
             # the archive so the push below ships them like the dev shaders
             # it already reads.  Never fatal: parse problems keep booting.
-            python3 scripts/extract_vpk_shaders.py "$SRC/cstrike/pak01_dir.vpk" || true
-            if [ -f "$SRC/platform/platform_pak01_dir.vpk" ]; then
-              python3 scripts/extract_vpk_shaders.py "$SRC/platform/platform_pak01_dir.vpk" || true
-            fi
-            find "$SRC/cstrike/shaders" "$SRC/platform/shaders" -name '*.vcs' 2>/dev/null | wc -l || true
+            #
+            # round 117: #273 parsed the adaptive layout CLEANLY (no drift)
+            # and found ZERO vcs under shaders/ in both pak01_dir.vpk and
+            # platform_pak01_dir.vpk - and the engine binds NO programs
+            # (gl4es useProgram/viewport counters all 0).  So the compiled
+            # shaders are nowhere in THOSE two archives.  Two probes:
+            # (a) --list both archives (extension histogram + every path
+            #     containing 'shader') and (b) extract from EVERY *_dir.vpk
+            # in the depot - shaders may live in a dedicated archive.
+            python3 scripts/extract_vpk_shaders.py --list "$SRC/cstrike/pak01_dir.vpk" || true
+            [ -f "$SRC/platform/platform_pak01_dir.vpk" ] && \
+              python3 scripts/extract_vpk_shaders.py --list "$SRC/platform/platform_pak01_dir.vpk" || true
+            echo "--- every dir-vpk in the depot ---"
+            find "$SRC" -name '*_dir.vpk' -size +1k 2>/dev/null | head -40
+            find "$SRC" -name '*_dir.vpk' -size +1k 2>/dev/null | while read -r V; do
+              python3 scripts/extract_vpk_shaders.py "$V" || true
+            done
+            find "$SRC" -path '*/shaders/*' -name '*.vcs' 2>/dev/null | wc -l || true
+            find "$SRC" -path '*/shaders/*' -name '*.vcs' 2>/dev/null | head -8
             # full legacy depot is ~30.5 GB — a push-to-tmp + run-as copy would
             # need 2x that inside userdata. adb root (aosp_atd = userdebug)
             # lets us push straight into the app sandbox: one copy only.

@@ -88,13 +88,59 @@ def extract(archive_path):
         pos += 1
     return n
 
+def list_archive(archive_path):
+    """round 117 diagnostics: walk the tree WITHOUT extracting - dump the
+    extension histogram, the top directories per interesting extension and
+    every path containing 'shader' (case-insensitive)."""
+    data = open(archive_path, 'rb').read()
+    version = struct.unpack_from('<I', data, 4)[0]
+    tree_size = struct.unpack_from('<I', data, 8)[0]
+    pos = 28 if version >= 2 else 12
+    tree_end = pos + tree_size
+    ext_hist = {}
+    shader_paths = set()
+    total_entries = 0
+    while pos < tree_end and data[pos] != 0:
+        ext, pos = read_cstr(data, pos)
+        while pos < tree_end and data[pos] != 0:
+            dpath, pos = read_cstr(data, pos)
+            while pos < tree_end and data[pos] != 0:
+                fname, pos = read_cstr(data, pos)
+                crc, preload, aidx, off, ln = struct.unpack_from(
+                    '<IHHII', data, pos); pos += 16
+                term = struct.unpack_from('<H', data, pos)[0]
+                pos += 2 if term == 0xffff else 4
+                if version >= 2 and term == 0xffff:
+                    pos += 4
+                pos += preload
+                total_entries += 1
+                ext_hist[ext] = ext_hist.get(ext, 0) + 1
+                if 'shader' in dpath.lower() or 'shader' in ext.lower():
+                    shader_paths.add(f'{dpath}/{fname}.{ext}')
+            pos += 1
+        pos += 1
+    print(f'VPK-LIST {os.path.basename(archive_path)}: v{version} entries={total_entries}')
+    for ext, cnt in sorted(ext_hist.items(), key=lambda kv: -kv[1])[:15]:
+        print(f'  ext {ext!r}: {cnt}')
+    if shader_paths:
+        print(f'  shader paths: {len(shader_paths)}')
+        for pth in sorted(shader_paths)[:12]:
+            print('   ', pth[-100:])
+    else:
+        print('  shader paths: NONE')
+
 if __name__ == '__main__':
+    argv = [a for a in sys.argv[1:] if a != '--list']
+    listing = '--list' in sys.argv
     total = 0
-    for p in sys.argv[1:]:
+    for p in argv:
         if os.path.exists(p):
-            k = extract(p)
-            print(f'VPK-EXTRACT {os.path.basename(p)}: {k} VCS extracted')
-            total += k
+            if listing:
+                list_archive(p)
+            else:
+                k = extract(p)
+                print(f'VPK-EXTRACT {os.path.basename(p)}: {k} VCS extracted')
+                total += k
         else:
             print(f'VPK-EXTRACT {p}: archive missing - skip')
     print(f'VPK-EXTRACT TOTAL: {total}')
