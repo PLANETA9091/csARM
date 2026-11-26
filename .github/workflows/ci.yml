@@ -1106,6 +1106,33 @@ jobs:
           SRC=""
           [ -d "$HOME/csgo-content/cstrike" ] && SRC="$HOME/csgo-content"
           [ -z "$SRC" ] && [ -d "$HOME/csgo-content/csgo/cstrike" ] && SRC="$HOME/csgo-content/csgo"
+          # round 120: accept a dedicated shaders upload BEFORE resolving the
+          # depot root.  CS:GO ships the compiled game shaders
+          # (shaders/fxc/*.vcs, ps20b/ps30) as LOOSE files in csgo/shaders/
+          # - NOT inside any vpk (verified: the client pak01 has zero vcs
+          # entries; the platform vpk only carries the 524 platform/engine
+          # shaders).  Merge whatever form the upload takes into
+          # <root>/cstrike/shaders so the staging push carries it.
+          if [ ! -d "$HOME/csgo-content/cstrike" ]; then
+            for CAND in "$HOME/csgo-content/shaders" "$HOME/csgo-content/csgo/shaders" "$HOME/csgo-content/csgo/cstrike/shaders"; do
+              if [ -d "$CAND" ]; then
+                echo "shaders-only upload found at $CAND - building cstrike/ root"
+                mkdir -p "$HOME/csgo-content/cstrike"
+                mv "$CAND" "$HOME/csgo-content/cstrike/shaders"
+                break
+              fi
+            done
+          fi
+          # normalize: accept either a zip of the csgo/ folder CONTENTS or a
+          # zip of the folder itself (single top-level csgo/ entry)
+          SRC=""
+          [ -d "$HOME/csgo-content/cstrike" ] && SRC="$HOME/csgo-content"
+          [ -z "$SRC" ] && [ -d "$HOME/csgo-content/csgo/cstrike" ] && SRC="$HOME/csgo-content/csgo"
+          # merge bare shaders into an existing depot too
+          if [ -n "$SRC" ] && [ -d "$HOME/csgo-content/shaders" ] && [ ! -d "$SRC/cstrike/shaders" ]; then
+            echo "bare shaders/ upload found - moving into cstrike/"
+            mv "$HOME/csgo-content/shaders" "$SRC/cstrike/shaders"
+          fi
           if [ -z "$SRC" ]; then
             echo "::error::no cstrike/ directory found in content archive"
             find "$HOME/csgo-content" -maxdepth 2 | head -25
