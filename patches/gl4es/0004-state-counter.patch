@@ -1,0 +1,50 @@
+--- a/src/gl/program.c
++++ b/src/gl/program.c
+@@ -809,5 +809,6 @@
+ }
+ 
++    { static int csarmS_useprg = 0; if (++csarmS_useprg <= 3 || (csarmS_useprg % 200) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "useprg#%d prog=%u", csarmS_useprg, program); } /* csARM r114 counter useprg */
+ void APIENTRY_GL4ES gl4es_glUseProgram(GLuint program) {
+     DBG(printf("glUseProgram(%d) old=%d\n", program, glstate->glsl->program);)
+     PUSH_IF_COMPILING(glUseProgram);
+--- a/src/gl/raster.c
++++ b/src/gl/raster.c
+@@ -79,5 +79,6 @@
+ }
+ 
++    { static int csarmS_viewport = 0; if (++csarmS_viewport <= 3 || (csarmS_viewport % 200) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "viewport#%d %dx%d@%d,%d", csarmS_viewport, width, height, x, y); } /* csARM r114 counter viewport */
+ void APIENTRY_GL4ES gl4es_glViewport(GLint x, GLint y, GLsizei width, GLsizei height) {
+ 	if (glstate->fbo.current_fb->id != 0) {
+     	gltexture_t *tex = gl4es_getTexture(glstate->fbo.current_fb->t_color[0], glstate->fbo.current_fb->color[0]);
+--- a/src/gl/enable.c
++++ b/src/gl/enable.c
+@@ -286,5 +286,6 @@
+ }
+ 
++    { static int csarmS_enable = 0; if (++csarmS_enable <= 3 || (csarmS_enable % 2000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "enable#%d cap=0x%x", csarmS_enable, (int)cap); } /* csARM r114 counter enable */
+ void APIENTRY_GL4ES gl4es_glEnable(GLenum cap) {
+     DBG(printf("glEnable(%s), glstate->list.pending=%d\n", PrintEnum(cap), glstate->list.pending);)
+     if(!glstate->list.pending) {
+--- a/src/gl/uniform.c
++++ b/src/gl/uniform.c
+@@ -292,5 +292,6 @@
+     GoUniformfv(glprogram, location, 4, 1, fl);
+ }
++    { static int csarmS_unif1i = 0; if (++csarmS_unif1i <= 3 || (csarmS_unif1i % 1000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "unif1i#%d loc=%d v=%d", csarmS_unif1i, location, v0); } /* csARM r114 counter unif1i */
+ void APIENTRY_GL4ES gl4es_glUniform1i(GLint location, GLint v0) {
+     DBG(printf("glUniform1i(%d, %d)\n", location, v0);)
+     PUSH_IF_COMPILING(glUniform1i);
+@@ -352,5 +352,6 @@
+     GoUniformfv(glprogram, location, 3, count, value);
+ }
++    { static int csarmS_unif4fv = 0; if (++csarmS_unif4fv <= 3 || (csarmS_unif4fv % 1000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "unif4fv#%d loc=%d cnt=%d", csarmS_unif4fv, location, count); } /* csARM r114 counter unif4fv */
+ void APIENTRY_GL4ES gl4es_glUniform4fv(GLint location, GLsizei count, const GLfloat *value) {
+     DBG(printf("glUniform4fv(%d, %d, %p) =>(%f %f, %f, %f)\n", location, count, value, value[0], value[1], value[2], value[3]);)
+     PUSH_IF_COMPILING(glUniform4fv);
+@@ -636,5 +636,6 @@
+         errorShim(GL_INVALID_OPERATION);    // no GLSL hardware
+ }
++    { static int csarmS_unifm4 = 0; if (++csarmS_unifm4 <= 3 || (csarmS_unifm4 % 1000) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "unifm4#%d loc=%d cnt=%d", csarmS_unifm4, location, count); } /* csARM r114 counter unifm4 */
+ void APIENTRY_GL4ES gl4es_glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) {
+     DBG(printf("glUniformMatrix4fv(%d, %d, %d, %p) p=>(%f, %f, %f, %f, %f...)\n", location, count, transpose, value, value[0], value[1], value[2], value[3], value[4]);)
+     PUSH_IF_COMPILING(glUniformMatrix4fv);
