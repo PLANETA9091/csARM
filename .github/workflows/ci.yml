@@ -1284,6 +1284,20 @@ jobs:
           if [ "${CONTENT:-none}" = "pack" ]; then
             [ -n "${SRC:-}" ] || { echo "::error::CONTENT=pack but SRC unset"; exit 1; }
             T0=$SECONDS
+            # csARM round 115: the console said the whole story -
+            # "!!!!!Using invalid shader combo!!!!! Shader: sky_vs20 static: 0
+            # dynamic: 0" + "SetProgramPair ... lightmappedgeneric_vs30 and
+            # pixel shader null!" -> the engine's shader FILE layer works
+            # (engine_post/colorout/depthwrite ps30 load fine) but the GAME
+            # shader VCS never resolve.  The depot packs them inside
+            # pak01_dir.vpk; extract every shaders/*.vcs entry LOOSE next to
+            # the archive so the push below ships them like the dev shaders
+            # it already reads.  Never fatal: parse problems keep booting.
+            python3 scripts/extract_vpk_shaders.py "$SRC/cstrike/pak01_dir.vpk" || true
+            if [ -f "$SRC/platform/platform_pak01_dir.vpk" ]; then
+              python3 scripts/extract_vpk_shaders.py "$SRC/platform/platform_pak01_dir.vpk" || true
+            fi
+            find "$SRC/cstrike/shaders" "$SRC/platform/shaders" -name '*.vcs' 2>/dev/null | wc -l || true
             # full legacy depot is ~30.5 GB — a push-to-tmp + run-as copy would
             # need 2x that inside userdata. adb root (aosp_atd = userdebug)
             # lets us push straight into the app sandbox: one copy only.
