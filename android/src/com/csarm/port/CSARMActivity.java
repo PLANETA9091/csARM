@@ -152,6 +152,14 @@ public class CSARMActivity extends SDLActivity {
             // shaderapidx9 — without this CMaterialSystem dlopens shaderapidx9,
             // fails, and the engine silently hangs before the first tick
             sb.append("-noshaderapi\n");
+            // round 122: create GL shader programs on demand from the VCS
+            // bytecode.  #276 proved every combo ends up INVALID otherwise:
+            // CShaderManager::LoadShaderCache("glshaders.cfg") finds no MOD
+            // cache file and the only remaining creation path is gated on
+            // m_bCreateShadersOnDemand (vertexshaderdx8.cpp:929 = editor mode
+            // or -shadersondemand).  With the flag, each requested combo
+            // goes through CreateD3DVertexShader -> togl dx9asmtogl2 -> GLSL.
+            sb.append("-shadersondemand\n");
             // round 26: -no_scaleform_menu_on_boot — no Scaleform runtime is
             // shipped; without the flag the client SIGSEGVs in
             // CCreateMainMenuScreenScaleform::LoadDialog (NULL g_pScaleformUI)
