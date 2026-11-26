@@ -48,11 +48,21 @@ def extract(archive_path):
                 fname, pos = read_cstr(data, pos)
                 crc, preload, aidx, off, ln = struct.unpack_from(
                     '<IHHII', data, pos); pos += 16
-                term = struct.unpack_from('<H', data, pos)[0]; pos += 2
-                if term != 0xffff:
-                    print(f'VPK-EXTRACT {name}: term 0x{term:x} != 0xffff at {fname}')
-                if version >= 2:
-                    pos += 4          # archiveMD5Index
+                # adaptive entry layout (round 116): #272 proved the real
+                # pak01_dir.vpk desyncs with a forced per-entry 0xffff
+                # terminator ("term 0x6f63 != 0xffff at ..." drift).  Peek
+                # the next u16: 0xffff -> v1 terminator present, consume it
+                # (then the v2 u32 archiveMD5Index); otherwise treat those
+                # bytes as the v2 u32 index directly (CS:GO writer omits
+                # the terminator).  A u16 peek is safe: md5 indexes are
+                # small section ordinals, never 0xffff in practice.
+                term = struct.unpack_from('<H', data, pos)[0]
+                if term == 0xffff:
+                    pos += 2
+                    if version >= 2:
+                        pos += 4      # archiveMD5Index
+                else:
+                    pos += 4          # v2: archiveMD5Index, no terminator
                 pre = data[pos:pos + preload]; pos += preload
                 if ext.lower() != 'vcs' or not dpath.lower().startswith('shaders'):
                     continue
