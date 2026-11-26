@@ -1341,6 +1341,15 @@ jobs:
             find "$GITHUB_WORKSPACE" -name '*_dir.vpk' -not -path '*/\.git/*' -size +1k 2>/dev/null | while read -r V; do
               cp -n "$V" "$SRC/cstrike/" || true
             done
+            # round 121: loose shader VCS committed straight into the repo
+            # (branch add-shaders carries shaders/{fxc,psh,vsh} at the
+            # checkout root).  Merge any such tree into the depot.
+            if [ -d "$GITHUB_WORKSPACE/shaders" ]; then
+              NREPO=$(find "$GITHUB_WORKSPACE/shaders" -name '*.vcs' 2>/dev/null | wc -l)
+              echo "repo loose shaders: $NREPO vcs - merging"
+              mkdir -p "$SRC/cstrike/shaders"
+              cp -r "$GITHUB_WORKSPACE/shaders/." "$SRC/cstrike/shaders/" || true
+            fi
             echo "--- every dir-vpk in the depot ---"
             find "$SRC" -name '*_dir.vpk' -size +1k 2>/dev/null | head -40
             find "$SRC" -name '*_dir.vpk' -size +1k 2>/dev/null | while read -r V; do
