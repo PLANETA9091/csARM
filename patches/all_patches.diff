@@ -4981,6 +4981,38 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  #include "tier0/memdbgon.h"
  
  // mapping from vcs file basename to shader combo semantics information.
+@@ -814,6 +814,15 @@
+ 	m_ShaderFileCache( 32 )
+ {
+ 	m_bCreateShadersOnDemand = false;
++#ifdef __ANDROID__
++	// round 125: force at construction time - shaders load before
++	// CShaderManager::Init() runs and every m_bCreateShadersOnDemand
++	// gate (the m_pCreationData allocation and both bytecode cache
++	// branches) is evaluated at LOAD time.  #280 proved the miss:
++	// 79389 VSCREATE attempts, every one bytes=0 - the creation data
++	// was never stored because the flag was still false during load.
++	m_bCreateShadersOnDemand = true;
++#endif
+ 
+ #ifdef DYNAMIC_SHADER_COMPILE
+ 	m_pShaderCompiler30 = 0;
+@@ -927,5 +927,15 @@
+ 	// incompatible with the 360, violates loading system
+ 	// only used by PC to help tools reduce d3d footprint
+ 	m_bCreateShadersOnDemand = IsPC() && ( ShaderUtil()->InEditorMode() || CommandLine()->CheckParm( "-shadersondemand" ) );
++#ifdef __ANDROID__
++	// round 124: split-module builds give every .so its own tier1
++	// CCommandLine instance; materialsystem never sees the launcher
++	// argv (SOD log in #279: parm=0 despite CSARM_ARGS carrying the
++	// flag).  Force on-demand shader creation - the only combo path
++	// left without a glshaders.cfg cache.
++	m_bCreateShadersOnDemand = true;
++#endif
++	CSARM_SHDR( "SOD m_bCreateShadersOnDemand=%d editor=%d parm=%d", (int)m_bCreateShadersOnDemand,
++		(int)ShaderUtil()->InEditorMode(), CommandLine()->FindParm( "-shadersondemand" ) );
+ 
+ #ifdef DYNAMIC_SHADER_COMPILE
 @@ -2637,6 +2643,18 @@
  FileHandle_t CShaderManager::OpenFileAndLoadHeader( const char *pFileName, ShaderHeader_t *pHeader )
  {
@@ -5000,6 +5032,97 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  	if ( fp == FILESYSTEM_INVALID_HANDLE )
  	{
  		return FILESYSTEM_INVALID_HANDLE;
+@@ -2842,80 +2842,84 @@
+ 	ShaderLookup_t* pLookup = (ShaderLookup_t *)pContext;
+ 	ShaderFileCache_t *pFileCache = &m_ShaderFileCache[pLookup->m_hShaderFileCache];
++	CSARM_SHDR( "VER5 enter lookup=%p buf=%p dataOff=%d nDyn=%d", (void *)pLookup, (void *)pComboBuffer,
++		(int)pLookup->m_nDataOffset, (int)pLookup->m_ShaderStaticCombos.m_nCount );
+ 	uint8 *pCompressedShaders = pComboBuffer + pLookup->m_nDataOffset;
+ 
+ 	uint8 *pUnpackBuffer = new uint8[MAX_SHADER_UNPACKED_BLOCK_SIZE];
+ 
+ 	char *debugLabelPtr = debugLabel;	// can be moved to point at something else if need be
+ 	
+ 	// now, loop through all blocks
+ 	bool bOK = true;
+ 	while ( bOK )
+ 	{
++		CSARM_SHDR( "VER5 block size=0x%08X", nBlockSize );
+ 		uint32 nBlockSize = NextULONG( pCompressedShaders );
+ 		if ( nBlockSize == 0xffffffff )	
+ 		{
+ 			// any more blocks?
+ 			break;
+ 		}
+ 
+ 		switch( nBlockSize  & 0xc0000000 )
+ 		{
+ 			case 0:											// bzip2
+ 			{
+ 				// uncompress
+ 				uint32 nOutsize = MAX_SHADER_UNPACKED_BLOCK_SIZE;
+ 				int nRslt = BZ2_bzBuffToBuffDecompress( 
+ 					reinterpret_cast<char *>( pUnpackBuffer ),
+ 					&nOutsize,
+ 					reinterpret_cast<char *>( pCompressedShaders ),
+ 					nBlockSize, 1, 0 );
+ 				if ( nRslt < 0 )
+ 				{
+ 					// errors are negative for bzip
+ 					Assert( 0 );
+ 					DevWarning( "BZIP Error (%d) decompressing shader", nRslt );
+ 					bOK = false;
+ 				}
+ 				
+ 				pCompressedShaders += nBlockSize;
+ 				nBlockSize = nOutsize;		// how much data there is
+ 			}
+ 			break;
+ 
+ 			case 0x80000000:								// uncompressed
+ 			{
+ 				// not compressed, as is
+ 				nBlockSize &= 0x3fffffff;
+ 				memcpy( pUnpackBuffer, pCompressedShaders, nBlockSize );
+ 				pCompressedShaders += nBlockSize;
+ 			}
+ 			break;
+ 
+ 			case 0x40000000:								// lzma compressed
+ 			{
+ 				CLZMA lzDecoder;
+ 				nBlockSize &= 0x3fffffff;
+ 				
+ 				size_t nOutsize = lzDecoder.Uncompress(
+ 					reinterpret_cast<uint8 *>( pCompressedShaders ),
+ 					pUnpackBuffer );
+ 				pCompressedShaders += nBlockSize;
+ 				nBlockSize = nOutsize;		// how much data there is
+ 			}
+ 			break;
+ 			
+ 			default:
+ 			{
+ 				Assert( 0 );
+ 				Error(" unrecognized shader compression type = file corrupt?");
+ 				bOK = false;
+ 			}
+ 		}
+ 		
+ 		uint8 *pReadPtr = pUnpackBuffer;
+ 		while ( pReadPtr < pUnpackBuffer+nBlockSize )
+ 		{
+ 			uint32 nCombo_ID = NextULONG( pReadPtr );
++			CSARM_SHDR( "VER5 rec id=%u size=%u", nCombo_ID, nShaderSize );
+ 			uint32 nShaderSize = NextULONG( pReadPtr );
+ 			
+ #if defined( WRITE_ASSEMBLY )
+@@ -3023,4 +3023,5 @@
++	CSARM_SHDR( "VER5 exit bOK=%d", (int)bOK );
+ 
+ 	delete[] pUnpackBuffer;
+ 
+ 	return bOK;
 @@ -3246,11 +3264,15 @@
  		char filename[MAX_PATH];
  		Q_snprintf( filename, MAX_PATH, "shaders\\%s\\%s" SHADER_FNAME_EXTENSION, bVertexShader ? "vsh" : "psh", pName );
@@ -5101,70 +5224,6 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  		nStartingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx].m_nFileOffset;
  		nEndingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx+1].m_nFileOffset;
  	}
-@@ -814,6 +814,15 @@
- 	m_ShaderFileCache( 32 )
- {
- 	m_bCreateShadersOnDemand = false;
-+#ifdef __ANDROID__
-+	// round 125: force at construction time - shaders load before
-+	// CShaderManager::Init() runs and every m_bCreateShadersOnDemand
-+	// gate (the m_pCreationData allocation and both bytecode cache
-+	// branches) is evaluated at LOAD time.  #280 proved the miss:
-+	// 79389 VSCREATE attempts, every one bytes=0 - the creation data
-+	// was never stored because the flag was still false during load.
-+	m_bCreateShadersOnDemand = true;
-+#endif
- 
- #ifdef DYNAMIC_SHADER_COMPILE
- 	m_pShaderCompiler30 = 0;
-@@ -927,5 +927,15 @@
- 	// incompatible with the 360, violates loading system
- 	// only used by PC to help tools reduce d3d footprint
- 	m_bCreateShadersOnDemand = IsPC() && ( ShaderUtil()->InEditorMode() || CommandLine()->CheckParm( "-shadersondemand" ) );
-+#ifdef __ANDROID__
-+	// round 124: split-module builds give every .so its own tier1
-+	// CCommandLine instance; materialsystem never sees the launcher
-+	// argv (SOD log in #279: parm=0 despite CSARM_ARGS carrying the
-+	// flag).  Force on-demand shader creation - the only combo path
-+	// left without a glshaders.cfg cache.
-+	m_bCreateShadersOnDemand = true;
-+#endif
-+	CSARM_SHDR( "SOD m_bCreateShadersOnDemand=%d editor=%d parm=%d", (int)m_bCreateShadersOnDemand,
-+		(int)ShaderUtil()->InEditorMode(), CommandLine()->FindParm( "-shadersondemand" ) );
- 
- #ifdef DYNAMIC_SHADER_COMPILE
-@@ -2842,5 +2842,7 @@
- 	ShaderLookup_t* pLookup = (ShaderLookup_t *)pContext;
- 	ShaderFileCache_t *pFileCache = &m_ShaderFileCache[pLookup->m_hShaderFileCache];
- 	uint8 *pCompressedShaders = pComboBuffer + pLookup->m_nDataOffset;
-+	CSARM_SHDR( "VER5 enter lookup=%p buf=%p dataOff=%d nDyn=%d", (void *)pLookup, (void *)pComboBuffer,
-+		(int)pLookup->m_nDataOffset, (int)pLookup->m_ShaderStaticCombos.m_nCount );
- 
- 	uint8 *pUnpackBuffer = new uint8[MAX_SHADER_UNPACKED_BLOCK_SIZE];
-@@ -2850,7 +2850,8 @@
- 	// now, loop through all blocks
- 	bool bOK = true;
- 	while ( bOK )
- 	{
-+		CSARM_SHDR( "VER5 block size=0x%08X", nBlockSize );
- 		uint32 nBlockSize = NextULONG( pCompressedShaders );
- 		if ( nBlockSize == 0xffffffff )	
- 		{
-@@ -2915,7 +2915,8 @@
- 		uint8 *pReadPtr = pUnpackBuffer;
- 		while ( pReadPtr < pUnpackBuffer+nBlockSize )
- 		{
- 			uint32 nCombo_ID = NextULONG( pReadPtr );
-+			CSARM_SHDR( "VER5 rec id=%u size=%u", nCombo_ID, nShaderSize );
- 			uint32 nShaderSize = NextULONG( pReadPtr );
- 			
- #if defined( WRITE_ASSEMBLY )
-@@ -3023,4 +3023,5 @@
-+	CSARM_SHDR( "VER5 exit bOK=%d", (int)bOK );
- 
- 	delete[] pUnpackBuffer;
- 
- 	return bOK;
 @@ -3420,3 +3420,7 @@
 +	CSARM_SHDR( "LCS ver=%d static=%d dyn=%d total=%d start=%u end=%u bytes=%u",
 +		(int)pFileCache->m_Header.m_nVersion, (int)pFileCache->m_Header.m_nNumStaticCombos,
