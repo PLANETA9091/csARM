@@ -5101,6 +5101,32 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  		nStartingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx].m_nFileOffset;
  		nEndingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx+1].m_nFileOffset;
  	}
+@@ -927,5 +927,7 @@
+ 	// incompatible with the 360, violates loading system
+ 	// only used by PC to help tools reduce d3d footprint
+ 	m_bCreateShadersOnDemand = IsPC() && ( ShaderUtil()->InEditorMode() || CommandLine()->CheckParm( "-shadersondemand" ) );
++	CSARM_SHDR( "SOD m_bCreateShadersOnDemand=%d editor=%d parm=%d", (int)m_bCreateShadersOnDemand,
++		(int)ShaderUtil()->InEditorMode(), CommandLine()->FindParm( "-shadersondemand" ) );
+ 
+ #ifdef DYNAMIC_SHADER_COMPILE
+@@ -4165,6 +4165,8 @@
+ 	HardwareShader_t dxshader = vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[vshIndex];
+ #endif
+ 
+ 	if ( IsPC() && ( dxshader == INVALID_HARDWARE_SHADER ) && m_bCreateShadersOnDemand )
+ 	{
++		CSARM_SHDR( "VSCREATE vs \"%s\" idx=%d bytes=%d", m_ShaderSymbolTable.String( vshLookup.m_Name ),
++			vshIndex, vshLookup.m_ShaderStaticCombos.m_pCreationData ? (int)vshLookup.m_ShaderStaticCombos.m_pCreationData[vshIndex].ByteCode.Count() : -1 );
+ #ifdef DYNAMIC_SHADER_COMPILE
+@@ -4303,6 +4303,8 @@
+ 	HardwareShader_t dxshader = pshLookup.m_ShaderStaticCombos.m_pHardwareShaders[pshIndex];
+ #endif
+ 
+ 	if ( IsPC() && ( dxshader == INVALID_HARDWARE_SHADER ) && m_bCreateShadersOnDemand )
+ 	{
++		CSARM_SHDR( "VSCREATE ps \"%s\" idx=%d bytes=%d", m_ShaderSymbolTable.String( pshLookup.m_Name ),
++			pshIndex, pshLookup.m_ShaderStaticCombos.m_pCreationData ? (int)pshLookup.m_ShaderStaticCombos.m_pCreationData[pshIndex].ByteCode.Count() : -1 );
+ #ifdef DYNAMIC_SHADER_COMPILE
 diff -ruN a/togl/dxabstract.cpp b/togl/dxabstract.cpp
 --- a/togl/dxabstract.cpp
 +++ b/togl/dxabstract.cpp

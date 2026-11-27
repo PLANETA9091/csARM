@@ -7,6 +7,20 @@
  void APIENTRY_GL4ES gl4es_glUseProgram(GLuint program) {
      DBG(printf("glUseProgram(%d) old=%d\n", program, glstate->glsl->program);)
      PUSH_IF_COMPILING(glUseProgram);
+@@ -728,5 +728,6 @@
+ }
+ 
++    { static int csarmS_lnk = 0; if (++csarmS_lnk <= 3 || (csarmS_lnk % 20) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "lnk#%d id=%u", csarmS_lnk, program); } /* csARM r114 counter lnk */
+ void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
+     DBG(printf("glLinkProgram(%d)\n", program);)
+     FLUSH_BEGINEND;
+@@ -367,5 +367,6 @@
+ }
+ 
++    { static int csarmS_pgstat = 0; if (++csarmS_pgstat <= 3 || (csarmS_pgstat % 20) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "pgstat#%d id=%u pn=0x%x st=%d", csarmS_pgstat, program, (unsigned)pname, params ? *params : -99); } /* csARM r114 counter pgstat */
+ void APIENTRY_GL4ES gl4es_glGetProgramiv(GLuint program, GLenum pname, GLint *params) {
+     DBG(printf("glGetProgramiv(%d, %s, %p)\n", program, PrintEnum(pname), params);)
+     FLUSH_BEGINEND;
 --- a/src/gl/raster.c
 +++ b/src/gl/raster.c
 @@ -79,5 +79,6 @@
@@ -48,3 +62,26 @@
  void APIENTRY_GL4ES gl4es_glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value) {
      DBG(printf("glUniformMatrix4fv(%d, %d, %d, %p) p=>(%f, %f, %f, %f, %f...)\n", location, count, transpose, value, value[0], value[1], value[2], value[3], value[4]);)
      PUSH_IF_COMPILING(glUniformMatrix4fv);
+--- a/src/gl/shader.c
++++ b/src/gl/shader.c
+@@ -145,5 +145,6 @@
+ }
+ 
++    { static int csarmS_shsrc = 0; if (++csarmS_shsrc <= 3 || (csarmS_shsrc % 20) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "shsrc#%d id=%u cnt=%d", csarmS_shsrc, shader, (int)count); } /* csARM r114 counter shsrc */
+ void APIENTRY_GL4ES gl4es_glShaderSource(GLuint shader, GLsizei count, const GLchar * const *string, const GLint *length) {
+     DBG(printf("glShaderSource(%d, %d, %p, %p)\n", shader, count, string, length);)
+     // sanity check
+@@ -116,5 +116,6 @@
+ }
+ 
++    { static int csarmS_shcomp = 0; if (++csarmS_shcomp <= 3 || (csarmS_shcomp % 20) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "shcomp#%d id=%u", csarmS_shcomp, shader); } /* csARM r114 counter shcomp */
+ void APIENTRY_GL4ES gl4es_glCompileShader(GLuint shader) {
+     DBG(printf("glCompileShader(%d)\n", shader);)
+     // look for the shader
+@@ -308,5 +308,6 @@
+ }
+ 
++    { static int csarmS_shstat = 0; if (++csarmS_shstat <= 3 || (csarmS_shstat % 20) == 0) __android_log_print(ANDROID_LOG_INFO, "CSARM_GL4S", "shstat#%d id=%u pn=0x%x st=%d", csarmS_shstat, shader, (unsigned)pname, params ? *params : -99); } /* csARM r114 counter shstat */
+ void APIENTRY_GL4ES gl4es_glGetShaderiv(GLuint shader, GLenum pname, GLint *params) {
+     DBG(printf("glGetShaderiv(%d, %s, %p)\n", shader, PrintEnum(pname), params);)
+     // find shader
