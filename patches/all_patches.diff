@@ -5232,6 +5232,31 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  	lookup.m_nDataOffset = nStartingOffset - nAlignedOffset;
  
  	bool bOK = true;
+@@ -3439,12 +3439,23 @@
+ 		// single optimal read of all dynamic combos into monolithic buffer
+ 		uint8 *pOptimalBuffer = (uint8 *)g_pFullFileSystem->AllocOptimalReadBuffer( hFile, nAlignedBytesToRead, nAlignedOffset );
+ 		g_pFullFileSystem->Seek( hFile, nAlignedOffset, FILESYSTEM_SEEK_HEAD );
++		int nRead = g_pFullFileSystem->Read( pOptimalBuffer, nAlignedBytesToRead, hFile );
++		CSARM_SHDR( "LCSREAD off=%u bytes=%u got=%d", nAlignedOffset, nAlignedBytesToRead, nRead );
++		if ( nRead <= 0 )
++		{
++			// csARM r127: the optimal read returned nothing on this filesystem -
++			// re-seek and retry once before leaving the combos INVALID with bOK=true.
++			CSARM_SHDR( "LCSREAD fallback to plain read" );
++			g_pFullFileSystem->Seek( hFile, nAlignedOffset, FILESYSTEM_SEEK_HEAD );
++			nRead = g_pFullFileSystem->Read( pOptimalBuffer, nAlignedBytesToRead, hFile );
++			CSARM_SHDR( "LCSREAD plain got=%d", nRead );
++		}
+-		if( g_pFullFileSystem->Read( pOptimalBuffer, nAlignedBytesToRead, hFile ) )
++		if( nRead > 0 )
+ 		{
+ 			if ( pFileCache->IsOldVersion() )
+ 			{
+ 				bOK = CreateDynamicCombos_Ver4( &lookup, pOptimalBuffer );
+ 			}
+ 			else
+ 			{
+ 				bOK = CreateDynamicCombos_Ver5( &lookup, pOptimalBuffer, debugLabel );
 @@ -4165,6 +4165,8 @@
  	HardwareShader_t dxshader = vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[vshIndex];
  #endif

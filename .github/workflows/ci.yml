@@ -1303,9 +1303,12 @@ jobs:
           [ "$OK" = "1" ] || { echo "::error::APK install failed"; "$ADB" -s emulator-5554 logcat -d > logcat_boot.txt || true; exit 1; }
           "$ADB" -s emulator-5554 shell settings put global window_animation_scale 0 || true
           # csARM round 86: the 256KB default main buffer rotated out the
-          # one-time CSARM_VP SetViewport log in #241 — 4MB keeps every
-          # marker from all boot stages in the final logcat -d dump.
-          "$ADB" -s emulator-5554 shell logcat -G 4M || true
+          # one-time CSARM_VP SetViewport log in #241.  Round 127: shader
+          # loading finished before frame 271 in #286 while the first
+          # on-demand dump only ran minutes later — the 4MB ring ate the
+          # one-time LCS/VER5 loader lines.  16MB holds ~120k lines, the
+          # full boot plus the map-phase VSCREATE repeats.
+          "$ADB" -s emulator-5554 shell logcat -G 16M || true
           # --- part 0: stage game content into the app sandbox (once; the
           # same filesDir serves the later native/arm64/swiftshader stages) ---
           if [ "${CONTENT:-none}" = "pack" ]; then
@@ -1522,6 +1525,15 @@ jobs:
           "$ADB" -s emulator-5554 exec-out screencap -p > boot2.png || true
           "$ADB" -s emulator-5554 logcat -d > logcat_boot.txt || true
           "$ADB" -s emulator-5554 logcat -d -b crash > crash.txt || true
+          # csARM round 127: dump the SHDR loader lines RIGHT AFTER boot —
+          # the one-time LCS/VER5/LCSREAD lines from shader loading must
+          # survive the map-phase VSCREATE flood that rotates the ring.
+          "$ADB" -s emulator-5554 logcat -d -s CSARM_SHDR:V > logcat_early.txt || true
+          wc -c logcat_early.txt || true
+          # and pull one real .vcs for offline layout simulation (the
+          # 28-byte ShaderHeader_t / static-combo records hypothesis)
+          "$ADB" -s emulator-5554 shell "run-as com.csarm.port cat files/cstrike/shaders/fxc/sky_vs20.vcs" > sky_vs20.vcs 2>/dev/null || true
+          wc -c sky_vs20.vcs || true
           echo "=== csARM boot chain ==="
           grep -E "CSARM_" logcat_boot.txt | head -80 || true
           echo "=== engine spew sample ==="
@@ -1983,6 +1995,8 @@ jobs:
             logcat_sw.txt
             logcat_map.txt
             logcat_stream.txt
+            logcat_early.txt
+            sky_vs20.vcs
             crash.txt
             crash_sw.txt
             crash_map.txt
