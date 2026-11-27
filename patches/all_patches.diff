@@ -5116,7 +5116,7 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
 +#endif
  
  #ifdef DYNAMIC_SHADER_COMPILE
- 	SaveShaderCache("glshaders_OSX.cfg");
+ 	m_pShaderCompiler30 = 0;
 @@ -927,5 +927,15 @@
  	// incompatible with the 360, violates loading system
  	// only used by PC to help tools reduce d3d footprint
