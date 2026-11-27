@@ -5133,6 +5133,46 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
 +		(int)ShaderUtil()->InEditorMode(), CommandLine()->FindParm( "-shadersondemand" ) );
  
  #ifdef DYNAMIC_SHADER_COMPILE
+@@ -2842,5 +2842,7 @@
+ 	ShaderLookup_t* pLookup = (ShaderLookup_t *)pContext;
+ 	ShaderFileCache_t *pFileCache = &m_ShaderFileCache[pLookup->m_hShaderFileCache];
+ 	uint8 *pCompressedShaders = pComboBuffer + pLookup->m_nDataOffset;
++	CSARM_SHDR( "VER5 enter lookup=%p buf=%p dataOff=%d nDyn=%d", (void *)pLookup, (void *)pComboBuffer,
++		(int)pLookup->m_nDataOffset, (int)pLookup->m_ShaderStaticCombos.m_nCount );
+ 
+ 	uint8 *pUnpackBuffer = new uint8[MAX_SHADER_UNPACKED_BLOCK_SIZE];
+@@ -2850,7 +2850,8 @@
+ 	// now, loop through all blocks
+ 	bool bOK = true;
+ 	while ( bOK )
+ 	{
++		CSARM_SHDR( "VER5 block size=0x%08X", nBlockSize );
+ 		uint32 nBlockSize = NextULONG( pCompressedShaders );
+ 		if ( nBlockSize == 0xffffffff )	
+ 		{
+@@ -2915,7 +2915,8 @@
+ 		uint8 *pReadPtr = pUnpackBuffer;
+ 		while ( pReadPtr < pUnpackBuffer+nBlockSize )
+ 		{
+ 			uint32 nCombo_ID = NextULONG( pReadPtr );
++			CSARM_SHDR( "VER5 rec id=%u size=%u", nCombo_ID, nShaderSize );
+ 			uint32 nShaderSize = NextULONG( pReadPtr );
+ 			
+ #if defined( WRITE_ASSEMBLY )
+@@ -3023,4 +3023,5 @@
++	CSARM_SHDR( "VER5 exit bOK=%d", (int)bOK );
+ 
+ 	delete[] pUnpackBuffer;
+ 
+ 	return bOK;
+@@ -3420,3 +3420,7 @@
++	CSARM_SHDR( "LCS ver=%d static=%d dyn=%d total=%d start=%u end=%u bytes=%u",
++		(int)pFileCache->m_Header.m_nVersion, (int)pFileCache->m_Header.m_nNumStaticCombos,
++		(int)pFileCache->m_Header.m_nDynamicCombos, (int)pFileCache->m_Header.m_nTotalCombos,
++		nStartingOffset, nEndingOffset, nAlignedBytesToRead );
+ 	lookup.m_nDataOffset = nStartingOffset - nAlignedOffset;
+ 
+ 	bool bOK = true;
 @@ -4165,6 +4165,8 @@
  	HardwareShader_t dxshader = vshLookup.m_ShaderStaticCombos.m_pHardwareShaders[vshIndex];
  #endif
