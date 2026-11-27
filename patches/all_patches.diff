@@ -5101,6 +5101,22 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  		nStartingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx].m_nFileOffset;
  		nEndingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx+1].m_nFileOffset;
  	}
+@@ -814,6 +814,15 @@
+ 	m_ShaderFileCache( 32 )
+ {
+ 	m_bCreateShadersOnDemand = false;
++#ifdef __ANDROID__
++	// round 125: force at construction time - shaders load before
++	// CShaderManager::Init() runs and every m_bCreateShadersOnDemand
++	// gate (the m_pCreationData allocation and both bytecode cache
++	// branches) is evaluated at LOAD time.  #280 proved the miss:
++	// 79389 VSCREATE attempts, every one bytes=0 - the creation data
++	// was never stored because the flag was still false during load.
++	m_bCreateShadersOnDemand = true;
++#endif
+ 
+ #ifdef DYNAMIC_SHADER_COMPILE
+ 	SaveShaderCache("glshaders_OSX.cfg");
 @@ -927,5 +927,15 @@
  	// incompatible with the 360, violates loading system
  	// only used by PC to help tools reduce d3d footprint
@@ -5135,22 +5151,6 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
 +		CSARM_SHDR( "VSCREATE ps \"%s\" idx=%d bytes=%d", m_ShaderSymbolTable.String( pshLookup.m_Name ),
 +			pshIndex, pshLookup.m_ShaderStaticCombos.m_pCreationData ? (int)pshLookup.m_ShaderStaticCombos.m_pCreationData[pshIndex].ByteCode.Count() : -1 );
  #ifdef DYNAMIC_SHADER_COMPILE
-@@ -814,6 +814,14 @@
- 	m_ShaderFileCache( 32 )
- {
- 	m_bCreateShadersOnDemand = false;
-+#ifdef __ANDROID__
-+	// round 125: force at construction time - shaders load before
-+	// CShaderManager::Init() runs and every m_bCreateShadersOnDemand
-+	// gate (the m_pCreationData allocation and both bytecode cache
-+	// branches) is evaluated at LOAD time.  #280 proved the miss:
-+	// 79389 VSCREATE attempts, every one bytes=0 - the creation data
-+	// was never stored because the flag was still false during load.
-+	m_bCreateShadersOnDemand = true;
-+#endif
- 
- #ifdef DYNAMIC_SHADER_COMPILE
- 	SaveShaderCache("glshaders_OSX.cfg");
 diff -ruN a/togl/dxabstract.cpp b/togl/dxabstract.cpp
 --- a/togl/dxabstract.cpp
 +++ b/togl/dxabstract.cpp
