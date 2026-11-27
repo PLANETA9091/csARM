@@ -5101,10 +5101,18 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  		nStartingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx].m_nFileOffset;
  		nEndingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx+1].m_nFileOffset;
  	}
-@@ -927,5 +927,7 @@
+@@ -927,5 +927,15 @@
  	// incompatible with the 360, violates loading system
  	// only used by PC to help tools reduce d3d footprint
  	m_bCreateShadersOnDemand = IsPC() && ( ShaderUtil()->InEditorMode() || CommandLine()->CheckParm( "-shadersondemand" ) );
++#ifdef __ANDROID__
++	// round 124: split-module builds give every .so its own tier1
++	// CCommandLine instance; materialsystem never sees the launcher
++	// argv (SOD log in #279: parm=0 despite CSARM_ARGS carrying the
++	// flag).  Force on-demand shader creation - the only combo path
++	// left without a glshaders.cfg cache.
++	m_bCreateShadersOnDemand = true;
++#endif
 +	CSARM_SHDR( "SOD m_bCreateShadersOnDemand=%d editor=%d parm=%d", (int)m_bCreateShadersOnDemand,
 +		(int)ShaderUtil()->InEditorMode(), CommandLine()->FindParm( "-shadersondemand" ) );
  
