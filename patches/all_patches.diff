@@ -5032,97 +5032,6 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  	if ( fp == FILESYSTEM_INVALID_HANDLE )
  	{
  		return FILESYSTEM_INVALID_HANDLE;
-@@ -2842,80 +2842,84 @@
- 	ShaderLookup_t* pLookup = (ShaderLookup_t *)pContext;
- 	ShaderFileCache_t *pFileCache = &m_ShaderFileCache[pLookup->m_hShaderFileCache];
-+	CSARM_SHDR( "VER5 enter lookup=%p buf=%p dataOff=%d nDyn=%d", (void *)pLookup, (void *)pComboBuffer,
-+		(int)pLookup->m_nDataOffset, (int)pLookup->m_ShaderStaticCombos.m_nCount );
- 	uint8 *pCompressedShaders = pComboBuffer + pLookup->m_nDataOffset;
- 
- 	uint8 *pUnpackBuffer = new uint8[MAX_SHADER_UNPACKED_BLOCK_SIZE];
- 
- 	char *debugLabelPtr = debugLabel;	// can be moved to point at something else if need be
- 	
- 	// now, loop through all blocks
- 	bool bOK = true;
- 	while ( bOK )
- 	{
-+		CSARM_SHDR( "VER5 block size=0x%08X", nBlockSize );
- 		uint32 nBlockSize = NextULONG( pCompressedShaders );
- 		if ( nBlockSize == 0xffffffff )	
- 		{
- 			// any more blocks?
- 			break;
- 		}
- 
- 		switch( nBlockSize  & 0xc0000000 )
- 		{
- 			case 0:											// bzip2
- 			{
- 				// uncompress
- 				uint32 nOutsize = MAX_SHADER_UNPACKED_BLOCK_SIZE;
- 				int nRslt = BZ2_bzBuffToBuffDecompress( 
- 					reinterpret_cast<char *>( pUnpackBuffer ),
- 					&nOutsize,
- 					reinterpret_cast<char *>( pCompressedShaders ),
- 					nBlockSize, 1, 0 );
- 				if ( nRslt < 0 )
- 				{
- 					// errors are negative for bzip
- 					Assert( 0 );
- 					DevWarning( "BZIP Error (%d) decompressing shader", nRslt );
- 					bOK = false;
- 				}
- 				
- 				pCompressedShaders += nBlockSize;
- 				nBlockSize = nOutsize;		// how much data there is
- 			}
- 			break;
- 
- 			case 0x80000000:								// uncompressed
- 			{
- 				// not compressed, as is
- 				nBlockSize &= 0x3fffffff;
- 				memcpy( pUnpackBuffer, pCompressedShaders, nBlockSize );
- 				pCompressedShaders += nBlockSize;
- 			}
- 			break;
- 
- 			case 0x40000000:								// lzma compressed
- 			{
- 				CLZMA lzDecoder;
- 				nBlockSize &= 0x3fffffff;
- 				
- 				size_t nOutsize = lzDecoder.Uncompress(
- 					reinterpret_cast<uint8 *>( pCompressedShaders ),
- 					pUnpackBuffer );
- 				pCompressedShaders += nBlockSize;
- 				nBlockSize = nOutsize;		// how much data there is
- 			}
- 			break;
- 			
- 			default:
- 			{
- 				Assert( 0 );
- 				Error(" unrecognized shader compression type = file corrupt?");
- 				bOK = false;
- 			}
- 		}
- 		
- 		uint8 *pReadPtr = pUnpackBuffer;
- 		while ( pReadPtr < pUnpackBuffer+nBlockSize )
- 		{
- 			uint32 nCombo_ID = NextULONG( pReadPtr );
-+			CSARM_SHDR( "VER5 rec id=%u size=%u", nCombo_ID, nShaderSize );
- 			uint32 nShaderSize = NextULONG( pReadPtr );
- 			
- #if defined( WRITE_ASSEMBLY )
-@@ -3023,4 +3023,5 @@
-+	CSARM_SHDR( "VER5 exit bOK=%d", (int)bOK );
- 
- 	delete[] pUnpackBuffer;
- 
- 	return bOK;
 @@ -3246,11 +3264,15 @@
  		char filename[MAX_PATH];
  		Q_snprintf( filename, MAX_PATH, "shaders\\%s\\%s" SHADER_FNAME_EXTENSION, bVertexShader ? "vsh" : "psh", pName );
@@ -5224,6 +5133,97 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  		nStartingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx].m_nFileOffset;
  		nEndingOffset = pFileCache->m_StaticComboRecords[nStaticComboIdx+1].m_nFileOffset;
  	}
+@@ -2842,80 +2842,84 @@
+ 	ShaderLookup_t* pLookup = (ShaderLookup_t *)pContext;
+ 	ShaderFileCache_t *pFileCache = &m_ShaderFileCache[pLookup->m_hShaderFileCache];
+ 	uint8 *pCompressedShaders = pComboBuffer + pLookup->m_nDataOffset;
++	CSARM_SHDR( "VER5 enter lookup=%p buf=%p dataOff=%d nDyn=%d", (void *)pLookup, (void *)pComboBuffer,
++		(int)pLookup->m_nDataOffset, (int)pLookup->m_ShaderStaticCombos.m_nCount );
+ 
+ 	uint8 *pUnpackBuffer = new uint8[MAX_SHADER_UNPACKED_BLOCK_SIZE];
+ 
+ 	char *debugLabelPtr = debugLabel;	// can be moved to point at something else if need be
+ 	
+ 	// now, loop through all blocks
+ 	bool bOK = true;
+ 	while ( bOK )
+ 	{
+ 		uint32 nBlockSize = NextULONG( pCompressedShaders );
++		CSARM_SHDR( "VER5 block size=0x%08X", nBlockSize );
+ 		if ( nBlockSize == 0xffffffff )	
+ 		{
+ 			// any more blocks?
+ 			break;
+ 		}
+ 
+ 		switch( nBlockSize  & 0xc0000000 )
+ 		{
+ 			case 0:											// bzip2
+ 			{
+ 				// uncompress
+ 				uint32 nOutsize = MAX_SHADER_UNPACKED_BLOCK_SIZE;
+ 				int nRslt = BZ2_bzBuffToBuffDecompress( 
+ 					reinterpret_cast<char *>( pUnpackBuffer ),
+ 					&nOutsize,
+ 					reinterpret_cast<char *>( pCompressedShaders ),
+ 					nBlockSize, 1, 0 );
+ 				if ( nRslt < 0 )
+ 				{
+ 					// errors are negative for bzip
+ 					Assert( 0 );
+ 					DevWarning( "BZIP Error (%d) decompressing shader", nRslt );
+ 					bOK = false;
+ 				}
+ 				
+ 				pCompressedShaders += nBlockSize;
+ 				nBlockSize = nOutsize;		// how much data there is
+ 			}
+ 			break;
+ 
+ 			case 0x80000000:								// uncompressed
+ 			{
+ 				// not compressed, as is
+ 				nBlockSize &= 0x3fffffff;
+ 				memcpy( pUnpackBuffer, pCompressedShaders, nBlockSize );
+ 				pCompressedShaders += nBlockSize;
+ 			}
+ 			break;
+ 
+ 			case 0x40000000:								// lzma compressed
+ 			{
+ 				CLZMA lzDecoder;
+ 				nBlockSize &= 0x3fffffff;
+ 				
+ 				size_t nOutsize = lzDecoder.Uncompress(
+ 					reinterpret_cast<uint8 *>( pCompressedShaders ),
+ 					pUnpackBuffer );
+ 				pCompressedShaders += nBlockSize;
+ 				nBlockSize = nOutsize;		// how much data there is
+ 			}
+ 			break;
+ 			
+ 			default:
+ 			{
+ 				Assert( 0 );
+ 				Error(" unrecognized shader compression type = file corrupt?");
+ 				bOK = false;
+ 			}
+ 		}
+ 		
+ 		uint8 *pReadPtr = pUnpackBuffer;
+ 		while ( pReadPtr < pUnpackBuffer+nBlockSize )
+ 		{
+ 			uint32 nCombo_ID = NextULONG( pReadPtr );
+ 			uint32 nShaderSize = NextULONG( pReadPtr );
++			CSARM_SHDR( "VER5 rec id=%u size=%u", nCombo_ID, nShaderSize );
+ 			
+ #if defined( WRITE_ASSEMBLY )
+@@ -3023,4 +3023,5 @@
++	CSARM_SHDR( "VER5 exit bOK=%d", (int)bOK );
+ 
+ 	delete[] pUnpackBuffer;
+ 
+ 	return bOK;
 @@ -3420,3 +3420,7 @@
 +	CSARM_SHDR( "LCS ver=%d static=%d dyn=%d total=%d start=%u end=%u bytes=%u",
 +		(int)pFileCache->m_Header.m_nVersion, (int)pFileCache->m_Header.m_nNumStaticCombos,
