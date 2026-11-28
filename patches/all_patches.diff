@@ -385,6 +385,15 @@ diff -ruN a/engine/sys_dll2.cpp b/engine/sys_dll2.cpp
  		{
  #if !defined(DEDICATED)
  			toolframework->ServerInit( g_ServerFactory );
+@@ -2935,2 +2935,7 @@
+ 			}
+-			else
++			// csARM r128: run the creation branch ALWAYS.  In on-demand mode
++			// VER5 previously only cached the bytecode and stored INVALID into
++			// m_pHardwareShaders; SetVertexShader then re-created from the cache
++			// every frame (and from an EMPTY cache when the align clamp above
++			// had skipped VER5 entirely) - the 85k VSCREATE bytes=0 spam.
++			if ( !m_bCreateShadersOnDemand )
 @@ -3069,18 +3122,16 @@
  			g_nDedicatedServerAppIdBreakpad = bValveDS ? 268480 : 268460;
  			break;
@@ -751,6 +760,22 @@ diff -ruN a/game/client/cstrike15/c_cs_player.cpp b/game/client/cstrike15/c_cs_p
  
  	if ( !m_hContactShadowLeft.Get() )
  	{
+@@ -3417,4 +3417,15 @@
+ 	unsigned int nAlignedBytesToRead = AlignValue( nEndingOffset - nAlignedOffset, nSizeAlign );
++		// csARM r128: GetOptimalIOConstraints in this port feeds the align math
++		// values that degenerate for small file offsets (sky: window [48,183)
++		// -> nAlignedBytesToRead = 0 -> VER5 never ran -> empty creation cache
++		// -> endless on-demand create-from-empty).  Clamp to the plain window.
++		if ( nAlignedBytesToRead == 0 || nEndingOffset <= nAlignedOffset )
++		{
++			CSARM_SHDR( "LCSALIGN start=%u end=%u plain window (align=%u bytes=%u)",
++				nStartingOffset, nEndingOffset, nOffsetAlign, nAlignedBytesToRead );
++			nAlignedOffset = nStartingOffset;
++			nAlignedBytesToRead = nEndingOffset - nStartingOffset;
++		}
+ 
+ 	// used for adjusting provided buffer to actual data
+ 	lookup.m_nDataOffset = nStartingOffset - nAlignedOffset;
 @@ -5221,7 +5221,7 @@
  				pOrigin = &pEvent->m_SoundOrigin;
  			}
@@ -5137,8 +5162,8 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  	ShaderLookup_t* pLookup = (ShaderLookup_t *)pContext;
  	ShaderFileCache_t *pFileCache = &m_ShaderFileCache[pLookup->m_hShaderFileCache];
  	uint8 *pCompressedShaders = pComboBuffer + pLookup->m_nDataOffset;
-+	CSARM_SHDR( "VER5 enter lookup=%p buf=%p dataOff=%d nDyn=%d", (void *)pLookup, (void *)pComboBuffer,
-+		(int)pLookup->m_nDataOffset, (int)pLookup->m_ShaderStaticCombos.m_nCount );
++	CSARM_SHDR( "VER5 enter lookup=%p buf=%p dataOff=%d nDyn=%d name=%s", (void *)pLookup, (void *)pComboBuffer,
++		(int)pLookup->m_nDataOffset, (int)pLookup->m_ShaderStaticCombos.m_nCount, m_ShaderSymbolTable.String( pLookup->m_Name ) );
  
  	uint8 *pUnpackBuffer = new uint8[MAX_SHADER_UNPACKED_BLOCK_SIZE];
  
@@ -5263,8 +5288,8 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  
  	if ( IsPC() && ( dxshader == INVALID_HARDWARE_SHADER ) && m_bCreateShadersOnDemand )
  	{
-+		CSARM_SHDR( "VSCREATE vs \"%s\" idx=%d bytes=%d", m_ShaderSymbolTable.String( vshLookup.m_Name ),
-+			vshIndex, vshLookup.m_ShaderStaticCombos.m_pCreationData ? (int)vshLookup.m_ShaderStaticCombos.m_pCreationData[vshIndex].ByteCode.Count() : -1 );
++		CSARM_SHDR( "VSCREATE vs \"%s\" idx=%d bytes=%d lookup=%p", m_ShaderSymbolTable.String( vshLookup.m_Name ),
++			vshIndex, vshLookup.m_ShaderStaticCombos.m_pCreationData ? (int)vshLookup.m_ShaderStaticCombos.m_pCreationData[vshIndex].ByteCode.Count() : -1, (void *)&vshLookup );
  #ifdef DYNAMIC_SHADER_COMPILE
 @@ -4303,6 +4303,8 @@
  	HardwareShader_t dxshader = pshLookup.m_ShaderStaticCombos.m_pHardwareShaders[pshIndex];
@@ -5272,8 +5297,8 @@ diff -ruN a/materialsystem/shaderapidx9/vertexshaderdx8.cpp b/materialsystem/sha
  
  	if ( IsPC() && ( dxshader == INVALID_HARDWARE_SHADER ) && m_bCreateShadersOnDemand )
  	{
-+		CSARM_SHDR( "VSCREATE ps \"%s\" idx=%d bytes=%d", m_ShaderSymbolTable.String( pshLookup.m_Name ),
-+			pshIndex, pshLookup.m_ShaderStaticCombos.m_pCreationData ? (int)pshLookup.m_ShaderStaticCombos.m_pCreationData[pshIndex].ByteCode.Count() : -1 );
++		CSARM_SHDR( "VSCREATE ps \"%s\" idx=%d bytes=%d lookup=%p", m_ShaderSymbolTable.String( pshLookup.m_Name ),
++			pshIndex, pshLookup.m_ShaderStaticCombos.m_pCreationData ? (int)pshLookup.m_ShaderStaticCombos.m_pCreationData[pshIndex].ByteCode.Count() : -1, (void *)&pshLookup );
  #ifdef DYNAMIC_SHADER_COMPILE
 diff -ruN a/togl/dxabstract.cpp b/togl/dxabstract.cpp
 --- a/togl/dxabstract.cpp
